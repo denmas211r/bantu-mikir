@@ -31,6 +31,9 @@
         date: toDate(r[c('Posting Date')], XLSX), resv: s(r[c('Reservation')]).replace(/^0$/, ''), header: s(r[c('Document Header Text')]), user: s(r[c('User name')]),
         ref: s(r[c('Reference')]), matDoc: s(r[c('Material Document')]) });
     }
+    // kategori Mvt (Own Use, PO/RO, Trf, MTA, BAU, Return, …) dari tabel referensi
+    const MS = root.Master || (typeof Master !== 'undefined' ? Master : null);
+    if (MS) moves.forEach((m) => { const k = MS.mvtKey(m); m.mkey = k.key; m.cat = k.cat; });
     // GR per PO item
     const gr = new Map();
     for (const m of moves) {

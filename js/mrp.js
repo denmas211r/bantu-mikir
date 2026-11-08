@@ -75,14 +75,14 @@
     const u = (r.usageAll || []).map((v) => Math.abs(v || 0));
     const win = u.slice(-P.amuMonths);
     const { aging, since } = agingTKO(u);
-    const amuHist = win.reduce((a, b) => a + b, 0) / P.amuMonths;
+    const amuHist = win.reduce((a, b) => a + b, 0) / (P.amuDivisor || P.amuMonths); // amuDivisor: histori pendek (MB51) dibagi jumlah bulan sebenarnya
     const sdmi = stdev(win);
     let amu = amuHist, basis = 'Histori';
     const rkmM = r.rkmYear ? r.rkmYear / 12 : 0;
     if (opt.basis === 'max' && rkmM > amuHist) { amu = rkmM; basis = 'RKM'; }
     if (opt.basis === 'rkm-new' && !amuHist && rkmM) { amu = rkmM; basis = 'RKM'; }
     const isProject = /^project$/i.test(String(r.cat || '').trim());
-    const isChem = new RegExp(P.chemRegex, 'i').test(r.desc || '');
+    const isChem = !!r.chem || new RegExp(P.chemRegex, 'i').test(r.desc || ''); // r.chem = Material Group 89 (CHEMICALS)
     let effAging = basis === 'RKM' && (aging === 'SP' || aging === 'DS') ? 'FS' : aging; // item baru dari RKM direncanakan sebagai rutin
     const mdFS = effAging === 'MD' && P.mdAsFS; if (mdFS) effAging = 'FS';            // Moderate diperlakukan seperti FS (perlu konfirmasi user)
     const cls = isProject ? 'Program' : effAging === 'FS' ? (isChem ? 'Rutin chemical' : 'Rutin maintenance') : effAging === 'MD' ? 'Rutin slow (ROP manual)' : 'On Demand';
@@ -92,7 +92,7 @@
     if (cls === 'Program' || cls === 'On Demand') {
       out.toOrder = roundup(Math.max(0, (r.rkmYear || 0) + res - stock - ospo));
       out.surplus = Math.max(0, stock - res - (r.rkmYear || 0));
-      if (aging === 'DS' && stock > 0) out.note = 'Kandidat dead stock (cek prospek & peralatan induk)';
+      if (aging === 'DS' && stock > 0) out.note = r.histShort ? 'Belum ada pemakaian di histori MB51 yang tersedia' : 'Kandidat dead stock (cek prospek & peralatan induk)';
       return out;
     }
     if (r.lt == null || r.lt === '' || !isFinite(r.lt)) { out.note = 'LT tidak ada'; return out; }
@@ -188,17 +188,44 @@
       const ex = calc({ usage36: r.usage36, amuSum: sumAvg.get(key), lt: ltv, hasContract: hc, stock, ospo: r.ospo, mb25: r.mb25, rkmYear: rkm }, opt);
       // histori bulanan digabung untuk baris duplikat Material+Plant
       const usageAll = (dupUsage.get(key) || r.usageAll);
-      const tk = calcTKO({ usageAll, lt: ltv, hasContract: hc, cat, desc: r.desc, stock, ospo: r.ospo, mb25: r.mb25, rkmYear: rkm, critical: opt.criticalSet ? opt.criticalSet.has(key) : false }, opt);
+      const tk = calcTKO({ usageAll, lt: ltv, hasContract: hc, cat, desc: r.desc, chem: opt.chemFn ? opt.chemFn(r.material) : false, histShort: !!wbData.histShort, stock, ospo: r.ospo, mb25: r.mb25, rkmYear: rkm, critical: opt.criticalSet ? opt.criticalSet.has(key) : false }, opt);
       ex.method = 'excel';
       const res = opt.method === 'excel' ? ex : tk;
       out.set(key, Object.assign({ key, material: r.material, plant: r.plant, kimap: r.kimap, desc: r.desc, uom: r.uom, field: r.field, cat,
         stock, ospo: r.ospo, mb25: r.mb25, rkm, oa: kp ? kp.doc : opt.contractPick ? '' : master ? master.oa : '', pic: kp ? kp.pic : master ? master.pic : '', sisaHari: kp ? kp.sisaHari : master ? master.sisaHari : null,
         contract: kp || null,
-        hasContract: hc, excel: r.excel, usageAll, alt: { excel: ex, tko: tk } }, res));
+        hasContract: hc, excel: r.excel, usageAll, wk: wbData.wk || 'PEP', histShort: !!wbData.histShort, ltDefault: !!(master && master.ltDefault), alt: { excel: ex, tko: tk } }, res));
     }
     return out;
   }
 
-  root.MRP = { calc, calcTKO, agingTKO, TKO_DEFAULT, parseWorkbook, run, agingOf, roundup };
+  // Bangun input MRP dari MB52 + MB51 (untuk WK yang belum punya file MRP, mis. WK PHE).
+  // usage = gerakan yang lolos isUsage (default: Own Use + Return tanpa network/proyek), dijumlah per bulan per Material+Plant.
+  // LT: dari master LeadTime file MRP lain (kalau kode material sama), selain itu ltDefault.
+  function fromMoves({ items = [], moves = [], ltMaster = null, ltDefault = 3, isUsage, wk = 'PHE' }) {
+    const ym = (d) => String(d.getFullYear() % 100).padStart(2, '0') + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    const use = moves.filter((m) => m.date && m.material && (isUsage ? isUsage(m) : false));
+    const dates = moves.map((m) => m.date).filter(Boolean).sort((a, b) => a - b);
+    const labels = [];
+    if (dates.length) { const d = new Date(dates[0].getFullYear(), dates[0].getMonth(), 1), end = dates[dates.length - 1]; while (d <= end) { labels.push(ym(d)); d.setMonth(d.getMonth() + 1); } }
+    const li = new Map(labels.map((l, i) => [l, i]));
+    const rows = new Map();
+    const get = (mat, plant, desc, uom) => {
+      const k = mat + '|' + plant; let r = rows.get(k);
+      if (!r) rows.set(k, (r = { material: mat, plant, kimap: '', desc: desc || '', uom: uom || '', field: '', cat: '', usage36: new Array(36).fill(0), usageAll: new Array(labels.length).fill(0), stock: 0, ospo: 0, mb25: 0, excel: {} }));
+      if (!r.desc && desc) r.desc = desc; if (!r.uom && uom) r.uom = uom; return r;
+    };
+    items.forEach((i) => { const r = get(i.material, i.plant, i.desc, i.uom); r.stock += i.soh || 0; });
+    use.forEach((m) => { const r = get(m.material, m.plant, m.desc, m.uom); const i = li.get(ym(m.date)); if (i != null) r.usageAll[i] += -(m.qty || 0); });
+    rows.forEach((r) => { r.usageAll = r.usageAll.map((v) => Math.max(0, v)); r.usage36 = new Array(Math.max(0, 36 - labels.length)).fill(0).concat(r.usageAll.slice(-36)); });
+    const lt = new Map();
+    rows.forEach((r) => { if (lt.has(r.material)) return; const m = ltMaster && ltMaster.get(r.material);
+      lt.set(r.material, m && m.lt != null ? { material: r.material, lt: m.lt, cat: '', hasContract: '', ltFrom: 'master' } : { material: r.material, lt: ltDefault, cat: '', hasContract: '', ltDefault: true }); });
+    const span = dates.length ? Math.max(1, (dates[dates.length - 1] - dates[0]) / 86400000 / 30.44) : 1;
+    return { rows: [...rows.values()], lt, ltByKimap: new Map(), monthLabels: labels, window: [labels[0] || '-', labels[labels.length - 1] || '-'], wk, source: 'MB51',
+      monthsSpan: span, histShort: span < 12, usageMoves: use.length };
+  }
+
+  root.MRP = { fromMoves,  calc, calcTKO, agingTKO, TKO_DEFAULT, parseWorkbook, run, agingOf, roundup };
   if (typeof module !== 'undefined') module.exports = root.MRP;
 })(typeof window !== 'undefined' ? window : globalThis);

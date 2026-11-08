@@ -36,10 +36,13 @@ const MENU = [
 ];
 const ROUTES = Object.fromEntries(MENU.flatMap(([, items]) => items.map((i) => [i[0], i])));
 const DEFAULT_MRP_PLANTS = ['W101', 'W102', 'W802', 'W803'];
-const DEFAULT_ZONA = { W101: 'Zona 1', W102: 'Zona 1', W802: 'Zona 1', W803: 'Zona 1', W105: 'Zona 4', W106: 'Zona 4', W801: 'Zona 4', W809: 'Zona 4', W811: 'Zona 4' };
-const zonaOf = (p) => (S.set.zona || DEFAULT_ZONA)[p] || 'Lainnya';
-const ZONA_COLOR = { 'Zona 1': 'var(--z1)', 'Zona 4': 'var(--z4)', Lainnya: 'var(--z0)' };
-const PLANT_NAME = { W101: 'Rantau', W102: 'Pangkalan Susu', W802: 'Jambi', W803: 'Lirik', W105: 'Prabumulih', W106: 'Pendopo', W801: 'Limau', W809: 'Adera', W811: 'Ramba' };
+const DEFAULT_ZONA = Object.assign({ W101: 'Zona 1', W102: 'Zona 1', W802: 'Zona 1', W803: 'Zona 1', W105: 'Zona 4', W106: 'Zona 4', W801: 'Zona 4', W809: 'Zona 4', W811: 'Zona 4' },
+  Object.fromEntries(Object.entries(Master.PHE_PLANT).map(([p, [, a]]) => [p, a])));
+const ZONA_LIST = ['Zona 1', 'Zona 4', 'PHE NSO', 'PHE JM', 'PHE OK', 'PHE RT', 'Lainnya'];
+const zonaOf = (p) => (S.set.zona || {})[p] || DEFAULT_ZONA[p] || 'Lainnya';
+const ZONA_COLOR = { 'Zona 1': 'var(--z1)', 'Zona 4': 'var(--z4)', 'PHE NSO': 'var(--z5)', 'PHE JM': 'var(--z6)', 'PHE OK': 'var(--z7)', 'PHE RT': 'var(--z8)', Lainnya: 'var(--z0)' };
+const PLANT_NAME = Object.assign({ W101: 'Rantau', W102: 'Pangkalan Susu', W802: 'Jambi', W803: 'Lirik', W105: 'Prabumulih', W106: 'Pendopo', W801: 'Limau', W809: 'Adera', W811: 'Ramba' },
+  Object.fromEntries(Object.entries(Master.PHE_PLANT).map(([p, [n]]) => [p, n])));
 const METHOD = { tko: 'Metode TKO / Pedoman (disarankan)', excel: 'Metode Excel lama (untuk validasi)' };
 const TKO_FIELDS = [['amuMonths', 'AMU dari berapa bulan terakhir', 'bln'], ['nonContractLT', 'Tambahan lead time pengadaan bila tanpa kontrak', 'bln'], ['roqMonths', 'Reorder quantity (Max = ROP + n × AMU)', 'bln'], ['ssCapMonths', 'Batas safety stock maintenance/slow', 'bln × AMU'], ['chemSSMonths', 'Safety stock chemical/catalyst', 'bln × AMU'], ['chemP', 'Periode review chemical (P)', 'bln'], ['excessGeneral', 'Batas berlebih (umum)', 'bln'], ['excessChem', 'Batas berlebih (chemical)', 'bln']];
 const BASIS = { hist: 'Histori saja (sama dengan Excel)', max: 'Terbesar antara histori dan RKM', 'rkm-new': 'RKM hanya untuk item tanpa histori' };
@@ -63,7 +66,7 @@ $('lf').onsubmit = async (e) => {
     const { role, key } = await Vault.login(entry, $('p').value);
     const data = await Vault.decryptJSON(key, await (await fetch('data/data.enc.json', { cache: 'no-store' })).json());
     S = { role, data, user: $('u').value.trim(), mb52: null, mrpWB: null, rkmFiles: [], mrpRes: null, rkmMatched: [], mrp: null,
-      mrpPlants: new Set(store.get('mrpPlants') || DEFAULT_MRP_PLANTS), set: Object.assign({ basis: 'hist', lliLT: 6, method: 'tko', tko: {}, kurs: 18150, zona: DEFAULT_ZONA, wkCur: { PEP: 'IDR', PHE: 'USD' } }, store.get('settings') || {}), rkmTab: 'vs', src: {}, raw: {}, dash: { cur: 'IDR', wh: new Set(), zona: new Set(), wk: new Set() }, cariView: store.get('cariView') || 'matriks', kView: store.get('kView') || 'kartu' };
+      mrpPlants: new Set(store.get('mrpPlants') || DEFAULT_MRP_PLANTS), set: Object.assign({ basis: 'hist', lliLT: 6, method: 'tko', tko: {}, kurs: 18150, zona: {}, wkCur: { PEP: 'IDR', PHE: 'USD' }, pheLT: 3 }, store.get('settings') || {}), mrpWK: store.get('mrpWK') || 'PEP', rkmTab: 'vs', src: {}, raw: {}, dash: { cur: 'IDR', wh: new Set(), zona: new Set(), wk: new Set() }, cariView: store.get('cariView') || 'matriks', cariWK: store.get('cariWK') || 'all', kView: store.get('kView') || 'kartu' };
     $('login').hidden = true; $('app').hidden = false;
     $('whoName').textContent = S.user; $('whoRole').textContent = role; $('avatar').textContent = S.user[0].toUpperCase();
     buildNav(); route(); initFolder();
@@ -92,14 +95,30 @@ function route() {
 }
 
 // ---------- Hitung ulang semua (MB52 + MRP + RKM + pengaturan) ----------
+// MRP per WK: PEP dari file MRP; PHE dihitung dari MB52 + MB51 client 180 (sementara, sampai file MRP PHE dibuat)
 function recompute() {
   S.ver = (S.ver || 0) + 1;
-  if (!S.mrpWB) { S.mrpRes = null; S.mrp = null; S.rkmMatched = []; return; }
   const stockMap = S.mb52 ? new Map(S.mb52.items.map((i) => [i.material + '|' + i.plant, i.soh])) : null;
-  const o = { stockMap, method: S.set.method, tko: S.set.tko, contractPick: S.me3n ? S.me3n.pick : null, ospoMap: S.me2n ? S.me2n.ospo : null, mb25Map: S.mb25 ? S.mb25.open : null };
-  const base = MRP.run(S.mrpWB, o);
-  S.rkmMatched = RKM.match(S.rkmFiles, base, S.mrpWB);
-  S.mrpRes = MRP.run(S.mrpWB, Object.assign({}, o, { rkmMap: RKM.totals(S.rkmMatched), basis: S.set.basis }));
+  const pickOf = (wk) => (S.me3n ? (S.me3n.pickWK && S.me3n.pickWK[wk]) || new Map() : null);
+  const common = { stockMap, tko: S.set.tko, ospoMap: S.me2n ? S.me2n.ospo : null, mb25Map: S.mb25 ? S.mb25.open : null, chemFn: Master.isChemMG };
+  const res = new Map(); S.rkmMatched = []; S.mrpWB_PHE = null;
+  if (S.mrpWB) {
+    const o = Object.assign({}, common, { method: S.set.method, contractPick: pickOf('PEP') });
+    const base = MRP.run(S.mrpWB, o);
+    S.rkmMatched = RKM.match(S.rkmFiles, base, S.mrpWB);
+    MRP.run(S.mrpWB, Object.assign({}, o, { rkmMap: RKM.totals(S.rkmMatched), basis: S.set.basis })).forEach((v, k) => res.set(k, v));
+  }
+  const pheStock = S.raw.mb52 && S.raw.mb52.PHE;
+  if (pheStock) {
+    const wb = (S.mrpWB_PHE = MRP.fromMoves({ items: pheStock.items, moves: (S.raw.mb51 && S.raw.mb51.PHE && S.raw.mb51.PHE.moves) || [], ltMaster: S.mrpWB ? S.mrpWB.lt : null,
+      ltDefault: S.set.pheLT || 3, isUsage: Master.isMrpUsage, wk: 'PHE' }));
+    const tko = Object.assign({}, S.set.tko, { amuMonths: Math.max(1, wb.monthLabels.length), amuDivisor: wb.monthsSpan });
+    MRP.run(wb, Object.assign({}, common, { method: 'tko', tko, contractPick: pickOf('PHE') })).forEach((v, k) => res.set(k, v));
+    // plant PHE otomatis dipantau MRP saat pertama kali muncul
+    if (!store.get('mrpPlantsPHE')) { pheStock.items.forEach((i) => S.mrpPlants.add(i.plant)); store.set('mrpPlants', [...S.mrpPlants]); store.set('mrpPlantsPHE', true); }
+  }
+  if (!res.size) { S.mrpRes = null; S.mrp = null; return; }
+  S.mrpRes = res;
   const map = new Map();
   for (const r of S.mrpRes.values()) map.set(r.plant + '|' + r.material, { min: r.min2 || 0, max: r.max2 || 0, aging: r.aging, toOrder: r.toOrder });
   S.mrp = { map, plants: [...new Set([...S.mrpRes.values()].map((r) => r.plant))].sort() };
@@ -110,6 +129,18 @@ function activeItems() {
   if (S.mrpRes) return Parser.merge([...S.mrpRes.values()].map((r) => ({ plant: r.plant, material: r.material, desc: r.desc, uom: r.uom, soh: r.stock, value: 0, price: 0, transit: 0, locs: [] })), S.mrp.map, S.mrpPlants);
   return [];
 }
+
+// Switch MRP per WK (client 100 = WK PEP, 180 = WK PHE)
+const mrpWKs = () => { const w = new Set(S.mrpRes ? [...S.mrpRes.values()].map((r) => r.wk) : []); return WK_ORDER.filter((x) => w.has(x)); };
+function mrpSwitch() {
+  const ws = mrpWKs(); if (!ws.includes(S.mrpWK)) S.mrpWK = ws[0] || 'PEP';
+  if (ws.length < 2) return;
+  $('pageActions').insertAdjacentHTML('afterbegin', '<span id="mrpWK"></span>');
+  UI.seg($('mrpWK'), ws.map((w) => [w, `WK ${w} (${w === 'PEP' ? '100' : '180'})`]), S.mrpWK, (v) => { S.mrpWK = v; store.set('mrpWK', v); route(); });
+}
+const mrpRows = () => (S.mrpRes ? [...S.mrpRes.values()].filter((r) => r.wk === S.mrpWK && S.mrpPlants.has(r.plant)) : []);
+const mrpNote = () => { if (S.mrpWK !== 'PHE' || !S.mrpWB_PHE) return ''; const w = S.mrpWB_PHE;
+  return `<div class="banner warn"><span>MRP WK PHE sementara dihitung dari MB52 + MB51 client 180 (histori ${esc(w.window[0])} s.d. ${esc(w.window[1])}, ${fmt(w.monthsSpan, 1)} bulan). ${w.histShort ? 'Histori masih pendek, jadi AMU dan aging belum bisa diandalkan. ' : ''}Lead time dari master MRP PEP kalau kode materialnya sama, selain itu ${fmt(S.set.pheLT || 3, 1)} bulan (atur di <a href="#/pengaturan">Pengaturan</a>).</span></div>`; };
 
 // ---------- Muat file (dua client SAP: 100 = WK PEP, 180 = WK PHE) ----------
 const CLIENT_WK = { '100': 'PEP', '180': 'PHE' };
@@ -125,8 +156,13 @@ const MERGE = {
   },
   me3n(parts) {
     const docs = new Map(), items = [], pick = new Map();
-    parts.forEach(([wk, p]) => { p.docs.forEach((d, k) => { d.wk = wk; docs.set(k, d); }); p.items.forEach((i) => { i.wk = wk; items.push(i); }); p.pick.forEach((v, k) => { if (!pick.has(k)) pick.set(k, Object.assign({ wk }, v)); }); });
-    return { docs, items, pick };
+    const pickWK = {};
+    parts.forEach(([wk, p]) => { p.docs.forEach((d, k) => { d.wk = wk; docs.set(k, d); }); p.items.forEach((i) => { i.wk = wk; i.kel = Master.kelompok(i.desc); items.push(i); });
+      pickWK[wk] = new Map(); p.pick.forEach((v, k) => { const x = Object.assign({ wk }, v); pickWK[wk].set(k, x); if (!pick.has(k)) pick.set(k, x); }); });
+    // kelompok barang per kontrak = kelompok dengan item terbanyak
+    const byDoc = new Map(); items.forEach((i) => { const m = byDoc.get(i.doc) || byDoc.set(i.doc, new Map()).get(i.doc); m.set(i.kel, (m.get(i.kel) || 0) + 1); });
+    docs.forEach((d, k) => { const m = byDoc.get(k) || new Map(); const ks = [...m].sort((a, b) => (a[0] === 'Lainnya') - (b[0] === 'Lainnya') || b[1] - a[1]).map(([x]) => x); d.kel = ks[0] || 'Lainnya'; d.kels = ks; });
+    return { docs, items, pick, pickWK };
   },
   me2n(parts) {
     const lines = [], ospo = new Map(), lastPrice = new Map();
@@ -168,7 +204,7 @@ async function loadRKM(file, name) {
   const saved = (store.get('rkmPlant') || {})[f.fileName]; if (saved) f.plant = saved;
   S.rkmFiles = S.rkmFiles.filter((x) => x.fileName !== f.fileName).concat(f); srcMark('rkm', file);
 }
-const wkOfPlant = (p) => (S.plantWK && S.plantWK.get(p)) || (DEFAULT_ZONA[p] ? 'PEP' : '');
+const wkOfPlant = (p) => (S.plantWK && S.plantWK.get(p)) || (Master.PHE_PLANT[p] ? 'PHE' : DEFAULT_ZONA[p] ? 'PEP' : '');
 const stockCur = (p) => ((S.set.wkCur || {})[wkOfPlant(p)] || 'IDR');
 
 // ---------- Folder lokal ----------
@@ -215,7 +251,7 @@ const agingPill = (a) => pill(a || '-', a === 'FS' ? 'ok' : a === 'MD' ? 'info' 
 const HIDE = {};
 Object.assign(HIDE, {
   'rkmTab:vs': ['Basis', 'Cocok via', 'OS PO/RO'], 'rkmTab:noMrp': ['Remarks', 'Unit'], 'rkmTab:order': ['MB25', 'RKM 2027', 'Kelas'], 'rkmTab:cmp': ['Kelas TKO', 'Catatan'],
-  'kTab:list': ['Terpakai', 'Item'], 'kTab:renew': ['Terpakai', 'Item', 'Target'], 'kTab:open': ['Jenis'], 'kTab:late': ['Jenis'],
+  'kTab:list': ['Terpakai', 'Item', 'PIC'], 'kTab:renew': ['Terpakai', 'Item', 'Target'], 'kTab:open': ['Jenis'], 'kTab:late': ['Jenis'],
   'oTab:ro': ['Mata uang', 'PIC', 'Sisa hari', 'UoM', 'Harga kontrak'], 'oTab:pr': ['Mata uang', 'Kelas', 'Sumber harga'], 'oTab:kandidat': ['Sumber harga'], 'eTab:resv': ['Mvt'],
 });
 function convCols(cols, hide = []) {
@@ -254,7 +290,7 @@ const PAGES = {
     const items = (S.mb52 ? S.mb52.items : []).filter((i) => !S.dash.wk.size || S.dash.wk.has(i.wk));
     const perWH = new Map();
     items.forEach((i) => { const w = perWH.get(i.plant) || { plant: i.plant, value: 0, n: 0 }; w.value += idrOf(i); if (i.soh > 0) w.n++; perWH.set(i.plant, w); });
-    const allWH = [...perWH.keys()].sort(), zonas = [...new Set(allWH.map(zonaOf))].sort();
+    const allWH = [...perWH.keys()].sort(), zonas = [...new Set(allWH.map(zonaOf))].sort((a, b) => (ZONA_LIST.indexOf(a) + 99) % 99 - (ZONA_LIST.indexOf(b) + 99) % 99 || a.localeCompare(b));
     const visWH = allWH.filter((p) => !S.dash.zona.size || S.dash.zona.has(zonaOf(p)));
     const selWH = new Set(S.dash.wh.size ? visWH.filter((p) => S.dash.wh.has(p)) : visWH);
     const inSel = (p) => selWH.has(p);
@@ -338,8 +374,10 @@ const PAGES = {
   },
 
   rkm() {
-    if (!S.mrpWB) { $('view').innerHTML = needFile('file MRP', 'Mesin MRP butuh file MRP (sheet MRP dan LeadTime). RKM opsional sebagai input.'); return; }
-    const res = [...S.mrpRes.values()].filter((r) => S.mrpPlants.has(r.plant));
+    if (!S.mrpRes) { $('view').innerHTML = needFile('file MRP', 'Mesin MRP butuh file MRP (sheet MRP dan LeadTime) untuk WK PEP, atau MB52 + MB51 client 180 untuk WK PHE. RKM opsional sebagai input.'); return; }
+    mrpSwitch();
+    const res = mrpRows();
+    if (S.mrpWK === 'PHE') return rkmPHE(res);
     const M = S.rkmMatched, rkmPlants = new Set(S.rkmFiles.map((f) => f.plant).filter(Boolean));
     const rkmKeys = new Set(M.filter((x) => x.key).map((x) => x.key));
     const today = new Date(); const nowIdx = today.getFullYear() * 12 + today.getMonth();
@@ -400,7 +438,7 @@ const PAGES = {
     };
     TABS.lli[4] = 'Bulan kebutuhan bertanda * tidak diisi di RKM, sehingga dianggap mulai Januari 2027.';
     const top = (!S.rkmFiles.length ? `<div class="banner warn">Belum ada file RKM. Tab "Perlu order" tetap dihitung dari histori pemakaian.</div>` : '') +
-      `<p class="source">Metode ${esc(S.set.method === 'tko' ? 'TKO/Pedoman' : 'Excel lama')}, histori s.d. ${esc(S.mrpWB.window[1])}, basis kebutuhan ${esc(BASIS[S.set.basis].toLowerCase())}. <a href="#/pengaturan">Ubah</a></p>`;
+      `<p class="source">WK PEP. Metode ${esc(S.set.method === 'tko' ? 'TKO/Pedoman' : 'Excel lama')}, histori s.d. ${esc(S.mrpWB.window[1])}, basis kebutuhan ${esc(BASIS[S.set.basis].toLowerCase())}. <a href="#/pengaturan">Ubah</a></p>`;
     tabbed('rkmTab', TABS, top);
   },
 
@@ -411,7 +449,8 @@ const PAGES = {
     if ($('tbRefresh')) $('tbRefresh').onclick = refreshData;
     const SRC = [
       ['mb52', 'MB52', 'Stok per plant dan storage location', S.mb52 && `${fmt(S.mb52.items.length, 0)} item`, S.mb52 && `${S.mb52.plants.length} plant` + wkSplit('mb52', (p) => p.items.length)],
-      ['mrp', 'MRP', 'Histori pemakaian bulanan dan master lead time', S.mrpWB && `${fmt(S.mrpWB.rows.length, 0)} baris`, S.mrpWB && `histori ${S.mrpWB.window[0]} s.d. ${S.mrpWB.window[1]}`],
+      ['mrp', 'MRP', 'Histori pemakaian bulanan dan master lead time. WK PHE belum punya file MRP, jadi dihitung dari MB52 + MB51 client 180', S.mrpWB && `${fmt(S.mrpWB.rows.length, 0)} baris (WK PEP)`,
+        [S.mrpWB && `WK PEP histori ${S.mrpWB.window[0]} s.d. ${S.mrpWB.window[1]}`, S.mrpWB_PHE && `WK PHE dari MB51: ${fmt(S.mrpWB_PHE.rows.length, 0)} material×plant, ${fmt(S.mrpWB_PHE.monthsSpan, 1)} bulan histori`].filter(Boolean).join('; ')],
       ['me3n', 'ME3N', 'Kontrak (outline agreement)', S.me3n && `${fmt(S.me3n.docs.size, 0)} kontrak`, S.me3n && `${fmt(S.me3n.items.length, 0)} item kontrak` + wkSplit('me3n', (p) => p.docs.size)],
       ['me2n', 'ME2N', 'PO dan RO', S.me2n && `${fmt(S.me2n.lines.length, 0)} baris`, S.me2n && `${fmt(new Set(S.me2n.lines.map((l) => l.doc)).size, 0)} dokumen` + wkSplit('me2n', (p) => p.lines.length)],
       ['mb51', 'MB51', 'Pergerakan material (GR, GI, transfer)', S.mb51 && `${fmt(S.mb51.moves.length, 0)} gerakan`, S.mb51 && S.mb51.range && `${dstr(S.mb51.range[0])} s.d. ${dstr(S.mb51.range[1])}` + wkSplit('mb51', (p) => p.moves.length)],
@@ -450,7 +489,7 @@ const PAGES = {
     const P = (k) => (S.set.tko[k] != null ? S.set.tko[k] : MRP.TKO_DEFAULT[k]);
     $('view').innerHTML = `<section class="panel"><div class="panel-h"><h2>Plant dan zona</h2><span class="sub">Zona dipakai di dashboard. Min/Max hanya dihitung untuk plant yang dipantau MRP.</span></div>
         ${plainTable(all, [['Plant', (p) => `<b>${esc(p)}</b>`], ['Nama', (p) => esc(PLANT_NAME[p] || '')],
-          ['Zona', (p) => `<select class="zn" data-p="${esc(p)}" aria-label="Zona ${esc(p)}">${['Zona 1', 'Zona 4', 'Lainnya'].map((z) => `<option ${zonaOf(p) === z ? 'selected' : ''}>${z}</option>`).join('')}</select>`],
+          ['Zona', (p) => `<select class="zn" data-p="${esc(p)}" aria-label="Zona ${esc(p)}">${ZONA_LIST.map((z) => `<option ${zonaOf(p) === z ? 'selected' : ''}>${z}</option>`).join('')}</select>`],
           ['Dipantau MRP', (p) => `<input type="checkbox" class="mp" value="${esc(p)}" ${S.mrpPlants.has(p) ? 'checked' : ''} aria-label="Pantau ${esc(p)}">`]])}</section>
       <section class="panel"><div class="panel-h"><h2>Mata uang dan kurs</h2></div>
         <div class="params"><label>Rupiah per 1 USD<span><input type="number" id="kurs" min="1" step="1" value="${S.set.kurs}"></span></label>
@@ -463,12 +502,15 @@ const PAGES = {
           <label>Moderate (MD) dihitung sebagai FS<span><select data-s="mdAsFS"><option value="1" ${P('mdAsFS') ? 'selected' : ''}>Ya, perlu konfirmasi user</option><option value="0" ${P('mdAsFS') ? '' : 'selected'}>Tidak, Min = Max = SS</option></select></span></label>
           <label>Service level non-critical<span><select data-z="z">${[[1.282, '90%'], [1.645, '95%'], [2.054, '98%'], [2.326, '99%']].map(([z, t]) => `<option value="${z}" ${P('z') == z ? 'selected' : ''}>${t}</option>`).join('')}</select></span></label></div>
           <p class="muted small" style="margin-top:8px">Penjelasan rumus ada di <a href="#/regulasi">Regulasi & Logika</a>. <a href="#" id="tkoReset">Kembalikan default</a></p>` : ''}</section>
+      <section class="panel"><div class="panel-h"><h2>MRP WK PHE</h2><span class="sub">Sementara, sampai file MRP PHE dibuat</span></div>
+        <div class="params"><label>Lead time default bila material tidak ada di master MRP PEP<span><input type="number" id="pheLT" min="0.5" max="36" step="0.5" value="${S.set.pheLT || 3}"></span></label></div>
+        <p class="muted small" style="margin-top:8px">Pemakaian diambil dari MB51 client 180: Mvt kategori Own Use dan Return, tanpa GI ke network/proyek (221, 222, 949, 950). Aturan ini sama dengan file MRP PEP (dicek Oktober 2026, cocok 363 dari 364 material×plant).</p></section>
       <section class="panel"><div class="panel-h"><h2>Basis kebutuhan</h2><span class="sub">Angka AMU yang dipakai mesin MRP</span></div>
         <div class="radios">${Object.entries(BASIS).map(([k, t]) => `<label class="radio"><input type="radio" name="basis" value="${k}" ${S.set.basis === k ? 'checked' : ''}>${esc(t)}</label>`).join('')}</div></section>
       <section class="panel"><div class="panel-h"><h2>Long lead item</h2></div>
         <div class="params"><label>Lead time minimal (bulan)<span><input type="number" id="lli" min="1" max="36" value="${S.set.lliLT}"></span></label></div></section>`;
     const saveSet = () => { store.set('settings', S.set); recompute(); };
-    document.querySelectorAll('.zn').forEach((sl) => (sl.onchange = () => { S.set.zona = Object.assign({}, S.set.zona || DEFAULT_ZONA, { [sl.dataset.p]: sl.value }); saveSet(); }));
+    document.querySelectorAll('.zn').forEach((sl) => (sl.onchange = () => { S.set.zona = Object.assign({}, S.set.zona || {}, { [sl.dataset.p]: sl.value }); saveSet(); }));
     document.querySelectorAll('.mp').forEach((c) => (c.onchange = () => { c.checked ? S.mrpPlants.add(c.value) : S.mrpPlants.delete(c.value); store.set('mrpPlants', [...S.mrpPlants]); }));
     document.querySelectorAll('.wkc').forEach((sl) => (sl.onchange = () => { S.set.wkCur = Object.assign({}, S.set.wkCur, { [sl.dataset.w]: sl.value }); saveSet(); }));
     $('kurs').onchange = () => { const v = parseFloat($('kurs').value); if (v > 0) { S.set.kurs = v; saveSet(); } };
@@ -478,9 +520,29 @@ const PAGES = {
     document.querySelectorAll('.params select[data-z]').forEach((i) => (i.onchange = () => { S.set.tko.z = parseFloat(i.value); saveSet(); }));
     if ($('tkoReset')) $('tkoReset').onclick = (e) => { e.preventDefault(); S.set.tko = {}; saveSet(); route(); };
     document.querySelectorAll('input[name=basis]').forEach((r) => (r.onchange = () => { S.set.basis = r.value; saveSet(); }));
+    $('pheLT').onchange = () => { const v = parseFloat($('pheLT').value); if (v > 0) { S.set.pheLT = v; saveSet(); } };
     $('lli').onchange = () => { S.set.lliLT = Math.max(1, Math.min(36, +$('lli').value || 6)); saveSet(); };
   },
 };
+
+// RKM x MRP untuk WK PHE: belum ada RKM dan file MRP, jadi hanya hasil mesin MRP dari MB52 + MB51
+function rkmPHE(res) {
+  const orders = res.filter((r) => r.toOrder > 0).sort((a, b) => b.toOrder - a.toOrder);
+  const pakai = res.filter((r) => r.amu > 0).sort((a, b) => b.amu - a.amu);
+  const sehat = res.filter((r) => r.berlebih && r.stock > 0).sort((a, b) => (b.surplus || 0) - (a.surplus || 0));
+  const mat = (r) => `<a class="mono mlink" href="#" data-mat="${esc(r.material)}">${esc(r.material)}</a>`;
+  const base = [['Plant', (r) => esc(plantLabel(r.plant)), '', (r) => plantLabel(r.plant)], ['Material', mat, '', (r) => r.material], ['Deskripsi', (r) => esc(r.desc)], ['Aging', (r) => agingPill(r.aging), '', (r) => r.aging],
+    ['AMU', (r) => fmt(r.amu, 2), 'num', (r) => r.amu], ['LT', (r) => fmt(r.lt, 1) + (r.ltDefault ? ' *' : ''), 'num', (r) => r.lt], ['Stok', (r) => fmt(r.stock), 'num', (r) => r.stock], ['OS PO/RO', (r) => fmt(r.ospo), 'num', (r) => r.ospo],
+    ['MB25', (r) => fmt(r.mb25), 'num', (r) => r.mb25], ['Min', (r) => fmt(r.min2), 'num', (r) => r.min2], ['Max', (r) => fmt(r.max2), 'num', (r) => r.max2]];
+  const TABS = {
+    order: ['Perlu order (To Order)', orders, base.concat([['To Order', (r) => pill(fmt(r.toOrder), 'warn'), 'num', (r) => r.toOrder], ['Kelas', (r) => esc(r.cls || r.aging), '', (r) => r.cls || r.aging],
+      ['Kontrak (OA)', (r) => (r.oa ? `<span class="mono">${esc(r.oa)}</span>` : pill('PR + OE', 'mute')), '', (r) => r.oa || 'PR + OE']]), (r) => r.material + ' ' + r.desc, 'LT bertanda * memakai lead time default.'],
+    pakai: ['Material dipakai', pakai, base.concat([['Kelas', (r) => esc(r.cls || r.aging), '', (r) => r.cls || r.aging], ['To Order', (r) => fmt(r.toOrder), 'num', (r) => r.toOrder]]), (r) => r.material + ' ' + r.desc,
+      'Material dengan pemakaian (Mvt Own Use + Return, tanpa network/proyek) di MB51 WK PHE.'],
+    sehat: ['Penyehatan stok', sehat, base.concat([['Surplus', (r) => fmt(r.surplus), 'num', (r) => r.surplus], ['Cakupan (bln)', (r) => (isFinite(r.cover) ? fmt(r.cover, 1) : '∞'), 'num', (r) => (isFinite(r.cover) ? r.cover : '')]]), (r) => r.material + ' ' + r.desc],
+  };
+  tabbed('rkmPheTab', TABS, mrpNote() + srcLine('mb52', 'mb51', 'me3n', 'me2n'));
+}
 
 // ---------- Tab generik (dipakai halaman Kontrak & Order) ----------
 function tabbed(state, TABS, extraTop = '') {
@@ -511,7 +573,7 @@ PAGES.kontrak = function () {
   const renew = docs.filter((d) => (d.sisaHari != null && d.sisaHari <= 180) || d.pctSisa < 0.2);
   const lines = S.me2n ? S.me2n.lines.filter((l) => l.openQty > 0 && !l.deleted) : [];
   const late = lines.filter((l) => l.lateDays > 0).sort((a, b) => b.lateDays - a.lateDays);
-  const kCols = [['No. OA', (d) => `<span class="mono">${esc(d.doc)}</span>`, '', (d) => d.doc], ['Vendor', (d) => esc(d.vendor)], ['PIC', (d) => esc(d.pic)],
+  const kCols = [['No. OA', (d) => `<span class="mono">${esc(d.doc)}</span>`, '', (d) => d.doc], ['Vendor', (d) => esc(d.vendor)], ['Kelompok barang', (d) => esc(d.kel || ''), '', (d) => d.kel || ''], ['PIC', (d) => esc(d.pic)],
     ['Berakhir', (d) => dstr(d.end), '', (d) => dstr(d.end)], ['Sisa hari', (d) => fmt(d.sisaHari, 0), 'num', (d) => d.sisaHari],
     ['Target', (d) => money(d.target, d.currency), 'num', (d) => d.target], ['Terpakai', (d) => money(d.released, d.currency), 'num', (d) => d.released],
     ['Sisa', (d) => money(d.sisa, d.currency), 'num', (d) => d.sisa], ['% Sisa', (d) => fmt(d.pctSisa * 100, 0) + '%', 'num', (d) => d.pctSisa],
@@ -650,10 +712,11 @@ PAGES.lacak = function () {
 
 // ---------- Vendor & PR/PO ----------
 const vc = { all() { return store.get('vendorContacts') || {}; }, get(k) { return this.all()[k] || {}; }, set(k, v) { const a = this.all(); a[k] = v; store.set('vendorContacts', a); } };
-const kimapGroup = (m) => (m || '').slice(0, 4);
+const kimapGroup = (m) => { const g = Master.mgOf(m); return g ? `MG ${g.mg} ${g.mgName}` : 'KIMAP ' + (m || '').slice(0, 4); };
 PAGES.order = function () {
   if (!S.mrpRes) { $('view').innerHTML = needFile('file MRP', 'Draft RO/PR dihitung dari mesin MRP. Upload file MRP (dan ME3N/ME2N agar status kontrak & PO terbaru).'); return; }
-  const res = [...S.mrpRes.values()].filter((r) => S.mrpPlants.has(r.plant));
+  mrpSwitch();
+  const res = mrpRows();
   const mbPrice = new Map(S.mb52 ? S.mb52.items.filter((i) => i.soh > 0).map((i) => [i.material + '|' + i.plant, i.price]) : []);
   const oePrice = (r) => { const lp = S.me2n && (S.me2n.lastPrice.get(r.material) || (r.kimap && S.me2n.lastPrice.get(r.kimap)));
     if (lp) return { price: lp.price, currency: lp.currency, src: 'PO terakhir ' + dstr(lp.date) }; const p = mbPrice.get(r.key); return p ? { price: p, currency: stockCur(r.plant), src: 'Harga rata-rata stok' } : { price: 0, currency: '', src: 'Belum ada harga' }; };
@@ -680,12 +743,12 @@ PAGES.order = function () {
       ['Sisa hari', (o) => fmt(o.r.contract.sisaHari, 0), 'num', (o) => o.r.contract.sisaHari],
       ['Kontak', (o) => `<button class="btn ghost mail" data-doc="${esc(o.r.contract.doc)}" data-v="${esc(o.r.contract.vendorCode || o.r.contract.vendor)}">Email vendor</button>`, '', () => '', false]],
       (o) => o.r.contract.doc + ' ' + o.r.contract.vendor + ' ' + o.r.material + ' ' + o.r.desc, 'Item To Order yang tercover kontrak aktif → terbitkan RO. Kontrak dipilih dengan prioritas X07 → X02 → X10 → X03.'],
-    pr: ['Draft PR + OE (tanpa kontrak)', pr, [['Kelompok KIMAP', (o) => `<span class="mono">${esc(o.grp)}</span>`, '', (o) => o.grp], ['Plant', (o) => esc(o.r.plant)], ['Material', (o) => `<a class="mono mlink" href="#" data-mat="${esc(o.r.material)}">${esc(o.r.material)}</a>`, '', (o) => o.r.material],
+    pr: ['Draft PR + OE (tanpa kontrak)', pr, [['Kelompok', (o) => esc(o.grp), '', (o) => o.grp], ['Plant', (o) => esc(o.r.plant)], ['Material', (o) => `<a class="mono mlink" href="#" data-mat="${esc(o.r.material)}">${esc(o.r.material)}</a>`, '', (o) => o.r.material],
       ['Deskripsi', (o) => esc(o.r.desc)], ['Qty', (o) => fmt(o.r.toOrder), 'num', (o) => o.r.toOrder], ['UoM', (o) => esc(o.r.uom)],
       ['Harga OE', (o) => (o.p.price ? money(o.p.price, o.p.currency) : pill('Belum ada', 'warn')), 'num', (o) => o.p.price], ['Sumber harga', (o) => esc(o.p.src)],
       ['Nilai OE', (o) => money(o.value, o.p.currency), 'num', (o) => o.value], ['Mata uang', (o) => esc(o.p.currency)], ['Kelas', (o) => esc(o.r.cls || o.r.aging)]],
-      (o) => o.grp + ' ' + o.r.material + ' ' + o.r.desc, 'Item To Order tanpa kontrak → PR + Owner Estimate. Dikelompokkan per 4 digit awal KIMAP (sementara, nanti diganti Material Group). Harga OE dari PO terakhir (ME2N), atau harga rata-rata stok.'],
-    kandidat: ['Kandidat kontrak', kandidat, [['Kelompok KIMAP', (k) => `<span class="mono">${esc(k.grp)}</span>`, '', (k) => k.grp], ['Material', (k) => `<a class="mono mlink" href="#" data-mat="${esc(k.material)}">${esc(k.material)}</a>`, '', (k) => k.material], ['Deskripsi', (k) => esc(k.desc)],
+      (o) => o.grp + ' ' + o.r.material + ' ' + o.r.desc, 'Item To Order tanpa kontrak → PR + Owner Estimate. Dikelompokkan per Material Group untuk kode material baru (12 karakter), dan per 4 digit awal KIMAP untuk kode lama. Harga OE dari PO terakhir (ME2N), atau harga rata-rata stok.'],
+    kandidat: ['Kandidat kontrak', kandidat, [['Kelompok', (k) => esc(k.grp), '', (k) => k.grp], ['Material', (k) => `<a class="mono mlink" href="#" data-mat="${esc(k.material)}">${esc(k.material)}</a>`, '', (k) => k.material], ['Deskripsi', (k) => esc(k.desc)],
       ['Plant', (k) => esc(k.plants.join(', '))], ['Kebutuhan/thn', (k) => fmt(k.qty) + ' ' + esc(k.uom), 'num', (k) => k.qty], ['Est. nilai/thn', (k) => money(k.value, 'IDR'), 'num', (k) => k.value],
       ['To Order sekarang', (k) => fmt(k.order), 'num', (k) => k.order], ['Sumber harga', (k) => esc(k.priceSrc)]], (k) => k.grp + ' ' + k.material + ' ' + k.desc,
       'Material rutin (FS) yang belum punya kontrak aktif. Sesuai Pedoman, item rutin/bottleneck sebaiknya dibuatkan kontrak jangka panjang (OA/COO) agar lead time turun dan stok bisa lebih tipis.'],
@@ -696,7 +759,7 @@ PAGES.order = function () {
       ['Nama kontak', (v) => `<input class="vc" data-k="${esc(v.code || v.name)}" data-f="pic" value="${esc(vc.get(v.code || v.name).pic || '')}" placeholder="nama">`, '', (v) => vc.get(v.code || v.name).pic || '']],
       (v) => v.code + ' ' + v.name, 'Kontak vendor hanya tersimpan di browser ini, tidak ke GitHub. Dipakai untuk tombol Email vendor di Draft RO.'],
   };
-  tabbed('oTab', TABS, srcLine('mrp', 'me3n', 'me2n') + (S.me3n ? '' : '<div class="banner warn">Status kontrak masih dari file MRP. Tambahkan ME3N dan ME2N supaya kontrak, harga, dan OS PO terbaru.</div>'));
+  tabbed('oTab', TABS, mrpNote() + srcLine('mrp', 'me3n', 'me2n', 'mb51') + (S.me3n ? '' : '<div class="banner warn">Status kontrak masih dari file MRP. Tambahkan ME3N dan ME2N supaya kontrak, harga, dan OS PO terbaru.</div>'));
   // event: kontak vendor & email
   const bindRes = () => {
     document.querySelectorAll('.vc').forEach((i) => (i.onchange = () => { const c = vc.get(i.dataset.k); c[i.dataset.f] = i.value.trim(); vc.set(i.dataset.k, c); }));

@@ -98,7 +98,7 @@
       const p80 = lens.length ? lens[Math.floor(lens.length * 0.8)] : 6;
       // kolom kode: isi tanpa spasi (No. dokumen, KIMAP, plant) → jangan dipatahkan
       const words = vals.map((v) => Math.max(0, ...v.split(/\s+/).map((w) => w.length))).sort((a, b) => a - b);
-      c.code = !c.num && !c.wide && words.length && words[Math.floor(words.length * 0.9)] >= p80 * 0.8 && p80 <= 16;
+      c.code = !!c.nowrap || !c.num && !c.wide && words.length && words[Math.floor(words.length * 0.9)] >= p80 * 0.8 && p80 <= 16;
       const longestWord = Math.max(...c.label.split(/\s+/).map((w) => w.length));
       const maxWord = words.length ? words[Math.floor(words.length * 0.9)] : 0;
       let e = Math.max(longestWord + 1, Math.min(p80, c.wide ? 44 : 24), Math.min(maxWord, 16), c.num ? 6 : 5) + 3;
@@ -124,17 +124,31 @@
       const wt = (c) => (shrink.has(c.i) ? shrink.get(c.i) : est(c)), tot = vc.reduce((a, c) => a + wt(c), 0);
       let cg = el.querySelector('colgroup'); if (!cg) { cg = document.createElement('colgroup'); thead.parentNode.insertBefore(cg, thead); }
       cg.innerHTML = vc.map((c) => `<col style="width:${((wt(c) / tot) * 100).toFixed(2)}%">`).join('');
-      thead.innerHTML = '<tr>' + vc.map((c) => {
+      const th = (c, attr = '') => {
         const s = st.sort && st.sort.i === c.i ? st.sort.dir : 0, f = st.f[c.i] && st.f[c.i].size;
-        return `<th class="${c.num ? 'num' : ''}${c.wide ? ' wide' : ''}" aria-sort="${s > 0 ? 'ascending' : s < 0 ? 'descending' : 'none'}"><div class="th">
-          <button type="button" class="th-sort" data-i="${c.i}">${esc(c.label)}<span class="ico ${s ? 'on' : ''}">${s > 0 ? I.up : s < 0 ? I.down : I.sort}</span></button>
+        return `<th ${attr} class="${c.num ? 'num' : ''}${c.wide ? ' wide' : ''}${c.gStart ? ' g-start' : ''}" aria-sort="${s > 0 ? 'ascending' : s < 0 ? 'descending' : 'none'}"${c.title ? ` title="${esc(c.title)}"` : ''}><div class="th">
+          <button type="button" class="th-sort" data-i="${c.i}"><span class="th-l">${esc(c.label)}${c.sub ? `<small>${esc(c.sub)}</small>` : ''}</span><span class="ico ${s ? 'on' : ''}">${s > 0 ? I.up : s < 0 ? I.down : I.sort}</span></button>
           ${c.filter === false ? '' : `<button type="button" class="th-filter ${f ? 'on' : ''}" data-i="${c.i}" aria-label="Filter ${esc(c.label)}">${I.funnel}</button>`}</div></th>`;
-      }).join('') + '</tr>';
+      };
+      // header bertingkat: kolom dengan properti group yang berurutan digabung di baris atas (mis. plant per WK)
+      vc.forEach((c, k) => (c.gStart = !!c.group && (k === 0 || vc[k - 1].group !== c.group)));
+      if (!vc.some((c) => c.group)) thead.innerHTML = '<tr>' + vc.map((c) => th(c)).join('') + '</tr>';
+      else {
+        let r1 = '', r2 = '';
+        for (let k = 0; k < vc.length;) {
+          const c = vc[k]; if (!c.group) { r1 += th(c, 'rowspan="2"'); k++; continue; }
+          let n = 0; while (k + n < vc.length && vc[k + n].group === c.group) n++;
+          r1 += `<th colspan="${n}" class="grp g-start">${esc(c.group)}</th>`; for (let j = 0; j < n; j++) r2 += th(vc[k + j]); k += n;
+        }
+        thead.innerHTML = `<tr>${r1}</tr><tr class="r2">${r2}</tr>`;
+        const g = thead.querySelector('th.grp'); const top = g ? g.offsetHeight : 0;
+        thead.querySelectorAll('tr.r2 th').forEach((x) => (x.style.top = top + 'px'));
+      }
     }
     function body() {
       const n = filtered.length, pages = Math.max(1, Math.ceil(n / st.size)); st.page = Math.min(st.page, pages - 1);
       const from = st.page * st.size, rows = filtered.slice(from, from + st.size), vc = visCols();
-      tbody.innerHTML = rows.length ? rows.map((r) => (o.rowKey ? `<tr class="clickable" data-k="${esc(o.rowKey(r))}">` : '<tr>') + vc.map((c) => `<td class="${c.num ? 'num' : ''}${c.wide ? ' wide' : ''}${c.code ? ' code' : ''}">${c.html ? c.html(r) : esc(labelOf(c.get(r)) === '(kosong)' ? '' : labelOf(c.get(r)))}</td>`).join('') + '</tr>').join('')
+      tbody.innerHTML = rows.length ? rows.map((r) => (o.rowKey ? `<tr class="clickable" data-k="${esc(o.rowKey(r))}">` : '<tr>') + vc.map((c) => `<td class="${c.num ? 'num' : ''}${c.wide ? ' wide' : ''}${c.code ? ' code' : ''}${c.gStart ? ' g-start' : ''}">${c.html ? c.html(r) : esc(labelOf(c.get(r)) === '(kosong)' ? '' : labelOf(c.get(r)))}</td>`).join('') + '</tr>').join('')
         : `<tr><td class="dt-empty" colspan="${vc.length}">${o.rows.length ? 'Tidak ada baris yang cocok dengan pencarian atau filter.' : esc(o.empty || 'Belum ada data.')}</td></tr>`;
       el.querySelector('.dt-count').textContent = n === o.rows.length ? `${nf(n)} baris` : `${nf(n)} dari ${nf(o.rows.length)} baris`;
       el.querySelector('.dt-range').textContent = n ? `${nf(from + 1)}–${nf(Math.min(from + st.size, n))} dari ${nf(n)}` : '';
