@@ -121,3 +121,6 @@ th,td{padding:10px 12px;border-bottom:1px solid var(--line)} tr:hover td{backgro
 .params{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;margin-top:12px}
 .params label{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px;padding:8px 10px;border:1px solid var(--line);border-radius:10px}
 .params input{width:80px;padding:6px 8px} .params select{padding:6px 8px}
+.md h2,.md h3,.md h4{margin:18px 0 6px} .md h2{font-size:18px} .md p,.md li{line-height:1.6} .md ul,.md ol{padding-left:20px} .md li.sub{margin-left:18px;list-style:circle}
+.md code,code{background:var(--mute-soft);padding:1px 5px;border-radius:5px;font-size:12.5px} .md table{margin:8px 0} hr{border:0;border-top:1px solid var(--line);margin:16px 0}
+.sim-out{margin-top:12px} .small-v{font-size:18px!important}

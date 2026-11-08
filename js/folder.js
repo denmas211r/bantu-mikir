@@ -26,15 +26,17 @@
   async function listExcel(h, depth = 0, prefix = '') {
     const out = [];
     for await (const [name, e] of h.entries()) {
-      if (e.kind === 'file' && /\.(xlsx|xlsm|xls)$/i.test(name) && !name.startsWith('~$')) { const f = await e.getFile(); out.push({ name: prefix + name, file: f }); }
+      if (e.kind === 'file' && /\.(xlsx|xlsm|xls|md)$/i.test(name) && !name.startsWith('~$')) { const f = await e.getFile(); out.push({ name: prefix + name, file: f }); }
       else if (e.kind === 'directory' && depth < 1) out.push(...(await listExcel(e, depth + 1, prefix + name + '/')));
     }
     return out;
   }
-  // Pilih file berdasarkan nama: MB52 & MRP = yang terbaru; RKM = semua
+  // Pilih file berdasarkan nama: MB52 & MRP = yang terbaru; RKM = semua; .md regulasi/pedoman = yang terbaru
   function classify(files) {
     const newest = (re) => files.filter((f) => re.test(f.name.split('/').pop())).sort((a, b) => b.file.lastModified - a.file.lastModified)[0] || null;
-    return { mb52: newest(/mb52/i), mrp: newest(/mrp/i), rkm: files.filter((f) => /rkm/i.test(f.name.split('/').pop())) };
+    const xl = files.filter((f) => !/\.md$/i.test(f.name)), md = files.filter((f) => /\.md$/i.test(f.name));
+    const nw = (arr, re) => arr.filter((f) => re.test(f.name.split('/').pop())).sort((a, b) => b.file.lastModified - a.file.lastModified)[0] || null;
+    return { mb52: nw(xl, /mb52/i), mrp: nw(xl, /mrp/i), rkm: xl.filter((f) => /rkm/i.test(f.name.split('/').pop())), regulasi: nw(md, /regulasi|pedoman|otak/i) };
   }
   root.Folder = { supported, pick, loadHandle, forget, permission, listExcel, classify };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -61,7 +61,7 @@
   //   Order   : tersedia = Stok + OS PO − Reservasi(MB25); bila tersedia < Min → Max − tersedia
   //             Program/on demand: RKM + Reservasi − (Stok + OS PO)
   //   Berlebih: cakupan stok > batas bulan (umum 12, chemical 5)
-  const TKO_DEFAULT = { amuMonths: 24, z: 1.645, zCrit: 2.326, nonContractLT: 5.5, roqMonths: 6, maxFormula: 'C', mdAsFS: true, chemSSMonths: 3, ssCapMonths: 3, chemP: 1, excessGeneral: 12, excessChem: 5,
+  const TKO_DEFAULT = { amuMonths: 24, z: 1.645, zCrit: 2.326, nonContractLT: 5.5, roqMonths: 6, maxFormula: 'BC', mdAsFS: true, chemSSMonths: 3, ssCapMonths: 3, chemP: 1, excessGeneral: 12, excessChem: 5,
     chemRegex: '^(?!.*BATTERY).*(CHEMICAL|CATALYST|SULFATE|SULPHATE|KAPORIT|CHLORINE|HYPOCHLORITE|HYDROXIDE|DEMULSIFIER|CORROSION INHIBITOR|SCALE INHIBITOR|BIOCIDE|SURFACTANT|SCAVENGER|DEFOAM|SOLVENT|POLYMER|COAGULANT|FLOCCULANT|HYDROCHLORIC|CAUSTIC|SODA ASH)' };
   function stdev(a) { if (a.length < 2) return 0; const m = a.reduce((x, y) => x + y, 0) / a.length; return Math.sqrt(a.reduce((s, v) => s + (v - m) ** 2, 0) / (a.length - 1)); }
   function agingTKO(usageAll) {

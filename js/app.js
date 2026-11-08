@@ -8,6 +8,7 @@ const ICON = {
   calc: '<rect x="5" y="2" width="14" height="20" rx="2"/><path d="M8 6h8M8 11h2M14 11h2M8 15h2M14 15h2M8 19h2M14 19h2"/>',
   gauge: '<path d="M12 14l4-4"/><path d="M3.3 17a10 10 0 1 1 17.4 0"/>',
   db: '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
+  book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5M9 7h7M9 11h5"/>',
   gear: '<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>',
 };
 const svg = (k) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICON[k]}</svg>`;
@@ -25,6 +26,7 @@ const MENU = [
     ['hps', 'HPS / OE', 'calc', 'Evaluasi penawaran vendor', 'Tahap 5'],
   ]],
   ['Laporan', [['kpi', 'KPI Inventory', 'gauge', 'Service level, TOR, slow moving & dead stock', 'Tahap 5']]],
+  ['Panduan', [['regulasi', 'Regulasi & Logika', 'book', 'Aturan Pedoman/TKO, logika MRP, dan RKM yang dipakai web ini']]],
   ['Data', [
     ['data', 'Data SAP', 'db', 'Folder data, MB52, MRP, dan RKM (diproses di browser)'],
     ['pengaturan', 'Pengaturan', 'gear', 'Plant MRP, basis kebutuhan, batas Long Lead Item'],
@@ -132,6 +134,7 @@ async function loadFolder(h) {
     const c = Folder.classify(await Folder.listExcel(h));
     if (c.mb52) { await loadMB52(c.mb52.file); log.push('MB52: ' + c.mb52.name); }
     if (c.mrp) { await tick(); await loadMRP(c.mrp.file); log.push('MRP: ' + c.mrp.name); }
+    if (c.regulasi) { S.regulasi = { name: c.regulasi.name, text: await c.regulasi.file.text() }; log.push('Regulasi: ' + c.regulasi.name); }
     for (const r of c.rkm) { try { await loadRKM(r.file, r.name); log.push('RKM: ' + r.name); } catch (e) { log.push('⚠ ' + r.name + ' — ' + e.message); } }
     recompute(); route();
     banner(log.length ? `✓ Dimuat dari <b>${esc(h.name)}</b>: ${log.map(esc).join(' · ')} <button class="icon-btn" id="bx">✕</button>` : `Folder <b>${esc(h.name)}</b> tidak berisi file MB52/MRP/RKM. Nama file harus memuat kata "MB52", "MRP", atau "RKM". <button class="icon-btn" id="bx">✕</button>`, log.length ? 'ok' : 'warn');
@@ -352,4 +355,91 @@ const PAGES = {
     summary();
   },
 };
+// Markdown sederhana → HTML (teks di-escape dulu, aman)
+function md(src) {
+  const inline = (t) => esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\*(.+?)\*/g, '<i>$1</i>').replace(/`(.+?)`/g, '<code>$1</code>');
+  const L = src.replace(/\r/g, '').split('\n'); let h = '', i = 0;
+  while (i < L.length) {
+    const l = L[i];
+    if (/^\s*\|/.test(l)) { const rows = []; while (i < L.length && /^\s*\|/.test(L[i])) rows.push(L[i++]);
+      const cells = (r) => r.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
+      const body = rows.filter((r, k) => !(k === 1 && /^[\s|:-]+$/.test(r)));
+      h += `<div class="table-wrap flat"><table><tr>${cells(body[0]).map((c) => `<th>${inline(c)}</th>`).join('')}</tr>${body.slice(1).map((r) => `<tr>${cells(r).map((c) => `<td>${inline(c)}</td>`).join('')}</tr>`).join('')}</table></div>`; continue; }
+    if (/^#{1,4}\s/.test(l)) { const n = l.match(/^#+/)[0].length; h += `<h${n + 1}>${inline(l.replace(/^#+\s*/, ''))}</h${n + 1}>`; i++; continue; }
+    if (/^\s*([-*]|\d+\.)\s/.test(l)) { const ord = /^\s*\d+\./.test(l); let it = ''; while (i < L.length && /^\s*([-*]|\d+\.)\s/.test(L[i])) { const sub = /^\s{2,}/.test(L[i]); it += `<li${sub ? ' class="sub"' : ''}>${inline(L[i].replace(/^\s*([-*]|\d+\.)\s/, ''))}</li>`; i++; } h += ord ? `<ol>${it}</ol>` : `<ul>${it}</ul>`; continue; }
+    if (/^---+$/.test(l.trim())) { h += '<hr>'; i++; continue; }
+    if (l.trim()) { let p = ''; while (i < L.length && L[i].trim() && !/^\s*(\||#|[-*]\s|\d+\.\s)/.test(L[i])) p += ' ' + L[i++]; h += `<p>${inline(p.trim())}</p>`; continue; }
+    i++;
+  }
+  return h;
+}
+
+PAGES.regulasi = function () {
+  const P = Object.assign({}, MRP.TKO_DEFAULT, S.set.tko || {});
+  const maxTxt = { A: '2 × (AMU × T) + SS', B: 'AMU × T + 2 × SS', C: `ROP + ${P.roqMonths} × AMU`, BC: `ada kontrak: AMU × T + 2 × SS · tanpa kontrak: ROP + ${P.roqMonths} × AMU` }[P.maxFormula];
+  const sl = { 1.282: '90%', 1.645: '95%', 2.054: '98%', 2.326: '99%' }[P.z] || P.z;
+  const T = {
+    mrp: ['Logika MRP', `
+      <div class="card"><h3>Urutan hitung per material + plant</h3><ol class="steps">
+        <li><b>Aging</b> dari pemakaian terakhir: FS ≤ 12 bln · MD ≤ 24 bln · SP ≤ 60 bln · DS &gt; 60 bln.${P.mdAsFS ? ' <i>MD sementara dihitung seperti FS (perlu konfirmasi user).</i>' : ''}</li>
+        <li><b>Kategori stock</b>: Project → Program · FS chemical/catalyst → Rutin Chemical · FS lainnya → Rutin Maintenance · SP/DS → On Demand.</li>
+        <li><b>AMU</b> = rata-rata pemakaian ${P.amuMonths} bulan terakhir.</li>
+        <li><b>T (lead time efektif)</b> = lead time${' + ' + P.nonContractLT} bln bila belum ada kontrak (waktu PR → kontrak).</li>
+        <li><b>Safety stock</b>: maintenance = z × SdMI × √T (service level ${sl}), maks ${P.ssCapMonths} × AMU · chemical = ${P.chemSSMonths} × AMU.</li>
+        <li><b>Min (ROP)</b> = AMU × T + SS.</li>
+        <li><b>Max</b> = ${esc(maxTxt)} · chemical = AMU × (${P.chemP} + T) + SS. Min dan Max dibulatkan ke atas, Max ≥ Min.</li>
+        <li><b>To Order</b>: tersedia = Stok + OS PO − Reservasi. Kalau tersedia &lt; Min → pesan Max − tersedia. Program/On Demand: RKM + Reservasi − (Stok + OS PO).</li>
+        <li><b>Penyehatan</b>: berlebih kalau stok &gt; ${P.excessGeneral} bln pemakaian (chemical ${P.excessChem} bln); DS dengan stok = kandidat dead stock.</li>
+      </ol><p class="muted small">Angka di atas mengikuti Pengaturan saat ini. <a href="#/pengaturan">Ubah parameter</a></p></div>
+      <div class="card"><h3>Coba hitung</h3><div class="params" id="sim">
+        ${[['amu', 'AMU (per bulan)', 4], ['lt', 'Lead time (bln)', 3], ['sd', 'Std. deviasi pemakaian bulanan', 3], ['st', 'Stok', 10], ['po', 'OS PO/RO', 0], ['rs', 'Reservasi (MB25)', 0]].map(([k, t, v]) => `<label>${t}<span><input type="number" step="0.5" min="0" data-k="${k}" value="${v}"></span></label>`).join('')}
+        <label>Kontrak<span><select data-k="kon"><option value="Yes">Ada</option><option value="No">Belum ada</option></select></span></label>
+        <label>Chemical/catalyst<span><select data-k="chem"><option value="0">Bukan</option><option value="1">Ya</option></select></span></label>
+      </div><div id="simOut" class="sim-out"></div></div>`],
+    kat: ['Kategori & Aging', `
+      <div class="card"><h3>Kategori stock dan perlakuannya di web</h3><div class="table-wrap flat"><table>
+        <tr><th>Kategori</th><th>Siapa</th><th>Safety stock</th><th>Min / Max</th><th>Cara pesan</th></tr>
+        <tr><td>Program</td><td>Cat = Project, kebutuhan program (TA/OH, drilling, WS)</td><td>0</td><td>Tidak ada</td><td>RKM + reservasi − (stok + PO)</td></tr>
+        <tr><td>Rutin · Chemical</td><td>FS, deskripsi chemical/catalyst</td><td>${P.chemSSMonths} bln × AMU</td><td>ROP = AMU×T+SS · Max = AMU×(P+T)+SS</td><td>Isi sampai Max</td></tr>
+        <tr><td>Rutin · Maintenance</td><td>FS lainnya${P.mdAsFS ? ' (+ MD)' : ''}</td><td>z × SdMI × √T</td><td>ROP = AMU×T+SS · Max = ${esc(maxTxt)}</td><td>Isi sampai Max</td></tr>
+        <tr><td>Rutin · Slow</td><td>MD${P.mdAsFS ? ' (bila opsi MD→FS dimatikan)' : ''}</td><td>z × SdMI × √T</td><td>Min = Max = SS</td><td>Sampai SS</td></tr>
+        <tr><td>On Demand</td><td>SP / DS</td><td>0</td><td>Tidak ada</td><td>Reservasi/RKM − (stok + PO)</td></tr>
+        <tr><td>Insurance / Critical</td><td>Belum ada data</td><td>Rekomendasi user</td><td>—</td><td>Upcoming</td></tr>
+      </table></div><p class="muted small">Penanda chemical sementara ditebak dari deskripsi. Nanti diganti Material Group / logika KIMAP.</p></div>
+      <div class="card"><h3>Kenapa Max dibedakan kontrak vs tanpa kontrak?</h3>
+        <p>Item yang punya kontrak cukup dibuatkan RO (lead time pendek), jadi stok bisa dijaga tipis (rumus B). Item tanpa kontrak harus lewat PR + OE (± ${P.nonContractLT} bln), jadi sekali pesan dibuat cukup untuk ± ${P.roqMonths} bln (rumus C) agar PR tidak terlalu sering.</p>
+        <p>Item rutin yang belum punya kontrak adalah kandidat kontrak jangka panjang (OA/COO). Begitu berkontrak, lead time turun dan stok bisa lebih tipis.</p></div>`],
+    rkm: ['RKM & Material', `
+      <div class="card"><h3>Peran RKM</h3><ul>
+        <li>MRP adalah metodenya, RKM adalah input dari user (jumlah dan bulan kebutuhan 2027).</li>
+        <li>Basis kebutuhan diatur di Pengaturan: <b>${esc(BASIS[S.set.basis])}</b>.</li>
+        <li>Untuk item Program / On Demand, RKM langsung jadi kebutuhan pesan (RKM − stok − PO).</li>
+        <li>Long Lead Item: item dengan LT ≥ ${S.set.lliLT} bln, diberi bulan "pesan paling lambat" = bulan butuh − LT.</li></ul></div>
+      <div class="card"><h3>Cara RKM dicocokkan ke MRP</h3><ol class="steps">
+        <li>KIMAP RKM = Material di MRP (plant sama)</li><li>KIMAP RKM = KIMAP Final di MRP</li>
+        <li>KIMAP RKM ditemukan di master LeadTime → Material → MRP</li><li>Kalau tanpa KIMAP: deskripsi persis sama dan unik di plant itu</li></ol>
+        <p class="muted small">Yang tidak cocok masuk tab "RKM tanpa MRP". Kalau ada di master LeadTime, web memberi usulan Min/Max dari RKM.</p></div>`],
+    pedoman: ['Pedoman / TKO', S.regulasi ? `<div class="card md"><p class="muted small">Dibaca dari file lokal <b>${esc(S.regulasi.name)}</b>. Tidak tersimpan di web/GitHub.</p>${md(S.regulasi.text)}</div>`
+      : `<div class="card empty"><div class="big">📘</div><h3>Ringkasan Pedoman belum dimuat</h3>
+        <p>Isi Pedoman/TKO bersifat internal, jadi tidak disimpan di web. Taruh file ringkasan (.md) yang namanya memuat kata "regulasi" di folder data, atau pilih filenya di sini.</p>
+        <label class="btn primary">Pilih file .md<input type="file" id="regf" accept=".md,.txt" hidden></label></div>`],
+  };
+  if (!T[S.regTab]) S.regTab = 'mrp';
+  $('view').innerHTML = `<div class="tabs">${Object.entries(T).map(([k, t]) => `<button class="tab ${k === S.regTab ? 'on' : ''}" data-t="${k}">${esc(t[0])}</button>`).join('')}</div>${T[S.regTab][1]}`;
+  document.querySelectorAll('.tab').forEach((b) => (b.onclick = () => { S.regTab = b.dataset.t; PAGES.regulasi(); }));
+  if ($('regf')) $('regf').onchange = async (e) => { const f = e.target.files[0]; if (f) { S.regulasi = { name: f.name, text: await f.text() }; PAGES.regulasi(); } };
+  if ($('sim')) {
+    const v = (k) => { const el = document.querySelector(`#sim [data-k="${k}"]`); return el.tagName === 'SELECT' ? el.value : parseFloat(el.value) || 0; };
+    const run = () => {
+      const amu = v('amu'), sd = v('sd'), chem = v('chem') === '1', kon = v('kon');
+      // usage sintetis 24 bln dengan rata-rata & sd yang diminta (supaya mesin yang sama dipakai)
+      const n = P.amuMonths, usage = Array.from({ length: 120 }, () => 0);
+      for (let i = 0; i < n; i++) usage[120 - n + i] = amu + (i % 2 ? sd : -sd) * Math.sqrt((n - 1) / n);
+      const r = MRP.calcTKO({ usageAll: usage, lt: v('lt'), hasContract: kon, cat: 'MRO', desc: chem ? 'CHEMICAL' : 'PART', stock: v('st'), ospo: v('po'), mb25: v('rs') }, { tko: S.set.tko });
+      $('simOut').innerHTML = `<div class="tiles">${[['Kategori', esc(r.cls)], ['T efektif', fmt(r.tEff) + ' bln'], ['Safety stock', fmt(r.ss)], ['Min (ROP)', fmt(r.min2)], ['Max', fmt(r.max2)], ['To Order', fmt(r.toOrder)]].map(([k, x]) => `<div class="tile info"><div class="k">${k}</div><div class="v small-v">${x}</div></div>`).join('')}</div>`;
+    };
+    document.querySelectorAll('#sim input, #sim select').forEach((el) => (el.oninput = el.onchange = run)); run();
+  }
+};
+
 function soon(r) { $('view').innerHTML = `<div class="card empty"><div class="big">🚧</div><h3>${esc(r[1])}</h3><p>Sedang disiapkan (${esc(r[4] || '')}).</p></div>`; }
