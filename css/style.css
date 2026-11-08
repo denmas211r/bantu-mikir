@@ -1,0 +1,9 @@
+*{box-sizing:border-box}body{margin:0;font:15px system-ui,sans-serif;color:#1f2937;background:#f3f4f6}
+#login{display:grid;place-items:center;height:100vh}#lf{background:#fff;padding:28px;border-radius:12px;width:320px;display:grid;gap:12px;box-shadow:0 4px 20px #0001}
+input,button{padding:10px;border-radius:8px;border:1px solid #d1d5db;font:inherit}button{background:#0f4c81;color:#fff;border:0;cursor:pointer}
+#err{color:#b91c1c;margin:0;min-height:1em}#app{display:flex;min-height:100vh}[hidden]{display:none!important}
+aside{width:220px;background:#0f2a43;color:#fff;padding:16px;display:flex;flex-direction:column;gap:8px}
+aside h2{margin:0 0 8px;font-size:16px}#nav{display:grid;gap:4px;flex:1}#nav a{color:#cbd5e1;text-decoration:none;padding:8px 10px;border-radius:6px}
+#nav a.on,#nav a:hover{background:#1e4a73;color:#fff}main{flex:1;padding:20px;overflow:auto}#who{color:#6b7280;margin-bottom:12px}
+table{border-collapse:collapse;width:100%;background:#fff}th,td{padding:8px 10px;border-bottom:1px solid #e5e7eb;text-align:left}
+.low{color:#b91c1c;font-weight:600}.ok{color:#047857}.card{background:#fff;padding:16px;border-radius:10px}
