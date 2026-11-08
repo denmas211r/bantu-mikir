@@ -98,7 +98,7 @@
       const p80 = lens.length ? lens[Math.floor(lens.length * 0.8)] : 6;
       // kolom kode: isi tanpa spasi (No. dokumen, KIMAP, plant) → jangan dipatahkan
       const words = vals.map((v) => Math.max(0, ...v.split(/\s+/).map((w) => w.length))).sort((a, b) => a - b);
-      c.code = !c.wide && words.length && words[Math.floor(words.length * 0.9)] >= p80 * 0.8 && p80 <= 16;
+      c.code = !c.num && !c.wide && words.length && words[Math.floor(words.length * 0.9)] >= p80 * 0.8 && p80 <= 16;
       const longestWord = Math.max(...c.label.split(/\s+/).map((w) => w.length));
       const maxWord = words.length ? words[Math.floor(words.length * 0.9)] : 0;
       let e = Math.max(longestWord + 1, Math.min(p80, c.wide ? 44 : 24), Math.min(maxWord, 16), c.num ? 6 : 5) + 3;
@@ -108,7 +108,8 @@
     function compute() {
       const q = st.q.trim().toLowerCase();
       filtered = o.rows.filter((r) => (!q || matchQ(r, q)) && passFilters(r, -1));
-      if (st.sort) { const c = cols[st.sort.i]; if (c) { const d = st.sort.dir; filtered = filtered.map((r, k) => [r, k]).sort((a, b) => cmp(c.get(a[0]), c.get(b[0])) * d || a[1] - b[1]).map((x) => x[0]); } }
+      if (st.sort) { const c = cols[st.sort.i]; if (c) { const d = st.sort.dir, emp = (v) => v == null || v === '' || (typeof v === 'number' && !isFinite(v));
+        filtered = filtered.map((r, k) => [r, k, c.get(r)]).sort((a, b) => { const ea = emp(a[2]), eb = emp(b[2]); if (ea || eb) return ea === eb ? a[1] - b[1] : ea ? 1 : -1; return cmp(a[2], b[2]) * d || a[1] - b[1]; }).map((x) => x[0]); } }
     }
     function head() {
       // lebar kolom proporsional → tabel selalu muat selebar layar, teks panjang turun baris
@@ -133,7 +134,7 @@
     function body() {
       const n = filtered.length, pages = Math.max(1, Math.ceil(n / st.size)); st.page = Math.min(st.page, pages - 1);
       const from = st.page * st.size, rows = filtered.slice(from, from + st.size), vc = visCols();
-      tbody.innerHTML = rows.length ? rows.map((r) => '<tr>' + vc.map((c) => `<td class="${c.num ? 'num' : ''}${c.wide ? ' wide' : ''}${c.code ? ' code' : ''}">${c.html ? c.html(r) : esc(labelOf(c.get(r)) === '(kosong)' ? '' : labelOf(c.get(r)))}</td>`).join('') + '</tr>').join('')
+      tbody.innerHTML = rows.length ? rows.map((r) => (o.rowKey ? `<tr class="clickable" data-k="${esc(o.rowKey(r))}">` : '<tr>') + vc.map((c) => `<td class="${c.num ? 'num' : ''}${c.wide ? ' wide' : ''}${c.code ? ' code' : ''}">${c.html ? c.html(r) : esc(labelOf(c.get(r)) === '(kosong)' ? '' : labelOf(c.get(r)))}</td>`).join('') + '</tr>').join('')
         : `<tr><td class="dt-empty" colspan="${vc.length}">${o.rows.length ? 'Tidak ada baris yang cocok dengan pencarian atau filter.' : esc(o.empty || 'Belum ada data.')}</td></tr>`;
       el.querySelector('.dt-count').textContent = n === o.rows.length ? `${nf(n)} baris` : `${nf(n)} dari ${nf(o.rows.length)} baris`;
       el.querySelector('.dt-range').textContent = n ? `${nf(from + 1)}–${nf(Math.min(from + st.size, n))} dari ${nf(n)}` : '';
@@ -157,6 +158,7 @@
         checklist(openPop(fb, '', 300), values, sel, () => { compute(); body(); head(); });
       }
     };
+    if (o.onRow) tbody.onclick = (e) => { if (e.target.closest('a,button,input,select,label')) return; const tr = e.target.closest('tr[data-k]'); if (tr) o.onRow(tr.dataset.k); };
     el.querySelector('.dt-chips').onclick = (e) => { const b = e.target.closest('[data-clear]'); if (b) { delete st.f[b.dataset.clear]; refresh(); } };
     el.querySelector('[data-a=reset]').onclick = () => { st.f = {}; st.q = ''; $q.value = ''; refresh(); };
     el.querySelector('[data-a=prev]').onclick = () => { st.page--; body(); el.querySelector('.dt-scroll').scrollTop = 0; };
@@ -208,5 +210,31 @@
     el.querySelector('.bars').onclick = (e) => { const b = e.target.closest('.bar-row'); if (b) o.onToggle(b.dataset.k); };
   }
 
-  root.UI = { table, multi, seg, bars, esc, strip, closePop, I };
+  // ---------- Panel samping (detail) ----------
+  let drawerEl = null;
+  function drawer(html, opt = {}) {
+    closeDrawer();
+    drawerEl = document.createElement('div'); drawerEl.className = 'drawer-wrap';
+    drawerEl.innerHTML = `<div class="drawer-back"></div><aside class="drawer" role="dialog" aria-modal="true" aria-label="${esc(opt.label || 'Detail')}">
+      <button type="button" class="icon-btn drawer-x" aria-label="Tutup">${I.x}</button><div class="drawer-body">${html}</div></aside>`;
+    document.body.appendChild(drawerEl); document.body.classList.add('noscroll');
+    drawerEl.querySelector('.drawer-back').onclick = closeDrawer; drawerEl.querySelector('.drawer-x').onclick = closeDrawer;
+    setTimeout(() => drawerEl && drawerEl.classList.add('open'), 10);
+    return drawerEl.querySelector('.drawer-body');
+  }
+  function closeDrawer() { if (drawerEl) { drawerEl.remove(); drawerEl = null; document.body.classList.remove('noscroll'); } }
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && drawerEl && !pop) closeDrawer(); });
+  // batang mini (pemakaian bulanan)
+  function spark(vals, w = 96, h = 24) {
+    const max = Math.max(1, ...vals), n = vals.length || 1, bw = w / n;
+    return `<svg class="spark" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true">${vals.map((v, i) => { const hh = v > 0 ? Math.max(2, (v / max) * h) : 1;
+      return `<rect x="${(i * bw + 0.5).toFixed(1)}" y="${(h - hh).toFixed(1)}" width="${Math.max(1, bw - 1.5).toFixed(1)}" height="${hh.toFixed(1)}" rx="1" class="${v > 0 ? 'on' : 'off'}"/>`; }).join('')}</svg>`;
+  }
+  // grafik kolom bulanan dengan tooltip (untuk panel detail)
+  function columns(el, labels, vals, fmtv) {
+    const max = Math.max(1, ...vals);
+    el.innerHTML = `<div class="cols">${vals.map((v, i) => `<div class="col" tabindex="0"><span class="col-f" style="height:${v > 0 ? Math.max(3, (v / max) * 100) : 0}%"></span><span class="tip">${esc(labels[i])}<br>${esc(fmtv(v))}</span></div>`).join('')}</div>
+      <div class="cols-x"><span>${esc(labels[0] || '')}</span><span>${esc(labels[labels.length - 1] || '')}</span></div>`;
+  }
+  root.UI = { table, multi, seg, bars, esc, strip, closePop, I, drawer, closeDrawer, spark, columns };
 })(window);

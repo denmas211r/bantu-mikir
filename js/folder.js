@@ -35,8 +35,13 @@
   function classify(files) {
     const newest = (re) => files.filter((f) => re.test(f.name.split('/').pop())).sort((a, b) => b.file.lastModified - a.file.lastModified)[0] || null;
     const xl = files.filter((f) => !/\.md$/i.test(f.name)), md = files.filter((f) => /\.md$/i.test(f.name));
-    const nw = (arr, re) => arr.filter((f) => re.test(f.name.split('/').pop())).sort((a, b) => b.file.lastModified - a.file.lastModified)[0] || null;
-    return { mb52: nw(xl, /mb52/i), mrp: nw(xl, /mrp/i), me3n: nw(xl, /me3n/i), me2n: nw(xl, /me2n/i), mb51: nw(xl, /mb51/i), mb25: nw(xl, /mb25/i), rkm: xl.filter((f) => /rkm/i.test(f.name.split('/').pop())), regulasi: nw(md, /regulasi|pedoman|otak/i) };
+    const base = (f) => f.name.split('/').pop();
+    const nw = (arr, re) => arr.filter((f) => re.test(base(f))).sort((a, b) => b.file.lastModified - a.file.lastModified)[0] || null;
+    // file SAP: ambil yang terbaru untuk SETIAP client (mis. _100_ = WK PEP, _180_ = WK PHE)
+    const perClient = (re) => { const m = new Map(); xl.filter((f) => re.test(base(f))).sort((a, b) => b.file.lastModified - a.file.lastModified)
+      .forEach((f) => { const c = (base(f).match(/_(\d{3})_/) || [, ''])[1]; if (!m.has(c)) m.set(c, f); }); return [...m.values()]; };
+    return { mb52: perClient(/mb52/i), mrp: nw(xl, /mrp/i), me3n: perClient(/me3n/i), me2n: perClient(/me2n/i), mb51: perClient(/mb51/i), mb25: perClient(/mb25/i),
+      rkm: xl.filter((f) => /rkm/i.test(base(f))), regulasi: nw(md, /regulasi|pedoman|otak/i) };
   }
   root.Folder = { supported, pick, loadHandle, forget, permission, listExcel, classify };
 })(typeof window !== 'undefined' ? window : globalThis);

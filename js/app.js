@@ -63,7 +63,7 @@ $('lf').onsubmit = async (e) => {
     const { role, key } = await Vault.login(entry, $('p').value);
     const data = await Vault.decryptJSON(key, await (await fetch('data/data.enc.json', { cache: 'no-store' })).json());
     S = { role, data, user: $('u').value.trim(), mb52: null, mrpWB: null, rkmFiles: [], mrpRes: null, rkmMatched: [], mrp: null,
-      mrpPlants: new Set(store.get('mrpPlants') || DEFAULT_MRP_PLANTS), set: Object.assign({ basis: 'hist', lliLT: 6, method: 'tko', tko: {}, kurs: 18150, zona: DEFAULT_ZONA }, store.get('settings') || {}), rkmTab: 'vs', src: {}, dash: { cur: 'IDR', wh: new Set(), zona: new Set() } };
+      mrpPlants: new Set(store.get('mrpPlants') || DEFAULT_MRP_PLANTS), set: Object.assign({ basis: 'hist', lliLT: 6, method: 'tko', tko: {}, kurs: 18150, zona: DEFAULT_ZONA, wkCur: { PEP: 'IDR', PHE: 'USD' } }, store.get('settings') || {}), rkmTab: 'vs', src: {}, raw: {}, dash: { cur: 'IDR', wh: new Set(), zona: new Set(), wk: new Set() }, cariView: store.get('cariView') || 'matriks', kView: store.get('kView') || 'kartu' };
     $('login').hidden = true; $('app').hidden = false;
     $('whoName').textContent = S.user; $('whoRole').textContent = role; $('avatar').textContent = S.user[0].toUpperCase();
     buildNav(); route(); initFolder();
@@ -86,13 +86,14 @@ function route() {
   const r = ROUTES[k] || ROUTES.beranda;
   document.querySelectorAll('#nav a').forEach((a) => a.classList.toggle('on', a.dataset.k === r[0]));
   $('pageTitle').textContent = r[1]; $('pageSub').textContent = r[3] || ''; $('pageActions').innerHTML = ''; document.title = r[1] + ' · MIM Inventory Analyst';
-  $('sidebar').classList.remove('open'); UI.closePop();
+  $('sidebar').classList.remove('open'); UI.closePop(); UI.closeDrawer();
   (PAGES[r[0]] || soon)(r);
   mountTables();
 }
 
 // ---------- Hitung ulang semua (MB52 + MRP + RKM + pengaturan) ----------
 function recompute() {
+  S.ver = (S.ver || 0) + 1;
   if (!S.mrpWB) { S.mrpRes = null; S.mrp = null; S.rkmMatched = []; return; }
   const stockMap = S.mb52 ? new Map(S.mb52.items.map((i) => [i.material + '|' + i.plant, i.soh])) : null;
   const o = { stockMap, method: S.set.method, tko: S.set.tko, contractPick: S.me3n ? S.me3n.pick : null, ospoMap: S.me2n ? S.me2n.ospo : null, mb25Map: S.mb25 ? S.mb25.open : null };
@@ -102,6 +103,7 @@ function recompute() {
   const map = new Map();
   for (const r of S.mrpRes.values()) map.set(r.plant + '|' + r.material, { min: r.min2 || 0, max: r.max2 || 0, aging: r.aging, toOrder: r.toOrder });
   S.mrp = { map, plants: [...new Set([...S.mrpRes.values()].map((r) => r.plant))].sort() };
+  S.ver = (S.ver || 0) + 1;
 }
 function activeItems() {
   if (S.mb52) return Parser.merge(S.mb52.items, S.mrp ? S.mrp.map : null, S.mrpPlants);
@@ -109,19 +111,65 @@ function activeItems() {
   return [];
 }
 
-// ---------- Muat file ----------
-async function loadMB52(file) { S.mb52 = Parser.parseMB52(XLSX, await file.arrayBuffer()); S.mb52Name = file.name; srcMark('mb52', file); }
-async function loadMRP(file) { S.mrpWB = MRP.parseWorkbook(XLSX, await file.arrayBuffer()); S.mrpName = file.name; srcMark('mrp', file); }
-async function loadME3N(file) { S.me3n = Contract.parseME3N(XLSX, await file.arrayBuffer()); S.me3nName = file.name; srcMark('me3n', file); }
-async function loadME2N(file) { S.me2n = Contract.parseME2N(XLSX, await file.arrayBuffer()); S.me2nName = file.name; srcMark('me2n', file); }
-async function loadMB51(file) { S.mb51 = Trace.parseMB51(XLSX, await file.arrayBuffer()); S.mb51Name = file.name; srcMark('mb51', file); }
-async function loadMB25(file) { S.mb25 = Trace.parseMB25(XLSX, await file.arrayBuffer()); S.mb25Name = file.name; srcMark('mb25', file); }
-function srcMark(k, file) { S.src[k] = { name: file.name, at: new Date(), modified: file.lastModified ? new Date(file.lastModified) : null }; }
+// ---------- Muat file (dua client SAP: 100 = WK PEP, 180 = WK PHE) ----------
+const CLIENT_WK = { '100': 'PEP', '180': 'PHE' };
+const clientOf = (name) => { const m = String(name).match(/_(\d{3})_/); return m ? m[1] : ''; };
+const wkOfFile = (name) => CLIENT_WK[clientOf(name)] || 'PEP';
+const WK_ORDER = ['PEP', 'PHE'];
+const byWK = (obj) => WK_ORDER.filter((w) => obj[w]).map((w) => [w, obj[w]]).concat(Object.entries(obj).filter(([w]) => !WK_ORDER.includes(w)));
+// gabung hasil per WK menjadi satu struktur yang dipakai seluruh web
+const MERGE = {
+  mb52(parts) {
+    const items = []; parts.forEach(([wk, p]) => p.items.forEach((i) => { i.wk = wk; items.push(i); }));
+    return { items, skipped: parts.reduce((a, [, p]) => a + p.skipped, 0), plants: [...new Set(items.map((i) => i.plant))].sort() };
+  },
+  me3n(parts) {
+    const docs = new Map(), items = [], pick = new Map();
+    parts.forEach(([wk, p]) => { p.docs.forEach((d, k) => { d.wk = wk; docs.set(k, d); }); p.items.forEach((i) => { i.wk = wk; items.push(i); }); p.pick.forEach((v, k) => { if (!pick.has(k)) pick.set(k, Object.assign({ wk }, v)); }); });
+    return { docs, items, pick };
+  },
+  me2n(parts) {
+    const lines = [], ospo = new Map(), lastPrice = new Map();
+    parts.forEach(([wk, p]) => {
+      p.lines.forEach((l) => { l.wk = wk; lines.push(l); });
+      p.ospo.forEach((v, k) => ospo.set(k, (ospo.get(k) || 0) + v));
+      p.lastPrice.forEach((v, k) => { const o = lastPrice.get(k); if (!o || (v.date && o.date && v.date > o.date)) lastPrice.set(k, v); });
+    });
+    return { lines, ospo, lastPrice };
+  },
+  mb51(parts) {
+    const moves = [], gr = new Map(); let lo = null, hi = null;
+    parts.forEach(([wk, p]) => {
+      p.moves.forEach((m) => { m.wk = wk; moves.push(m); });
+      p.gr.forEach((g, k) => { const o = gr.get(k); if (!o) gr.set(k, g); else { o.inQty += g.inQty; o.relQty += g.relQty; o.docs.push(...g.docs); } });
+      if (p.range) { if (!lo || p.range[0] < lo) lo = p.range[0]; if (!hi || p.range[1] > hi) hi = p.range[1]; }
+    });
+    return { moves, gr, range: lo ? [lo, hi] : null };
+  },
+  mb25(parts) {
+    const lines = [], open = new Map();
+    parts.forEach(([wk, p]) => { p.lines.forEach((l) => { l.wk = wk; lines.push(l); }); p.open.forEach((v, k) => open.set(k, (open.get(k) || 0) + v)); });
+    return { lines, open };
+  },
+};
+const PARSE = { mb52: (b) => Parser.parseMB52(XLSX, b), me3n: (b) => Contract.parseME3N(XLSX, b), me2n: (b) => Contract.parseME2N(XLSX, b), mb51: (b) => Trace.parseMB51(XLSX, b), mb25: (b) => Trace.parseMB25(XLSX, b) };
+async function loadSAP(k, file) {
+  const wk = wkOfFile(file.name);
+  S.raw[k] = S.raw[k] || {}; S.raw[k][wk] = PARSE[k](await file.arrayBuffer());
+  S[k] = MERGE[k](byWK(S.raw[k]));
+  srcMark(k, file, wk);
+  if (k === 'mb52') { S.plantWK = new Map(); S.mb52.items.forEach((i) => S.plantWK.set(i.plant, i.wk)); }
+}
+const loadMB52 = (f) => loadSAP('mb52', f), loadME3N = (f) => loadSAP('me3n', f), loadME2N = (f) => loadSAP('me2n', f), loadMB51 = (f) => loadSAP('mb51', f), loadMB25 = (f) => loadSAP('mb25', f);
+async function loadMRP(file) { S.mrpWB = MRP.parseWorkbook(XLSX, await file.arrayBuffer()); S.mrpName = file.name; srcMark('mrp', file, 'PEP'); }
+function srcMark(k, file, wk = '') { S.src[k] = S.src[k] || {}; if (k === 'rkm') wk = file.name; S.src[k][wk || '-'] = { name: file.name, at: new Date(), wk }; }
 async function loadRKM(file, name) {
   const f = RKM.parseFile(XLSX, await file.arrayBuffer(), name || file.name);
   const saved = (store.get('rkmPlant') || {})[f.fileName]; if (saved) f.plant = saved;
   S.rkmFiles = S.rkmFiles.filter((x) => x.fileName !== f.fileName).concat(f); srcMark('rkm', file);
 }
+const wkOfPlant = (p) => (S.plantWK && S.plantWK.get(p)) || (DEFAULT_ZONA[p] ? 'PEP' : '');
+const stockCur = (p) => ((S.set.wkCur || {})[wkOfPlant(p)] || 'IDR');
 
 // ---------- Folder lokal ----------
 function banner(html, cls = '') { const b = $('banner'); b.className = 'banner ' + cls; b.innerHTML = html; b.hidden = !html; }
@@ -142,14 +190,11 @@ async function loadFolder(h) {
   const log = [];
   try {
     const c = Folder.classify(await Folder.listExcel(h));
-    if (c.mb52) { await loadMB52(c.mb52.file); log.push('MB52: ' + c.mb52.name); }
-    if (c.mrp) { await tick(); await loadMRP(c.mrp.file); log.push('MRP: ' + c.mrp.name); }
-    if (c.me3n) { await tick(); await loadME3N(c.me3n.file); log.push('Kontrak: ' + c.me3n.name); }
-    if (c.me2n) { await tick(); await loadME2N(c.me2n.file); log.push('PO: ' + c.me2n.name); }
-    if (c.mb51) { await tick(); await loadMB51(c.mb51.file); log.push('MB51: ' + c.mb51.name); }
-    if (c.mb25) { await tick(); await loadMB25(c.mb25.file); log.push('MB25: ' + c.mb25.name); }
-    if (c.regulasi) { S.regulasi = { name: c.regulasi.name, text: await c.regulasi.file.text() }; log.push('Regulasi: ' + c.regulasi.name); }
-    for (const r of c.rkm) { try { await loadRKM(r.file, r.name); log.push('RKM: ' + r.name); } catch (e) { log.push('Gagal: ' + r.name + ' (' + e.message + ')'); } }
+    S.raw = {}; S.src = {}; ['mb52', 'me3n', 'me2n', 'mb51', 'mb25'].forEach((k) => (S[k] = null));
+    for (const k of ['mb52', 'me3n', 'me2n', 'mb51', 'mb25']) for (const f of c[k] || []) { await tick(); await loadSAP(k, f.file); log.push(f.name); }
+    if (c.mrp) { await tick(); await loadMRP(c.mrp.file); log.push(c.mrp.name); }
+    if (c.regulasi) { S.regulasi = { name: c.regulasi.name, text: await c.regulasi.file.text() }; log.push(c.regulasi.name); }
+    for (const r of c.rkm) { try { await loadRKM(r.file, r.name); log.push(r.name); } catch (e) { log.push('Gagal: ' + r.name + ' (' + e.message + ')'); } }
     recompute(); route();
     S.folderLoadedAt = new Date();
     banner(log.length ? `Data dimuat dari folder <b>${esc(h.name)}</b> (${log.length} file). <a href="#/data">Lihat detail</a> <button class="icon-btn" id="bx" aria-label="Tutup">${UI.I.x}</button>` : `Folder <b>${esc(h.name)}</b> tidak berisi file yang dikenali. Nama file harus memuat MB52, MRP, ME3N, ME2N, MB51, MB25, atau RKM. <button class="icon-btn" id="bx" aria-label="Tutup">${UI.I.x}</button>`, log.length ? 'ok' : 'warn');
@@ -162,7 +207,8 @@ const expand = (q) => q.toLowerCase().split(/\s+/).filter(Boolean).map((x) => S.
 const hit = (text, groups) => groups.every((g) => g.some((t) => text.toLowerCase().includes(t)));
 let timer; const debounce = (fn) => { clearTimeout(timer); timer = setTimeout(fn, 200); };
 const SRC_LABEL = { mb52: 'MB52', mrp: 'MRP', me3n: 'ME3N', me2n: 'ME2N', mb51: 'MB51', mb25: 'MB25', rkm: 'RKM' };
-const srcLine = (...keys) => { const t = keys.map((k) => S.src[k] && `${SRC_LABEL[k]}: ${S.src[k].name}`).filter(Boolean); return t.length ? `<p class="source">Sumber ${esc(t.join('; '))}</p>` : ''; };
+const srcFiles = (k) => (S.src[k] ? Object.values(S.src[k]) : []);
+const srcLine = (...keys) => { const t = keys.flatMap((k) => srcFiles(k).map((f) => `${SRC_LABEL[k]}${f.wk && k !== 'rkm' ? ' ' + f.wk : ''} ${f.name}`)); return t.length ? `<p class="source">Sumber: ${esc(t.join('; '))}</p>` : ''; };
 const pill = (t, cls) => `<span class="pill ${cls}">${esc(t)}</span>`;
 const agingPill = (a) => pill(a || '-', a === 'FS' ? 'ok' : a === 'MD' ? 'info' : a === 'SP' ? 'warn' : 'mute');
 // cols lama: [judul, fn(row)->html, kelas ('num'), fn(row)->nilai mentah, filter?]
@@ -180,7 +226,7 @@ function table(rows, cols, opt = {}) { DTQ.push({ rows, cols, opt }); return `<d
 function mountTables(rootEl = document) {
   rootEl.querySelectorAll('.dt-mount').forEach((el) => {
     const c = DTQ[+el.dataset.dt]; el.classList.remove('dt-mount'); if (!c) return;
-    UI.table(el, { id: c.opt.id || 'tbl-' + (location.hash || '#') + '-' + el.dataset.dt, rows: c.rows, cols: convCols(c.cols, c.opt.hide || []), name: c.opt.name, onRender: c.opt.onRender,
+    UI.table(el, { id: c.opt.id || 'tbl-' + (location.hash || '#') + '-' + el.dataset.dt, rows: c.rows, cols: convCols(c.cols, c.opt.hide || []), name: c.opt.name, onRender: c.opt.onRender, rowKey: c.opt.rowKey, onRow: c.opt.onRow,
       match: c.opt.text ? (r, q) => hit(c.opt.text(r), expand(q)) : undefined, empty: c.opt.empty });
   });
   DTQ.length = 0;
@@ -201,12 +247,13 @@ const PAGES = {
     const kurs = S.set.kurs || 18150, cur = S.dash.cur, today = new Date();
     const conv = (idr) => (cur === 'USD' ? idr / kurs : idr);
     const f1 = (x) => x.toLocaleString('id-ID', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-    const cmoney = (idr) => { const v = conv(idr), p = cur === 'USD' ? 'USD ' : 'Rp ';
+    const cmoney = (idr) => { const v = conv(idr), p = cur === 'USD' ? 'USD ' : 'IDR ';
       return v >= 1e12 ? p + f1(v / 1e12) + ' T' : v >= 1e9 ? p + f1(v / 1e9) + ' M' : v >= 1e6 ? p + f1(v / 1e6) + ' jt' : v >= 1e3 ? p + f1(v / 1e3) + ' rb' : p + fmt(v, 0); };
+    const idrOf = (i) => toIDR(i.value, stockCur(i.plant));
     const toIDR = (v, c) => (c === 'USD' ? v * kurs : v || 0);
-    const items = S.mb52 ? S.mb52.items : [];
+    const items = (S.mb52 ? S.mb52.items : []).filter((i) => !S.dash.wk.size || S.dash.wk.has(i.wk));
     const perWH = new Map();
-    items.forEach((i) => { const w = perWH.get(i.plant) || { plant: i.plant, value: 0, n: 0 }; w.value += i.value || 0; if (i.soh > 0) w.n++; perWH.set(i.plant, w); });
+    items.forEach((i) => { const w = perWH.get(i.plant) || { plant: i.plant, value: 0, n: 0 }; w.value += idrOf(i); if (i.soh > 0) w.n++; perWH.set(i.plant, w); });
     const allWH = [...perWH.keys()].sort(), zonas = [...new Set(allWH.map(zonaOf))].sort();
     const visWH = allWH.filter((p) => !S.dash.zona.size || S.dash.zona.has(zonaOf(p)));
     const selWH = new Set(S.dash.wh.size ? visWH.filter((p) => S.dash.wh.has(p)) : visWH);
@@ -214,10 +261,10 @@ const PAGES = {
     const selTxt = S.dash.wh.size ? `${selWH.size} warehouse dipilih` : S.dash.zona.size ? [...S.dash.zona].join(', ') : 'Semua warehouse';
 
     // ABC & top 10 (dalam warehouse terpilih)
-    const pool = items.filter((i) => inSel(i.plant) && i.value > 0).sort((a, b) => b.value - a.value);
-    const tot = pool.reduce((a, i) => a + i.value, 0); let cum = 0;
+    const pool = items.filter((i) => inSel(i.plant) && i.value > 0).sort((a, b) => idrOf(b) - idrOf(a));
+    const tot = pool.reduce((a, i) => a + idrOf(i), 0); let cum = 0;
     const abc = { A: { n: 0, v: 0 }, B: { n: 0, v: 0 }, C: { n: 0, v: 0 } };
-    pool.forEach((i) => { cum += i.value; const k = cum / tot <= 0.8 || abc.A.n === 0 ? 'A' : cum / tot <= 0.95 ? 'B' : 'C'; abc[k].n++; abc[k].v += i.value; });
+    pool.forEach((i) => { cum += idrOf(i); const k = cum / tot <= 0.8 || abc.A.n === 0 ? 'A' : cum / tot <= 0.95 ? 'B' : 'C'; i._abc = k; abc[k].n++; abc[k].v += idrOf(i); });
     const pct = (a, b) => (b ? fmt((a / b) * 100, 1) + '%' : '-');
 
     // Zona
@@ -237,18 +284,18 @@ const PAGES = {
     // To order
     let toHTML = '<p class="muted small">Tambahkan file MRP untuk menghitung material yang perlu dipesan.</p>';
     if (S.mrpRes) {
-      const mbPrice = new Map(items.filter((i) => i.soh > 0).map((i) => [i.material + '|' + i.plant, i.price]));
+      const mbPrice = new Map(items.filter((i) => i.soh > 0).map((i) => [i.material + '|' + i.plant, toIDR(i.price, stockCur(i.plant))]));
       const ord = [...S.mrpRes.values()].filter((r) => S.mrpPlants.has(r.plant) && (!S.mb52 || inSel(r.plant)) && r.toOrder > 0)
         .map((r) => ({ r, v: r.contract ? r.toOrder * toIDR(r.contract.price, r.contract.currency) : r.toOrder * (mbPrice.get(r.key) || 0) })).sort((a, b) => b.v - a.v);
       const ro = ord.filter((o) => o.r.contract), pr = ord.filter((o) => !o.r.contract);
       toHTML = `<div class="kv"><div><span>Perlu order</span><b>${fmt(ord.length, 0)}</b></div><div><span>Lewat RO</span><b>${fmt(ro.length, 0)}</b></div>
         <div><span>Lewat PR + OE</span><b>${fmt(pr.length, 0)}</b></div><div><span>Estimasi nilai</span><b>${cmoney(ord.reduce((a, o) => a + o.v, 0))}</b></div></div>
-        <h4 class="sub-h">Nilai terbesar</h4>${plainTable(ord.slice(0, 5), [['Material', (o) => `<span class="mono">${esc(o.r.material)}</span>`], ['Deskripsi', (o) => esc(o.r.desc)], ['Plant', (o) => esc(o.r.plant)], ['Qty', (o) => fmt(o.r.toOrder), 'num'], ['Estimasi', (o) => (o.v ? cmoney(o.v) : '-'), 'num']])}`;
+        <h4 class="sub-h">Nilai terbesar</h4>${plainTable(ord.slice(0, 5), [['Material', (o) => `<a class="mono mlink" href="#" data-mat="${esc(o.r.material)}">${esc(o.r.material)}</a>`], ['Deskripsi', (o) => esc(o.r.desc)], ['Plant', (o) => esc(o.r.plant)], ['Qty', (o) => fmt(o.r.toOrder), 'num'], ['Estimasi', (o) => (o.v ? cmoney(o.v) : '-'), 'num']])}`;
     }
 
-    $('view').innerHTML = `<div class="filters dash-f"><span id="dCur"></span><span id="dZona"></span><span id="dWH"></span>
-        ${S.dash.wh.size || S.dash.zona.size ? '<button class="btn ghost" id="dReset">Hapus pilihan</button>' : ''}
-        <span class="source dash-src">${S.src.mb52 ? `Stok dari MB52 ${esc(S.src.mb52.name)}` : ''}${cur === 'USD' ? ` · kurs Rp ${fmt(kurs, 0)}/USD` : ''}</span></div>
+    $('view').innerHTML = `<div class="filters dash-f"><span id="dCur"></span><span id="dWK"></span><span id="dZona"></span><span id="dWH"></span>
+        ${S.dash.wh.size || S.dash.zona.size || S.dash.wk.size ? '<button class="btn ghost" id="dReset">Hapus pilihan</button>' : ''}
+        <span class="source dash-src">Nilai dikonversi ke ${cur} dengan kurs IDR ${fmt(kurs, 0)}/USD</span></div>
       <div class="grid-3">
         <section class="panel"><div class="panel-h"><h2>Nilai stok per warehouse</h2><span class="sub">Klik batang untuk memilih satu atau beberapa warehouse</span></div><div id="dBars"></div></section>
         <section class="panel"><div class="panel-h"><h2>Per zona</h2></div>
@@ -258,15 +305,16 @@ const PAGES = {
         </section>
       </div>
       <section class="panel"><div class="panel-h"><h2>10 material dengan nilai stok terbesar</h2><span class="sub">${esc(selTxt)}</span><span class="right"><a href="#/cari">Buka Cari Material</a></span></div>
-        ${plainTable(pool.slice(0, 10), [['Material', (i) => `<a class="mono" href="#/lacak" data-q="${esc(i.material)}">${esc(i.material)}</a>`], ['Deskripsi', (i) => esc(i.desc)], ['Warehouse', (i) => esc(plantLabel(i.plant))], ['Stok', (i) => fmt(i.soh) + ' ' + esc(i.uom), 'num'], ['Nilai', (i) => cmoney(i.value), 'num'], ['Kelas', (i) => { const k = pool.indexOf(i); let c2 = 0; for (let j = 0; j <= k; j++) c2 += pool[j].value; return c2 / tot <= 0.8 || k === 0 ? 'A' : c2 / tot <= 0.95 ? 'B' : 'C'; }]])}</section>
+        ${plainTable(pool.slice(0, 10), [['Material', (i) => `<a class="mono mlink" href="#" data-mat="${esc(i.material)}">${esc(i.material)}</a>`], ['Deskripsi', (i) => esc(i.desc)], ['Warehouse', (i) => esc(plantLabel(i.plant))], ['Stok', (i) => fmt(i.soh) + ' ' + esc(i.uom), 'num'], ['Nilai', (i) => cmoney(idrOf(i)), 'num'], ['Kelas', (i) => i._abc]])}</section>
       <div class="grid-2">
         <section class="panel"><div class="panel-h"><h2>Expediting</h2><span class="sub">${esc(selTxt)}</span><span class="right"><a href="#/expediting">Buka Expediting</a></span></div>${exHTML}</section>
         <section class="panel"><div class="panel-h"><h2>Material perlu order</h2><span class="sub">${esc(selTxt)}</span><span class="right"><a href="#/order">Buka RO & PR</a></span></div>${toHTML}</section>
       </div>`;
     UI.seg($('dCur'), [['IDR', 'IDR'], ['USD', 'USD']], cur, (v) => { S.dash.cur = v; route(); });
+    UI.multi($('dWK'), { label: 'WK', options: [...new Set((S.mb52 ? S.mb52.items : []).map((i) => i.wk))].sort().map((w) => ({ value: w, label: 'WK ' + w })), selected: S.dash.wk, onChange: () => { clearTimeout(window._dT); window._dT = setTimeout(route, 500); } });
     UI.multi($('dZona'), { label: 'Zona', options: zonas.map((z) => ({ value: z, label: z })), selected: S.dash.zona, onChange: () => { clearTimeout(window._dT); window._dT = setTimeout(route, 500); } });
     UI.multi($('dWH'), { label: 'Warehouse', options: visWH.map((p) => ({ value: p, label: plantLabel(p) })), selected: S.dash.wh, onChange: () => { clearTimeout(window._dT); window._dT = setTimeout(route, 500); } });
-    if ($('dReset')) $('dReset').onclick = () => { S.dash.wh.clear(); S.dash.zona.clear(); route(); };
+    if ($('dReset')) $('dReset').onclick = () => { S.dash.wh.clear(); S.dash.zona.clear(); S.dash.wk.clear(); route(); };
     if (items.length) UI.bars($('dBars'), {
       items: visWH.map((p) => ({ key: p, label: p, sub: PLANT_NAME[p] || '', value: conv(perWH.get(p).value), series: zonaOf(p), tip: `${zonaOf(p)} · ${fmt(perWH.get(p).n, 0)} item berstok` })).sort((a, b) => b.value - a.value),
       series: zonas.map((z) => ({ key: z, label: z, color: ZONA_COLOR[z] || ZONA_COLOR.Lainnya })), selected: S.dash.wh,
@@ -280,12 +328,12 @@ const PAGES = {
     if (!S.mb52) { $('view').innerHTML = needFile('file MB52', 'Cari Material membaca stok dari MB52. Min/Max diambil dari mesin MRP kalau file MRP dimuat.'); return; }
     const items = activeItems();
     const cols = [['Plant', (m) => esc(plantLabel(m.plant)), '', (m) => plantLabel(m.plant)], ['Zona', (m) => esc(zonaOf(m.plant)), '', (m) => zonaOf(m.plant)],
-      ['Material', (m) => `<a class="mono" href="#/lacak" data-q="${esc(m.material)}">${esc(m.material)}</a>`, '', (m) => m.material], ['Deskripsi', (m) => esc(m.desc), '', (m) => m.desc],
-      ['Stok', (m) => fmt(m.soh), 'num', (m) => m.soh], ['UoM', (m) => esc(m.uom), '', (m) => m.uom], ['Harga/unit', (m) => fmt(m.price, 0), 'num', (m) => m.price],
-      ['Nilai (Rp)', (m) => fmt(m.value, 0), 'num', (m) => m.value], ['Aging', (m) => (m.mrp && m.mrp.aging ? agingPill(m.mrp.aging) : ''), '', (m) => (m.mrp && m.mrp.aging) || ''],
+      ['Material', (m) => `<a class="mono mlink" href="#" data-mat="${esc(m.material)}">${esc(m.material)}</a>`, '', (m) => m.material], ['Deskripsi', (m) => esc(m.desc), '', (m) => m.desc],
+      ['Stok', (m) => fmt(m.soh), 'num', (m) => m.soh], ['UoM', (m) => esc(m.uom), '', (m) => m.uom], ['Harga/unit', (m) => money(m.price, stockCur(m.plant)), 'num', (m) => m.price],
+      ['Nilai', (m) => money(m.value, stockCur(m.plant)), 'num', (m) => m.value], ['WK', (m) => esc(m.wk || ''), '', (m) => m.wk || ''], ['Aging', (m) => (m.mrp && m.mrp.aging ? agingPill(m.mrp.aging) : ''), '', (m) => (m.mrp && m.mrp.aging) || ''],
       ['Min', (m) => (m.mrp ? fmt(m.mrp.min) : ''), 'num', (m) => (m.mrp ? m.mrp.min : null)], ['Max', (m) => (m.mrp ? fmt(m.mrp.max) : ''), 'num', (m) => (m.mrp ? m.mrp.max : null)],
       ['Status', (m) => pill(m.status, m.cls), '', (m) => m.status], ['Lokasi', (m) => esc(m.locs.map((l) => l.sloc + (l.batch ? '/' + l.batch : '') + ': ' + fmt(l.qty)).join('; ')), '', (m) => m.locs.map((l) => l.sloc).join(', ')]];
-    $('view').innerHTML = srcLine('mb52', 'mrp') + table(items, cols, { id: 'cari', name: 'Cari Material', text: (m) => m.material + ' ' + m.desc + ' ' + m.plant, hide: ['Harga/unit', 'Zona', 'Lokasi'],
+    $('view').innerHTML = srcLine('mb52', 'mrp') + table(items, cols, { id: 'cari', name: 'Cari Material', text: (m) => m.material + ' ' + m.desc + ' ' + m.plant, hide: ['Harga/unit', 'Zona', 'Lokasi', 'WK'], rowKey: (m) => m.material, onRow: (k) => openMaterial(k),
       onRender: (el) => el.querySelectorAll('a[data-q]').forEach((a) => (a.onclick = () => sessionStorage.setItem('lacakQ', a.dataset.q))) });
   },
 
@@ -317,7 +365,7 @@ const PAGES = {
     const amu12 = (r) => r.amuHist * 12;
 
     const TABS = {
-      vs: ['RKM vs MRP', vs, [['Fungsi', (o) => esc(o.x.fungsi)], ['KIMAP', (o) => `<span class="mono">${esc(o.x.kimap || o.r.material)}</span>`], ['Deskripsi', (o) => esc(o.x.desc)],
+      vs: ['RKM vs MRP', vs, [['Fungsi', (o) => esc(o.x.fungsi)], ['KIMAP', (o) => `<a class="mono mlink" href="#" data-mat="${esc(o.r.material)}">${esc(o.x.kimap || o.r.material)}</a>`], ['Deskripsi', (o) => esc(o.x.desc)],
         ['RKM 2027', (o) => fmt(o.x.total), 'num', (o) => o.x.total], ['Histori/thn', (o) => fmt(amu12(o.r)), 'num', (o) => amu12(o.r)],
         ['Selisih', (o) => { const d = o.x.total - amu12(o.r); return `<span class="${d > 0 ? 'warn' : ''}">${d > 0 ? '+' : ''}${fmt(d)}</span>`; }, 'num', (o) => o.x.total - amu12(o.r)],
         ['Aging', (o) => agingPill(o.r.aging), '', (o) => o.r.aging], ['Stok', (o) => fmt(o.r.stock), 'num', (o) => o.r.stock], ['OS PO/RO', (o) => fmt(o.r.ospo), 'num', (o) => o.r.ospo],
@@ -328,22 +376,22 @@ const PAGES = {
         ['Di master LeadTime?', (o) => (o.x.master ? pill('Ada', 'ok') : pill('Tidak', 'mute')), '', (o) => (o.x.master ? 'Ada' : 'Tidak')], ['LT (bln)', (o) => (o.x.master ? fmt(o.x.master.lt) : '-'), 'num', (o) => (o.x.master ? o.x.master.lt : '')],
         ['Usulan Min', (o) => (o.sug ? fmt(o.sug.min2) : '-'), 'num', (o) => (o.sug ? o.sug.min2 : '')], ['Usulan Max', (o) => (o.sug ? fmt(o.sug.max2) : '-'), 'num', (o) => (o.sug ? o.sug.max2 : '')],
         ['Remarks', (o) => esc(o.x.remarks)]], (o) => o.x.kimap + ' ' + o.x.desc + ' ' + o.x.fungsi],
-      noRkm: ['MRP tanpa RKM', noRkm, [['Plant', (r) => esc(r.plant)], ['Material', (r) => `<span class="mono">${esc(r.material)}</span>`], ['Deskripsi', (r) => esc(r.desc)], ['Aging', (r) => agingPill(r.aging), '', (r) => r.aging],
+      noRkm: ['MRP tanpa RKM', noRkm, [['Plant', (r) => esc(r.plant)], ['Material', (r) => `<a class="mono mlink" href="#" data-mat="${esc(r.material)}">${esc(r.material)}</a>`], ['Deskripsi', (r) => esc(r.desc)], ['Aging', (r) => agingPill(r.aging), '', (r) => r.aging],
         ['Histori/thn', (r) => fmt(amu12(r)), 'num', amu12], ['Stok', (r) => fmt(r.stock), 'num', (r) => r.stock], ['Min', (r) => fmt(r.min2), 'num', (r) => r.min2], ['Max', (r) => fmt(r.max2), 'num', (r) => r.max2],
         ['To Order', (r) => fmt(r.toOrder), 'num', (r) => r.toOrder]], (r) => r.material + ' ' + r.desc],
       lli: [`Long Lead Item (LT ≥ ${S.set.lliLT} bln)`, lli, [['Fungsi', (o) => esc(o.x.fungsi)], ['KIMAP', (o) => `<span class="mono">${esc(o.x.kimap)}</span>`], ['Deskripsi', (o) => esc(o.x.desc)],
         ['LT (bln)', (o) => fmt(o.lt), 'num', (o) => o.lt], ['RKM 2027', (o) => fmt(o.x.total), 'num', (o) => o.x.total],
         ['Butuh mulai', (o) => mLabel(2027 * 12 + o.nm.i) + (o.nm.known ? '' : ' *'), '', (o) => mLabel(2027 * 12 + o.nm.i)], ['Pesan paling lambat', (o) => `<b>${mLabel(o.due)}</b>`, '', (o) => mLabel(o.due)],
         ['Stok + PO', (o) => (o.r ? fmt(o.cover) : '-'), 'num', (o) => o.cover], ['Status', (o) => pill(o.st[0], o.st[1]), '', (o) => o.st[0]]], (o) => o.x.kimap + ' ' + o.x.desc],
-      order: ['Perlu order (To Order)', orders, [['Plant', (r) => esc(r.plant)], ['Material', (r) => `<span class="mono">${esc(r.material)}</span>`], ['Deskripsi', (r) => esc(r.desc)], ['Aging', (r) => agingPill(r.aging), '', (r) => r.aging],
+      order: ['Perlu order (To Order)', orders, [['Plant', (r) => esc(r.plant)], ['Material', (r) => `<a class="mono mlink" href="#" data-mat="${esc(r.material)}">${esc(r.material)}</a>`], ['Deskripsi', (r) => esc(r.desc)], ['Aging', (r) => agingPill(r.aging), '', (r) => r.aging],
         ['Stok', (r) => fmt(r.stock), 'num', (r) => r.stock], ['OS PO/RO', (r) => fmt(r.ospo), 'num', (r) => r.ospo], ['MB25', (r) => fmt(r.mb25), 'num', (r) => r.mb25], ['Min', (r) => fmt(r.min2), 'num', (r) => r.min2], ['Max', (r) => fmt(r.max2), 'num', (r) => r.max2],
         ['To Order', (r) => pill(fmt(r.toOrder), 'warn'), 'num', (r) => r.toOrder], ['RKM 2027', (r) => fmt(r.rkm), 'num', (r) => r.rkm], ['Kelas', (r) => esc(r.cls || r.aging), '', (r) => r.cls || r.aging],
         ['Kontrak (OA)', (r) => (r.oa ? `<span class="mono">${esc(r.oa)}</span>` : pill('PR + OE', 'mute')), '', (r) => r.oa || 'PR + OE']], (r) => r.material + ' ' + r.desc + ' ' + r.oa],
-      sehat: ['Penyehatan stok', sehat, [['Plant', (r) => esc(r.plant)], ['Material', (r) => `<span class="mono">${esc(r.material)}</span>`], ['Deskripsi', (r) => esc(r.desc)], ['Aging', (r) => agingPill(r.aging), '', (r) => r.aging],
+      sehat: ['Penyehatan stok', sehat, [['Plant', (r) => esc(r.plant)], ['Material', (r) => `<a class="mono mlink" href="#" data-mat="${esc(r.material)}">${esc(r.material)}</a>`], ['Deskripsi', (r) => esc(r.desc)], ['Aging', (r) => agingPill(r.aging), '', (r) => r.aging],
         ['Stok', (r) => fmt(r.stock), 'num', (r) => r.stock], ['Max', (r) => fmt(r.max2), 'num', (r) => r.max2], ['Surplus', (r) => fmt(r.surplus), 'num', (r) => r.surplus],
         ['Cakupan (bln)', (r) => (r.cover == null ? '-' : isFinite(r.cover) ? fmt(r.cover, 1) : '∞'), 'num', (r) => (isFinite(r.cover) ? r.cover : '')],
         ['Kategori', (r) => (r.aging === 'DS' && r.stock > 0 ? pill('Kandidat dead stock', 'low') : r.berlebih ? pill('Berlebih', 'warn') : pill('Di atas Max', 'mute')), '', (r) => (r.aging === 'DS' && r.stock > 0 ? 'Kandidat dead stock' : r.berlebih ? 'Berlebih' : 'Di atas Max')]], (r) => r.material + ' ' + r.desc],
-      cmp: ['Banding Excel vs TKO', cmp, [['Plant', (r) => esc(r.plant)], ['Material', (r) => `<span class="mono">${esc(r.material)}</span>`], ['Deskripsi', (r) => esc(r.desc)],
+      cmp: ['Banding Excel vs TKO', cmp, [['Plant', (r) => esc(r.plant)], ['Material', (r) => `<a class="mono mlink" href="#" data-mat="${esc(r.material)}">${esc(r.material)}</a>`], ['Deskripsi', (r) => esc(r.desc)],
         ['Aging Excel→TKO', (r) => `${esc(r.alt.excel.aging)} → <b>${esc(r.alt.tko.aging)}</b>`, '', (r) => r.alt.excel.aging + '→' + r.alt.tko.aging],
         ['Min Excel', (r) => fmt(r.alt.excel.min2), 'num', (r) => r.alt.excel.min2], ['Min TKO', (r) => `<b>${fmt(r.alt.tko.min2)}</b>`, 'num', (r) => r.alt.tko.min2],
         ['Max Excel', (r) => fmt(r.alt.excel.max2), 'num', (r) => r.alt.excel.max2], ['Max TKO', (r) => `<b>${fmt(r.alt.tko.max2)}</b>`, 'num', (r) => r.alt.tko.max2],
@@ -357,25 +405,26 @@ const PAGES = {
   },
 
   data() {
+    const wkSplit = (k, n) => { const r = S.raw[k] ? byWK(S.raw[k]) : []; return r.length > 1 ? ' (' + r.map(([w, p]) => `${w} ${fmt(n(p), 0)}`).join(', ') + ')' : r.length === 1 ? ` (WK ${r[0][0]})` : ''; };
     const fs = Folder.supported(), t = (d) => (d ? d.toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
     $('pageActions').innerHTML = fs ? `<button class="btn primary" id="tbRefresh">${UI.I.dl.replace('M12 4v11m0 0-4-4m4 4 4-4M5 20h14', 'M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3M18 3v4h-4M6 21v-4h4')}<span>Muat ulang data</span></button>` : '';
     if ($('tbRefresh')) $('tbRefresh').onclick = refreshData;
     const SRC = [
-      ['mb52', 'MB52', 'Stok per plant dan storage location', S.mb52 && `${fmt(S.mb52.items.length, 0)} item`, S.mb52 && `${S.mb52.plants.length} plant`],
+      ['mb52', 'MB52', 'Stok per plant dan storage location', S.mb52 && `${fmt(S.mb52.items.length, 0)} item`, S.mb52 && `${S.mb52.plants.length} plant` + wkSplit('mb52', (p) => p.items.length)],
       ['mrp', 'MRP', 'Histori pemakaian bulanan dan master lead time', S.mrpWB && `${fmt(S.mrpWB.rows.length, 0)} baris`, S.mrpWB && `histori ${S.mrpWB.window[0]} s.d. ${S.mrpWB.window[1]}`],
-      ['me3n', 'ME3N', 'Kontrak (outline agreement)', S.me3n && `${fmt(S.me3n.docs.size, 0)} kontrak`, S.me3n && `${fmt(S.me3n.items.length, 0)} item kontrak`],
-      ['me2n', 'ME2N', 'PO dan RO', S.me2n && `${fmt(S.me2n.lines.length, 0)} baris`, S.me2n && `${fmt(new Set(S.me2n.lines.map((l) => l.doc)).size, 0)} dokumen`],
-      ['mb51', 'MB51', 'Pergerakan material (GR, GI, transfer)', S.mb51 && `${fmt(S.mb51.moves.length, 0)} gerakan`, S.mb51 && S.mb51.range && `${dstr(S.mb51.range[0])} s.d. ${dstr(S.mb51.range[1])}`],
-      ['mb25', 'MB25', 'Reservasi material', S.mb25 && `${fmt(S.mb25.lines.length, 0)} baris`, S.mb25 && `${fmt(S.mb25.open.size, 0)} material masih direservasi`],
+      ['me3n', 'ME3N', 'Kontrak (outline agreement)', S.me3n && `${fmt(S.me3n.docs.size, 0)} kontrak`, S.me3n && `${fmt(S.me3n.items.length, 0)} item kontrak` + wkSplit('me3n', (p) => p.docs.size)],
+      ['me2n', 'ME2N', 'PO dan RO', S.me2n && `${fmt(S.me2n.lines.length, 0)} baris`, S.me2n && `${fmt(new Set(S.me2n.lines.map((l) => l.doc)).size, 0)} dokumen` + wkSplit('me2n', (p) => p.lines.length)],
+      ['mb51', 'MB51', 'Pergerakan material (GR, GI, transfer)', S.mb51 && `${fmt(S.mb51.moves.length, 0)} gerakan`, S.mb51 && S.mb51.range && `${dstr(S.mb51.range[0])} s.d. ${dstr(S.mb51.range[1])}` + wkSplit('mb51', (p) => p.moves.length)],
+      ['mb25', 'MB25', 'Reservasi material', S.mb25 && `${fmt(S.mb25.lines.length, 0)} baris`, S.mb25 && `${fmt(S.mb25.open.size, 0)} material masih direservasi` + wkSplit('mb25', (p) => p.lines.length)],
       ['rkm', 'RKM', 'Rencana kebutuhan material per lapangan', S.rkmFiles.length && `${S.rkmFiles.length} file`, S.rkmFiles.length && `${fmt(S.rkmFiles.reduce((a, f) => a + f.items.length, 0), 0)} baris`],
     ];
     $('view').innerHTML = `<section class="panel"><div class="panel-h"><h2>Folder data</h2>
         <span class="right">${fs ? `<button class="btn" id="fp1">Pilih folder</button><button class="btn ghost" id="fp2">Lupakan folder</button>` : ''}</span></div>
-        <p class="muted">${fs ? `Web membaca file terbaru di folder ini setiap login. Nama file harus memuat MB52, MRP, ME3N, ME2N, MB51, MB25, atau RKM. File hanya dibaca di browser ini dan tidak dikirim ke mana pun.` : 'Browser ini tidak mendukung akses folder. Pakai Chrome atau Edge di laptop, atau upload file satu per satu di tabel bawah.'}</p>
+        <p class="muted">${fs ? `Web membaca file terbaru di folder ini setiap login, untuk setiap client SAP: _100_ = WK PEP, _180_ = WK PHE. Nama file harus memuat MB52, MRP, ME3N, ME2N, MB51, MB25, atau RKM. File hanya dibaca di browser ini dan tidak dikirim ke mana pun.` : 'Browser ini tidak mendukung akses folder. Pakai Chrome atau Edge di laptop, atau upload file satu per satu di tabel bawah.'}</p>
         ${S.folderName ? `<p class="source" style="margin-top:8px">Folder <b>${esc(S.folderName)}</b>, terakhir dimuat ${esc(t(S.folderLoadedAt))}</p>` : ''}</section>
       <section class="panel"><div class="panel-h"><h2>Sumber data</h2><span class="sub">Semua angka di web berasal dari file ini</span></div>
-        ${plainTable(SRC, [['Data', (r) => `<b>${r[1]}</b>`], ['Isi', (r) => esc(r[2])], ['File', (r) => (S.src[r[0]] ? esc(S.src[r[0]].name) : '<span class="muted">Belum dimuat</span>')],
-          ['Jumlah', (r) => esc(r[3] || ''), 'num'], ['Keterangan', (r) => esc(r[4] || '')], ['Dimuat', (r) => esc(S.src[r[0]] ? t(S.src[r[0]].at) : '')],
+        ${plainTable(SRC, [['Data', (r) => `<b>${r[1]}</b>`], ['Isi', (r) => esc(r[2])], ['File', (r) => srcFiles(r[0]).map((f) => (f.wk && r[0] !== 'rkm' && r[0] !== 'mrp' ? `<b>WK ${esc(f.wk)}</b> ` : '') + esc(f.name)).join('<br>') || '<span class="muted">Belum dimuat</span>', 'wide'],
+          ['Jumlah', (r) => esc(r[3] || ''), 'num'], ['Keterangan', (r) => esc(r[4] || '')], ['Dimuat', (r) => esc(srcFiles(r[0]).length ? t(srcFiles(r[0]).map((f) => f.at).sort((a, b) => b - a)[0]) : '')],
           ['', (r) => `<label class="btn ghost">Upload<input type="file" class="up" data-k="${r[0]}" accept=".xlsx,.xlsm,.xls" ${r[0] === 'rkm' ? 'multiple' : ''} hidden></label>`]])}
         <p class="muted small" id="upMsg" style="margin-top:8px"></p></section>
       ${S.rkmFiles.length ? `<section class="panel"><div class="panel-h"><h2>File RKM</h2><span class="sub">Pastikan plant setiap file benar</span></div>
@@ -403,9 +452,10 @@ const PAGES = {
         ${plainTable(all, [['Plant', (p) => `<b>${esc(p)}</b>`], ['Nama', (p) => esc(PLANT_NAME[p] || '')],
           ['Zona', (p) => `<select class="zn" data-p="${esc(p)}" aria-label="Zona ${esc(p)}">${['Zona 1', 'Zona 4', 'Lainnya'].map((z) => `<option ${zonaOf(p) === z ? 'selected' : ''}>${z}</option>`).join('')}</select>`],
           ['Dipantau MRP', (p) => `<input type="checkbox" class="mp" value="${esc(p)}" ${S.mrpPlants.has(p) ? 'checked' : ''} aria-label="Pantau ${esc(p)}">`]])}</section>
-      <section class="panel"><div class="panel-h"><h2>Kurs</h2></div>
-        <div class="params"><label>Rupiah per 1 USD<span><input type="number" id="kurs" min="1" step="1" value="${S.set.kurs}"></span></label></div>
-        <p class="muted small" style="margin-top:8px">Dipakai untuk tampilan USD di dashboard dan konversi harga kontrak USD. Nilai awal Rp 18.150 mengikuti JISDOR awal November 2026. Sesuaikan dengan kurs yang dipakai kantor.</p></section>
+      <section class="panel"><div class="panel-h"><h2>Mata uang dan kurs</h2></div>
+        <div class="params"><label>Rupiah per 1 USD<span><input type="number" id="kurs" min="1" step="1" value="${S.set.kurs}"></span></label>
+          ${['PEP', 'PHE'].map((w) => `<label>Mata uang nilai stok MB52 WK ${w}<span><select class="wkc" data-w="${w}">${['IDR', 'USD'].map((c) => `<option ${(S.set.wkCur || {})[w] === c ? 'selected' : ''}>${c}</option>`).join('')}</select></span></label>`).join('')}</div>
+        <p class="muted small" style="margin-top:8px">Kurs dipakai untuk konversi IDR dan USD di dashboard dan estimasi nilai. MB52 tidak mencantumkan mata uang, jadi mata uang nilai stok diatur per WK (company code). Pastikan sesuai dengan SAP. Nilai awal Rp 18.150 mengikuti JISDOR awal November 2026. Sesuaikan dengan kurs yang dipakai kantor.</p></section>
       <section class="panel"><div class="panel-h"><h2>Metode perhitungan MRP</h2></div>
         <div class="radios">${Object.entries(METHOD).map(([k, t]) => `<label class="radio"><input type="radio" name="method" value="${k}" ${S.set.method === k ? 'checked' : ''}>${esc(t)}</label>`).join('')}</div>
         ${S.set.method === 'tko' ? `<div class="params" style="margin-top:12px">${TKO_FIELDS.map(([k, t, u]) => `<label>${esc(t)} <span class="muted">(${u})</span><span><input type="number" step="0.5" min="0" data-k="${k}" value="${P(k)}"></span></label>`).join('')}
@@ -420,6 +470,7 @@ const PAGES = {
     const saveSet = () => { store.set('settings', S.set); recompute(); };
     document.querySelectorAll('.zn').forEach((sl) => (sl.onchange = () => { S.set.zona = Object.assign({}, S.set.zona || DEFAULT_ZONA, { [sl.dataset.p]: sl.value }); saveSet(); }));
     document.querySelectorAll('.mp').forEach((c) => (c.onchange = () => { c.checked ? S.mrpPlants.add(c.value) : S.mrpPlants.delete(c.value); store.set('mrpPlants', [...S.mrpPlants]); }));
+    document.querySelectorAll('.wkc').forEach((sl) => (sl.onchange = () => { S.set.wkCur = Object.assign({}, S.set.wkCur, { [sl.dataset.w]: sl.value }); saveSet(); }));
     $('kurs').onchange = () => { const v = parseFloat($('kurs').value); if (v > 0) { S.set.kurs = v; saveSet(); } };
     document.querySelectorAll('input[name=method]').forEach((r) => (r.onchange = () => { S.set.method = r.value; saveSet(); route(); }));
     document.querySelectorAll('.params input[data-k]').forEach((i) => (i.onchange = () => { const v = parseFloat(i.value); if (isFinite(v) && v >= 0) { S.set.tko[i.dataset.k] = v; saveSet(); } }));
@@ -441,7 +492,9 @@ function tabbed(state, TABS, extraTop = '') {
   document.querySelectorAll('.tab').forEach((b) => (b.onclick = () => { S[state] = b.dataset.t; route(); }));
 }
 const dstr = (d) => (d ? d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '-');
-const money = (v, cur) => (cur && cur !== 'IDR' ? cur + ' ' + fmt(v, 2) : rp(v || 0));
+const money = (v, cur = 'IDR') => { if (v == null || v === '' || !isFinite(v)) return ''; cur = cur || 'IDR'; const a = Math.abs(v);
+  return cur + ' ' + (a >= 1e9 ? fmt(v / 1e9, 2) + ' M' : a >= 1e6 ? fmt(v / 1e6, 2) + ' jt' : fmt(v, cur === 'IDR' ? 0 : 2)); };
+const toIDRv = (v, cur) => (cur === 'USD' ? v * (S.set.kurs || 18150) : v || 0);
 const needFile = (what, hint) => `<div class="panel empty"><h3>Butuh ${what}</h3><p>${hint}</p><a class="btn primary" href="#/data">Buka Data SAP</a></div>`;
 
 PAGES.kontrak = function () {
@@ -468,7 +521,7 @@ PAGES.kontrak = function () {
     list: ['Kontrak', docs, kCols, (d) => d.doc + ' ' + d.vendor + ' ' + d.pic],
     renew: ['Perlu perpanjangan / amandemen', renew, kCols.concat([['Nilai To Order MRP', (d) => money(orderBy.get(d.doc) || 0, d.currency), 'num', (d) => orderBy.get(d.doc) || 0]]), (d) => d.doc + ' ' + d.vendor,
       'Kontrak yang habis ≤ 180 hari atau sisa nilainya < 20%. "Dipakai MRP" = jumlah material yang Min/Max-nya mengandalkan kontrak ini.'],
-    items: ['Item kontrak', S.me3n.items, [['No. OA', (i) => `<span class="mono">${esc(i.doc)}</span>`, '', (i) => i.doc], ['Item', (i) => esc(i.item)], ['Material', (i) => `<span class="mono">${esc(i.material)}</span>`, '', (i) => i.material],
+    items: ['Item kontrak', S.me3n.items, [['No. OA', (i) => `<span class="mono">${esc(i.doc)}</span>`, '', (i) => i.doc], ['Item', (i) => esc(i.item)], ['Material', (i) => `<a class="mono mlink" href="#" data-mat="${esc(i.material)}">${esc(i.material)}</a>`, '', (i) => i.material],
       ['Deskripsi', (i) => esc(i.desc)], ['UoM', (i) => esc(i.uom)], ['Harga', (i) => money(i.price, i.k.currency), 'num', (i) => i.price],
       ['Target qty', (i) => fmt(i.targetQty), 'num', (i) => i.targetQty], ['Terpakai qty', (i) => fmt(i.releasedQty), 'num', (i) => i.releasedQty],
       ['% pakai', (i) => (i.targetQty ? fmt((i.releasedQty / i.targetQty) * 100, 0) + '%' : '-'), 'num', (i) => (i.targetQty ? i.releasedQty / i.targetQty : '')], ['Vendor', (i) => esc(i.k.vendor)]],
@@ -476,7 +529,7 @@ PAGES.kontrak = function () {
   };
   if (S.me2n) {
     const lCols = (extra) => [['Dokumen', (l) => `<span class="mono">${esc(l.doc)}</span>/${esc(l.item)}`, '', (l) => l.doc + '/' + l.item], ['Jenis', (l) => pill(l.type, l.type === 'RO' ? 'info' : 'mute'), '', (l) => l.type],
-      ['Plant', (l) => esc(l.plant)], ['Material', (l) => `<span class="mono">${esc(l.material)}</span>`, '', (l) => l.material], ['Deskripsi', (l) => esc(l.desc)], ['Vendor', (l) => esc(l.vendor)],
+      ['Plant', (l) => esc(l.plant)], ['Material', (l) => `<a class="mono mlink" href="#" data-mat="${esc(l.material)}">${esc(l.material)}</a>`, '', (l) => l.material], ['Deskripsi', (l) => esc(l.desc)], ['Vendor', (l) => esc(l.vendor)],
       ['Tgl kirim', (l) => dstr(l.delivery), '', (l) => dstr(l.delivery)], ['Sisa kirim', (l) => fmt(l.openQty) + ' ' + esc(l.uom), 'num', (l) => l.openQty],
       ['Nilai sisa', (l) => money(l.openValue, l.currency), 'num', (l) => l.openValue]].concat(extra);
     TABS.open = ['PO/RO berjalan', lines, lCols([['Status', (l) => (l.lateDays ? pill('Terlambat ' + l.lateDays + ' hr', 'low') : pill('Sesuai jadwal', 'ok')), '', (l) => (l.lateDays ? 'Terlambat ' + l.lateDays : 'OK')]]), (l) => l.doc + ' ' + l.material + ' ' + l.desc + ' ' + l.vendor + ' ' + l.plant];
@@ -524,7 +577,7 @@ PAGES.expediting = function () {
     ['Catatan', (e) => `<input class="exn w-note" data-k="${esc(e.doc)}" value="${esc(e.note)}" placeholder="Tambah catatan" aria-label="Catatan">`, '', (e) => e.note],
     ['GR gudang (MB51)', (e) => esc(grTxt(e)), '', grTxt], ['Sisa kirim', (e) => fmt(e.open), 'num', (e) => e.open], ['Vendor', (e) => esc(e.vendor)]];
   HIDE['eTab:aktif'] = HIDE['eTab:late'] = HIDE['eTab:done'] = HIDE['eTab:semua'] = ['No. PR', 'Mata uang', 'Sisa kirim', 'Tgl kirim kontrak', 'Terlambat (hari)'];
-  const rCols = [['Reservasi', (l) => `<a class="mono" href="#/lacak" data-q="${esc(l.resv)}">${esc(l.resv)}</a>/${esc(l.item)}`, '', (l) => l.resv], ['Plant', (l) => esc(l.plant)], ['Material', (l) => `<a class="mono" href="#/lacak" data-q="${esc(l.material)}">${esc(l.material)}</a>`, '', (l) => l.material],
+  const rCols = [['Reservasi', (l) => `<a class="mono" href="#/lacak" data-q="${esc(l.resv)}">${esc(l.resv)}</a>/${esc(l.item)}`, '', (l) => l.resv], ['Plant', (l) => esc(l.plant)], ['Material', (l) => `<a class="mono mlink" href="#" data-mat="${esc(l.material)}">${esc(l.material)}</a>`, '', (l) => l.material],
     ['Deskripsi', (l) => esc(l.desc)], ['Tgl butuh', (l) => dstr(l.reqDate), '', (l) => l.reqDate], ['Lewat (hari)', (l) => fmt(l.telat, 0), 'num', (l) => l.telat], ['Sisa reservasi', (l) => fmt(l.diff) + ' ' + esc(l.uom), 'num', (l) => l.diff],
     ['Stok (MB52)', (l) => (l.stock == null ? '-' : fmt(l.stock)), 'num', (l) => l.stock], ['Status GI', (l) => pill(l.gi[0], l.gi[1]), '', (l) => l.gi[0]], ['Penerima', (l) => esc(l.recipient || l.costCenter || l.wbs)], ['Mvt', (l) => esc(l.mt)]];
   const text = (e) => e.doc + ' ' + e.pr + ' ' + e.desc + ' ' + e.vendor + ' ' + fieldName(e.plant) + ' ' + e.note;
@@ -585,7 +638,7 @@ PAGES.lacak = function () {
       const desc = (stockRows[0] && stockRows[0].desc) || (mrpRows[0] && mrpRows[0].desc) || (ev[0] && '') || '';
       const stepCls = { PR: 'mute', PO: 'info', RO: 'info', 'GR (inspeksi)': 'warn', 'GR (rilis stok)': 'ok', Reservasi: 'warn', GI: 'low', Transfer: 'mute' };
       out.push(`<div class="panel"><h3>Material <span class="mono">${esc(mat)}</span>${plant ? ' · ' + esc(plantLabel(plant)) : ''}</h3><p class="muted">${esc(desc)}</p>
-        <div class="grid">${stockRows.length ? `<div><b>Stok sekarang (MB52)</b>${plainTable(stockRows, [['Plant', (i) => esc(i.plant)], ['Stok', (i) => fmt(i.soh) + ' ' + esc(i.uom), 'num'], ['Nilai', (i) => rp(i.value), 'num']])}</div>` : ''}
+        <div class="grid">${stockRows.length ? `<div><b>Stok sekarang (MB52)</b>${plainTable(stockRows, [['Plant', (i) => esc(i.plant)], ['Stok', (i) => fmt(i.soh) + ' ' + esc(i.uom), 'num'], ['Nilai', (i) => money(i.value, stockCur(i.plant)), 'num']])}</div>` : ''}
         ${mrpRows.length ? `<div><b>MRP</b>${plainTable(mrpRows, [['Plant', (r) => esc(r.plant)], ['Aging', (r) => agingPill(r.aging)], ['Min', (r) => fmt(r.min2), 'num'], ['Max', (r) => fmt(r.max2), 'num'], ['OS PO', (r) => fmt(r.ospo), 'num'], ['Reservasi', (r) => fmt(r.mb25), 'num'], ['To Order', (r) => fmt(r.toOrder), 'num'], ['Kontrak', (r) => esc(r.oa || '-')]])}</div>` : ''}</div>
         <h4>Jejak (${fmt(ev.length, 0)} kejadian)</h4>${ev.length ? `<ol class="timeline">${ev.map((e) => `<li><span class="when">${dstr(e.date)}</span>${pill(e.step, stepCls[e.step] || 'mute')} <span class="mono small">${esc(e.plant)}</span> ${esc(e.text)} <b class="${e.qty < 0 ? 'neg' : ''}">${fmt(e.qty)} ${esc(e.uom)}</b></li>`).join('')}</ol>` : '<p class="muted">Belum ada kejadian di ME2N/MB51/MB25.</p>'}</div>`);
     }
@@ -603,7 +656,7 @@ PAGES.order = function () {
   const res = [...S.mrpRes.values()].filter((r) => S.mrpPlants.has(r.plant));
   const mbPrice = new Map(S.mb52 ? S.mb52.items.filter((i) => i.soh > 0).map((i) => [i.material + '|' + i.plant, i.price]) : []);
   const oePrice = (r) => { const lp = S.me2n && (S.me2n.lastPrice.get(r.material) || (r.kimap && S.me2n.lastPrice.get(r.kimap)));
-    if (lp) return { price: lp.price, currency: lp.currency, src: 'PO terakhir ' + dstr(lp.date) }; const p = mbPrice.get(r.key); return p ? { price: p, currency: 'IDR', src: 'Harga rata-rata stok' } : { price: 0, currency: '', src: 'Belum ada harga' }; };
+    if (lp) return { price: lp.price, currency: lp.currency, src: 'PO terakhir ' + dstr(lp.date) }; const p = mbPrice.get(r.key); return p ? { price: p, currency: stockCur(r.plant), src: 'Harga rata-rata stok' } : { price: 0, currency: '', src: 'Belum ada harga' }; };
   const orders = res.filter((r) => r.toOrder > 0);
   const ro = orders.filter((r) => r.contract).map((r) => Object.assign({ r }, { value: r.toOrder * r.contract.price }));
   const pr = orders.filter((r) => !r.contract).map((r) => { const p = oePrice(r); return { r, p, value: r.toOrder * p.price, grp: kimapGroup(r.material) }; });
@@ -612,7 +665,7 @@ PAGES.order = function () {
   const kand = new Map();
   res.filter((r) => !r.contract && r.alt && /^Rutin/.test(r.alt.tko.cls || '') && r.alt.tko.amu > 0).forEach((r) => {
     const k = kand.get(r.material) || { material: r.material, desc: r.desc, uom: r.uom, plants: [], qty: 0, value: 0, grp: kimapGroup(r.material), order: 0 };
-    const p = oePrice(r), a = r.alt.tko.amu; k.plants.push(r.plant); k.qty += a * 12; k.value += a * 12 * (p.price || 0); k.order += r.toOrder; k.priceSrc = p.src; kand.set(r.material, k);
+    const p = oePrice(r), a = r.alt.tko.amu; k.plants.push(r.plant); k.qty += a * 12; k.value += a * 12 * toIDRv(p.price || 0, p.currency); k.order += r.toOrder; k.priceSrc = p.src; kand.set(r.material, k);
   });
   const kandidat = [...kand.values()].sort((a, b) => b.value - a.value);
   const ven = Contract.vendors(S.me3n, S.me2n);
@@ -620,24 +673,24 @@ PAGES.order = function () {
     return `Yth. ${k.vendor},\n\nBerikut rencana Release Order atas kontrak ${doc}:\n\n` + its.map((o, i) => `${i + 1}. ${o.r.material} - ${o.r.desc} : ${fmt(o.r.toOrder)} ${o.r.contract.uom || o.r.uom} (plant ${o.r.plant})`).join('\n') + `\n\nMohon konfirmasi ketersediaan dan jadwal pengiriman.\n\nTerima kasih.`; };
   const TABS = {
     ro: ['Draft RO (ada kontrak)', ro, [['No. OA', (o) => `<span class="mono">${esc(o.r.contract.doc)}</span><br><span class="muted small">item ${esc(o.r.contract.item)}</span>`, '', (o) => o.r.contract.doc], ['Vendor', (o) => esc(o.r.contract.vendor)], ['PIC', (o) => esc(o.r.contract.pic)],
-      ['Plant', (o) => esc(o.r.plant)], ['Material', (o) => `<span class="mono">${esc(o.r.material)}</span>`, '', (o) => o.r.material], ['Deskripsi', (o) => esc(o.r.desc)],
+      ['Plant', (o) => esc(o.r.plant)], ['Material', (o) => `<a class="mono mlink" href="#" data-mat="${esc(o.r.material)}">${esc(o.r.material)}</a>`, '', (o) => o.r.material], ['Deskripsi', (o) => esc(o.r.desc)],
       ['Qty', (o) => fmt(o.r.toOrder), 'num', (o) => o.r.toOrder], ['UoM', (o) => esc(o.r.contract.uom || o.r.uom)], ['Harga kontrak', (o) => money(o.r.contract.price, o.r.contract.currency), 'num', (o) => o.r.contract.price],
       ['Nilai', (o) => money(o.value, o.r.contract.currency), 'num', (o) => o.value], ['Mata uang', (o) => esc(o.r.contract.currency)],
       ['Sisa kontrak cukup?', (o) => (roByDoc.get(o.r.contract.doc) <= o.r.contract.sisa ? pill('Cukup', 'ok') : pill('Kurang', 'low')), '', (o) => (roByDoc.get(o.r.contract.doc) <= o.r.contract.sisa ? 'Cukup' : 'Kurang')],
       ['Sisa hari', (o) => fmt(o.r.contract.sisaHari, 0), 'num', (o) => o.r.contract.sisaHari],
       ['Kontak', (o) => `<button class="btn ghost mail" data-doc="${esc(o.r.contract.doc)}" data-v="${esc(o.r.contract.vendorCode || o.r.contract.vendor)}">Email vendor</button>`, '', () => '', false]],
       (o) => o.r.contract.doc + ' ' + o.r.contract.vendor + ' ' + o.r.material + ' ' + o.r.desc, 'Item To Order yang tercover kontrak aktif → terbitkan RO. Kontrak dipilih dengan prioritas X07 → X02 → X10 → X03.'],
-    pr: ['Draft PR + OE (tanpa kontrak)', pr, [['Kelompok KIMAP', (o) => `<span class="mono">${esc(o.grp)}</span>`, '', (o) => o.grp], ['Plant', (o) => esc(o.r.plant)], ['Material', (o) => `<span class="mono">${esc(o.r.material)}</span>`, '', (o) => o.r.material],
+    pr: ['Draft PR + OE (tanpa kontrak)', pr, [['Kelompok KIMAP', (o) => `<span class="mono">${esc(o.grp)}</span>`, '', (o) => o.grp], ['Plant', (o) => esc(o.r.plant)], ['Material', (o) => `<a class="mono mlink" href="#" data-mat="${esc(o.r.material)}">${esc(o.r.material)}</a>`, '', (o) => o.r.material],
       ['Deskripsi', (o) => esc(o.r.desc)], ['Qty', (o) => fmt(o.r.toOrder), 'num', (o) => o.r.toOrder], ['UoM', (o) => esc(o.r.uom)],
       ['Harga OE', (o) => (o.p.price ? money(o.p.price, o.p.currency) : pill('Belum ada', 'warn')), 'num', (o) => o.p.price], ['Sumber harga', (o) => esc(o.p.src)],
       ['Nilai OE', (o) => money(o.value, o.p.currency), 'num', (o) => o.value], ['Mata uang', (o) => esc(o.p.currency)], ['Kelas', (o) => esc(o.r.cls || o.r.aging)]],
       (o) => o.grp + ' ' + o.r.material + ' ' + o.r.desc, 'Item To Order tanpa kontrak → PR + Owner Estimate. Dikelompokkan per 4 digit awal KIMAP (sementara, nanti diganti Material Group). Harga OE dari PO terakhir (ME2N), atau harga rata-rata stok.'],
-    kandidat: ['Kandidat kontrak', kandidat, [['Kelompok KIMAP', (k) => `<span class="mono">${esc(k.grp)}</span>`, '', (k) => k.grp], ['Material', (k) => `<span class="mono">${esc(k.material)}</span>`, '', (k) => k.material], ['Deskripsi', (k) => esc(k.desc)],
-      ['Plant', (k) => esc(k.plants.join(', '))], ['Kebutuhan/thn', (k) => fmt(k.qty) + ' ' + esc(k.uom), 'num', (k) => k.qty], ['Est. nilai/thn', (k) => rp(k.value), 'num', (k) => k.value],
+    kandidat: ['Kandidat kontrak', kandidat, [['Kelompok KIMAP', (k) => `<span class="mono">${esc(k.grp)}</span>`, '', (k) => k.grp], ['Material', (k) => `<a class="mono mlink" href="#" data-mat="${esc(k.material)}">${esc(k.material)}</a>`, '', (k) => k.material], ['Deskripsi', (k) => esc(k.desc)],
+      ['Plant', (k) => esc(k.plants.join(', '))], ['Kebutuhan/thn', (k) => fmt(k.qty) + ' ' + esc(k.uom), 'num', (k) => k.qty], ['Est. nilai/thn', (k) => money(k.value, 'IDR'), 'num', (k) => k.value],
       ['To Order sekarang', (k) => fmt(k.order), 'num', (k) => k.order], ['Sumber harga', (k) => esc(k.priceSrc)]], (k) => k.grp + ' ' + k.material + ' ' + k.desc,
       'Material rutin (FS) yang belum punya kontrak aktif. Sesuai Pedoman, item rutin/bottleneck sebaiknya dibuatkan kontrak jangka panjang (OA/COO) agar lead time turun dan stok bisa lebih tipis.'],
     vendor: ['Vendor', ven, [['Kode', (v) => esc(v.code)], ['Vendor', (v) => esc(v.name)], ['Kontrak', (v) => fmt(v.kontrak, 0), 'num', (v) => v.kontrak], ['Dok. PO/RO', (v) => fmt(v.po, 0), 'num', (v) => v.po],
-      ['Nilai sisa kirim (IDR)', (v) => rp(v.openValue), 'num', (v) => v.openValue],
+      ['Nilai sisa kirim', (v) => money(v.openValue, 'IDR'), 'num', (v) => v.openValue],
       ['Email', (v) => `<input class="vc" data-k="${esc(v.code || v.name)}" data-f="email" value="${esc(vc.get(v.code || v.name).email || '')}" placeholder="email">`, '', (v) => vc.get(v.code || v.name).email || ''],
       ['Telepon', (v) => `<input class="vc" data-k="${esc(v.code || v.name)}" data-f="tel" value="${esc(vc.get(v.code || v.name).tel || '')}" placeholder="telp/WA">`, '', (v) => vc.get(v.code || v.name).tel || ''],
       ['Nama kontak', (v) => `<input class="vc" data-k="${esc(v.code || v.name)}" data-f="pic" value="${esc(vc.get(v.code || v.name).pic || '')}" placeholder="nama">`, '', (v) => vc.get(v.code || v.name).pic || '']],
