@@ -7,3 +7,8 @@ aside h2{margin:0 0 8px;font-size:16px}#nav{display:grid;gap:4px;flex:1}#nav a{c
 #nav a.on,#nav a:hover{background:#1e4a73;color:#fff}main{flex:1;padding:20px;overflow:auto}#who{color:#6b7280;margin-bottom:12px}
 table{border-collapse:collapse;width:100%;background:#fff}th,td{padding:8px 10px;border-bottom:1px solid #e5e7eb;text-align:left}
 .low{color:#b91c1c;font-weight:600}.ok{color:#047857}.card{background:#fff;padding:16px;border-radius:10px}
+.warn{color:#b45309;font-weight:600}.mute{color:#6b7280}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-bottom:14px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}.chips label{background:#e5eefa;padding:6px 10px;border-radius:999px;cursor:pointer}
+.bar{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}.bar input{flex:1;min-width:220px}.msg{color:#6b7280;margin:6px 0}
+.num{text-align:right}
