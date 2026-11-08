@@ -9,7 +9,10 @@ Live: https://denmas211r.github.io/mim-inventory-web/
 | `index.html` | Kerangka halaman: layar login + sidebar + area konten |
 | `css/style.css` | Tampilan (warna, sidebar, kartu, tabel, versi HP) |
 | `js/app.js` | Otak web: menu, pindah halaman, isi tiap halaman |
-| `js/parser.js` | Pembaca Excel SAP (MB52, sheet MRP) + hitung status stok |
+| `js/parser.js` | Pembaca MB52 + hitung status stok (Kosong / Di bawah Min / Surplus / Aman) |
+| `js/mrp.js` | Mesin MRP: rumus sama dengan file MRP Zona 1 (AMU 3 thn, Aging, SS, Min2/Max2, To Order) |
+| `js/rkm.js` | Pembaca RKM format SHU + pencocokan ke MRP (KIMAP → LeadTime → deskripsi) |
+| `js/folder.js` | Auto-load dari folder lokal (Chrome/Edge), 1 klik tiap sesi |
 | `js/vault.js` | Gembok: login & buka data terenkripsi (AES-256) |
 | `data/keys.json` | Daftar user (password tidak disimpan, hanya kunci terbungkus) |
 | `data/data.enc.json` | Data contoh terenkripsi |
