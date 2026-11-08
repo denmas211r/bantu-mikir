@@ -1,13 +1,71 @@
 <!DOCTYPE html>
-<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MIM Inventory Analyst</title><link rel="stylesheet" href="css/style.css"></head>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MIM Inventory Analyst · Zona 1</title>
+  <meta name="description" content="Web kerja Inventory Analyst MIM Zona 1: cari material, monitoring stok & MRP, kontrak, HPS/OE dan KPI.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230a5cc2'/%3E%3Cpath d='M8 22V10l8 7 8-7v12' fill='none' stroke='white' stroke-width='3' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css?v=3">
+</head>
 <body>
-<div id="login"><form id="lf"><h1>MIM Inventory Analyst</h1>
-<input id="u" placeholder="Username" autocomplete="username" required>
-<input id="p" type="password" placeholder="Password" autocomplete="current-password" required>
-<button>Masuk</button><p id="err"></p><small>Versi awal: data dummy</small></form></div>
-<div id="app" hidden>
-<aside><h2>MIM Zona 1</h2><nav id="nav"></nav><button id="out">Keluar</button></aside>
-<main><header id="who"></header><section id="view"></section></main></div>
-<script src="vendor/xlsx.full.min.js"></script><script src="js/vault.js"></script><script src="js/parser.js"></script><script src="js/app.js"></script>
-</body></html>
+  <!-- ===== Layar login ===== -->
+  <div id="login" class="login">
+    <div class="login-art">
+      <div class="logo big">M</div>
+      <h2>MIM Inventory Analyst</h2>
+      <p>Satu tempat untuk cek stok, Min/Max, kontrak, dan pengadaan material Zona 1.</p>
+      <ul>
+        <li>Cari material lintas plant</li>
+        <li>Status stok vs MRP otomatis</li>
+        <li>File SAP diproses di browser kamu</li>
+      </ul>
+    </div>
+    <form id="lf" class="login-card" autocomplete="on">
+      <h1>Masuk</h1>
+      <p class="muted">Gunakan akun tim MIM.</p>
+      <label>Username<input id="u" autocomplete="username" required></label>
+      <label>Password<input id="p" type="password" autocomplete="current-password" required></label>
+      <button class="btn primary" id="lb">Masuk</button>
+      <p id="err" class="err"></p>
+      <small class="muted">Versi awal · data contoh</small>
+    </form>
+  </div>
+
+  <!-- ===== Aplikasi ===== -->
+  <div id="app" class="app" hidden>
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="logo">M</div>
+        <div class="brand-title">MIM Inventory<small>Analyst · Zona 1</small></div>
+      </div>
+      <nav class="nav" id="nav"></nav>
+      <div class="side-data" id="sideData"></div>
+      <div class="side-user">
+        <div class="avatar" id="avatar"></div>
+        <div class="who"><b id="whoName"></b><small id="whoRole"></small></div>
+        <button class="icon-btn" id="out" title="Keluar">⎋</button>
+      </div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" title="Menu">☰</button>
+        <div>
+          <h1 id="pageTitle"></h1>
+          <div class="sub" id="pageSub"></div>
+        </div>
+        <div class="toolbar" id="pageActions"></div>
+      </header>
+      <section class="view" id="view"></section>
+    </main>
+  </div>
+
+  <script src="vendor/xlsx.full.min.js"></script>
+  <script src="js/vault.js"></script>
+  <script src="js/parser.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+tools/users.local.json
+node_modules/
+*.xlsx
+*.xlsm
+*.xls
+.DS_Store
