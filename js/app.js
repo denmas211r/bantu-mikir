@@ -328,6 +328,8 @@ const PAGES = {
       <div class="card"><h3>Metode perhitungan MRP</h3>
       <div class="radios">${Object.entries(METHOD).map(([k, t]) => `<label class="radio ${S.set.method === k ? 'on' : ''}"><input type="radio" name="method" value="${k}" ${S.set.method === k ? 'checked' : ''}>${esc(t)}</label>`).join('')}</div>
       ${S.set.method === 'tko' ? `<div class="params">${TKO_FIELDS.map(([k, t, u]) => `<label>${esc(t)}<span><input type="number" step="0.5" min="0" data-k="${k}" value="${S.set.tko[k] != null ? S.set.tko[k] : MRP.TKO_DEFAULT[k]}"> ${u}</span></label>`).join('')}
+        <label>Rumus Max (maintenance)<span><select data-s="maxFormula">${[['A', 'A · 2×(AMU×T)+SS'], ['B', 'B · AMU×T+2×SS'], ['C', 'C · ROP+n×AMU']].map(([v, t]) => `<option value="${v}" ${(S.set.tko.maxFormula || MRP.TKO_DEFAULT.maxFormula) === v ? 'selected' : ''}>${t}</option>`).join('')}</select></span></label>
+        <label>Moderate (MD) dihitung sebagai FS<span><select data-s="mdAsFS"><option value="1" ${(S.set.tko.mdAsFS ?? MRP.TKO_DEFAULT.mdAsFS) ? 'selected' : ''}>Ya (konfirmasi user)</option><option value="0" ${(S.set.tko.mdAsFS ?? MRP.TKO_DEFAULT.mdAsFS) ? '' : 'selected'}>Tidak, Min = Max = SS</option></select></span></label>
         <label>Service level non-critical<span><select data-z="z">${[[1.282, '90%'], [1.645, '95%'], [2.054, '98%'], [2.326, '99%']].map(([z, t]) => `<option value="${z}" ${(S.set.tko.z || MRP.TKO_DEFAULT.z) == z ? 'selected' : ''}>${t}</option>`).join('')}</select></span></label></div>
         <p class="muted small">Aging: FS = dipakai ≤ 12 bln · MD ≤ 24 bln · SP ≤ 60 bln · DS > 60 bln. Material Project dihitung sebagai program (RKM − stok − PO), tanpa Min/Max. <a href="#" id="tkoReset">Kembalikan default</a></p>` : ''}</div>
       <div class="card"><h3>Basis kebutuhan (input RKM ke mesin MRP)</h3>
@@ -342,6 +344,7 @@ const PAGES = {
       S.mrpPlants = new Set([...document.querySelectorAll('#chips input:checked')].map((i) => i.value)); store.set('mrpPlants', [...S.mrpPlants]); summary(); };
     document.querySelectorAll('input[name=method]').forEach((r) => (r.onchange = () => { S.set.method = r.value; saveSet(); PAGES.pengaturan(); }));
     document.querySelectorAll('.params input[data-k]').forEach((i) => (i.onchange = () => { const v = parseFloat(i.value); if (isFinite(v) && v >= 0) { S.set.tko[i.dataset.k] = v; saveSet(); } }));
+    document.querySelectorAll('.params select[data-s]').forEach((i) => (i.onchange = () => { S.set.tko[i.dataset.s] = i.dataset.s === 'mdAsFS' ? i.value === '1' : i.value; saveSet(); }));
     document.querySelectorAll('.params select[data-z]').forEach((i) => (i.onchange = () => { S.set.tko.z = parseFloat(i.value); saveSet(); }));
     if ($('tkoReset')) $('tkoReset').onclick = (e) => { e.preventDefault(); S.set.tko = {}; saveSet(); PAGES.pengaturan(); };
     document.querySelectorAll('input[name=basis]').forEach((r) => (r.onchange = () => { S.set.basis = r.value; saveSet(); PAGES.pengaturan(); }));

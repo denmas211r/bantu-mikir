@@ -61,7 +61,7 @@
   //   Order   : tersedia = Stok + OS PO − Reservasi(MB25); bila tersedia < Min → Max − tersedia
   //             Program/on demand: RKM + Reservasi − (Stok + OS PO)
   //   Berlebih: cakupan stok > batas bulan (umum 12, chemical 5)
-  const TKO_DEFAULT = { amuMonths: 24, z: 1.645, zCrit: 2.326, nonContractLT: 5, roqMonths: 6, chemSSMonths: 3, ssCapMonths: 3, chemP: 1, excessGeneral: 12, excessChem: 5,
+  const TKO_DEFAULT = { amuMonths: 24, z: 1.645, zCrit: 2.326, nonContractLT: 5.5, roqMonths: 6, maxFormula: 'C', mdAsFS: true, chemSSMonths: 3, ssCapMonths: 3, chemP: 1, excessGeneral: 12, excessChem: 5,
     chemRegex: '^(?!.*BATTERY).*(CHEMICAL|CATALYST|SULFATE|SULPHATE|KAPORIT|CHLORINE|HYPOCHLORITE|HYDROXIDE|DEMULSIFIER|CORROSION INHIBITOR|SCALE INHIBITOR|BIOCIDE|SURFACTANT|SCAVENGER|DEFOAM|SOLVENT|POLYMER|COAGULANT|FLOCCULANT|HYDROCHLORIC|CAUSTIC|SODA ASH)' };
   function stdev(a) { if (a.length < 2) return 0; const m = a.reduce((x, y) => x + y, 0) / a.length; return Math.sqrt(a.reduce((s, v) => s + (v - m) ** 2, 0) / (a.length - 1)); }
   function agingTKO(usageAll) {
@@ -83,7 +83,8 @@
     if (opt.basis === 'rkm-new' && !amuHist && rkmM) { amu = rkmM; basis = 'RKM'; }
     const isProject = /^project$/i.test(String(r.cat || '').trim());
     const isChem = new RegExp(P.chemRegex, 'i').test(r.desc || '');
-    const effAging = basis === 'RKM' && (aging === 'SP' || aging === 'DS') ? 'FS' : aging; // item baru dari RKM direncanakan sebagai rutin
+    let effAging = basis === 'RKM' && (aging === 'SP' || aging === 'DS') ? 'FS' : aging; // item baru dari RKM direncanakan sebagai rutin
+    const mdFS = effAging === 'MD' && P.mdAsFS; if (mdFS) effAging = 'FS';            // Moderate diperlakukan seperti FS (perlu konfirmasi user)
     const cls = isProject ? 'Program' : effAging === 'FS' ? (isChem ? 'Rutin · Chemical' : 'Rutin · Maintenance') : effAging === 'MD' ? 'Rutin · Slow (ROP manual)' : 'On Demand';
     const out = { method: 'tko', amu, amuHist, sdmi, aging, since, agingUsed: effAging, cls, basis, lt: r.lt, tEff: null, ss: 0, min: null, max: null, min2: null, max2: null, toOrder: 0, surplus: 0, cover: null, berlebih: false, note: '' };
     const stock = r.stock || 0, ospo = r.ospo || 0, res = r.mb25 || 0, avail = stock + ospo - res;
@@ -102,12 +103,15 @@
       out.min = amu * T + out.ss; out.max = amu * (P.chemP + T) + out.ss;
     } else if (cls === 'Rutin · Maintenance') {
       out.ss = roundup(Math.min(z * sdmi * Math.sqrt(T), P.ssCapMonths * amu)); // dibatasi agar tidak berlebih untuk pemakaian tak rutin
-      out.min = amu * T + out.ss; out.max = out.min + P.roqMonths * amu;
+      out.min = amu * T + out.ss;
+      // 3 pilihan rumus Max (lihat Pengaturan): A = 2×(AMU×T)+SS · B = AMU×T+2×SS · C = ROP + ROQ×AMU
+      out.max = P.maxFormula === 'A' ? 2 * amu * T + out.ss : P.maxFormula === 'B' ? amu * T + 2 * out.ss : out.min + P.roqMonths * amu;
     } else { // MD → rutin slow moving: ROP = SS, order lot-for-lot sampai SS
       out.ss = roundup(Math.min(z * sdmi * Math.sqrt(T), P.ssCapMonths * amu));
       out.min = out.ss; out.max = out.ss; out.note = 'ROP manual: review dengan user';
     }
     out.min2 = roundup(out.min); out.max2 = Math.max(roundup(out.max), out.min2);
+    if (mdFS) out.note = 'Moderate → dihitung sebagai FS (konfirmasi user)';
     out.toOrder = avail < out.min2 ? roundup(Math.max(0, out.max2 - avail)) : 0;
     out.surplus = Math.max(0, stock - out.max2);
     out.berlebih = isFinite(out.cover) && out.cover > (cls === 'Rutin · Chemical' ? P.excessChem : P.excessGeneral);
