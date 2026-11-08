@@ -105,7 +105,10 @@
       out.ss = roundup(Math.min(z * sdmi * Math.sqrt(T), P.ssCapMonths * amu)); // dibatasi agar tidak berlebih untuk pemakaian tak rutin
       out.min = amu * T + out.ss;
       // 3 pilihan rumus Max (lihat Pengaturan): A = 2×(AMU×T)+SS · B = AMU×T+2×SS · C = ROP + ROQ×AMU
-      out.max = P.maxFormula === 'A' ? 2 * amu * T + out.ss : P.maxFormula === 'B' ? amu * T + 2 * out.ss : out.min + P.roqMonths * amu;
+      const fB = amu * T + 2 * out.ss, fC = out.min + P.roqMonths * amu;
+      // 'BC' = segmentasi: item kontrak (RO cepat) pakai B, item non-kontrak (PR+OE 5–6 bln) pakai C
+      out.max = P.maxFormula === 'A' ? 2 * amu * T + out.ss : P.maxFormula === 'B' ? fB : P.maxFormula === 'BC' ? (r.hasContract === 'Yes' ? fB : fC) : fC;
+      if (r.hasContract !== 'Yes') out.kandidatKontrak = true;
     } else { // MD → rutin slow moving: ROP = SS, order lot-for-lot sampai SS
       out.ss = roundup(Math.min(z * sdmi * Math.sqrt(T), P.ssCapMonths * amu));
       out.min = out.ss; out.max = out.ss; out.note = 'ROP manual: review dengan user';
