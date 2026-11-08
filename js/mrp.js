@@ -183,6 +183,7 @@
       const kp = opt.contractPick ? opt.contractPick.get(r.material) || (r.kimap && opt.contractPick.get(r.kimap)) : null;
       const ltv = ltRow ? ltRow.lt : master ? master.lt : null, hc = opt.contractPick ? (kp ? 'Yes' : 'No') : master ? master.hasContract : '';
       if (opt.ospoMap) r = Object.assign({}, r, { ospo: opt.ospoMap.get(r.material + '|' + r.plant) || 0 });
+      if (opt.mb25Map) r = Object.assign({}, r, { mb25: opt.mb25Map.get(r.material + '|' + r.plant) || 0 });
       const cat = r.cat || (master && master.cat) || '';
       const ex = calc({ usage36: r.usage36, amuSum: sumAvg.get(key), lt: ltv, hasContract: hc, stock, ospo: r.ospo, mb25: r.mb25, rkmYear: rkm }, opt);
       // histori bulanan digabung untuk baris duplikat Material+Plant

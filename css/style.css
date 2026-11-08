@@ -125,3 +125,7 @@ th,td{padding:10px 12px;border-bottom:1px solid var(--line)} tr:hover td{backgro
 .md code,code{background:var(--mute-soft);padding:1px 5px;border-radius:5px;font-size:12.5px} .md table{margin:8px 0} hr{border:0;border-top:1px solid var(--line);margin:16px 0}
 .sim-out{margin-top:12px} .small-v{font-size:18px!important}
 .btn.mini{padding:4px 10px;font-size:12px} td input.vc{padding:5px 8px;width:150px;font-size:12.5px}
+td input.exn{width:170px;padding:5px 8px;font-size:12.5px} td input.exk,td select.exm{padding:4px 6px;font-size:12.5px}
+.timeline{list-style:none;padding:0;margin:8px 0;border-left:2px solid var(--line)} .timeline li{padding:6px 0 6px 14px;position:relative;font-size:13px}
+.timeline li::before{content:'';position:absolute;left:-6px;top:12px;width:10px;height:10px;border-radius:50%;background:var(--brand)}
+.timeline .when{display:inline-block;width:96px;color:var(--muted);font-variant-numeric:tabular-nums} .neg{color:var(--bad)}

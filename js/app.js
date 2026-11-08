@@ -9,6 +9,8 @@ const ICON = {
   gauge: '<path d="M12 14l4-4"/><path d="M3.3 17a10 10 0 1 1 17.4 0"/>',
   db: '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
   book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5M9 7h7M9 11h5"/>',
+  truck: '<path d="M2 16V7a1 1 0 0 1 1-1h11v10"/><path d="M14 9h4l4 4v3h-2"/><circle cx="6.5" cy="17.5" r="2"/><circle cx="17.5" cy="17.5" r="2"/>',
+  route: '<circle cx="6" cy="19" r="2"/><circle cx="18" cy="5" r="2"/><path d="M8 19h8a3 3 0 0 0 0-6H8a3 3 0 0 1 0-6h8"/>',
   gear: '<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>',
 };
 const svg = (k) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICON[k]}</svg>`;
@@ -23,6 +25,8 @@ const MENU = [
   ['Pengadaan', [
     ['kontrak', 'Kontrak (OA/RO)', 'doc', 'Sisa nilai & masa kontrak, PO/RO berjalan, pengiriman terlambat'],
     ['order', 'Vendor & PR/PO', 'cart', 'Draft RO, draft PR + OE, kandidat kontrak, kontak vendor'],
+    ['expediting', 'Expediting', 'truck', 'Progres PO/RO sampai GR gudang, dan reservasi yang belum di-GI'],
+    ['lacak', 'Lacak Material', 'route', 'Jejak PR → PO/RO → GR → stok → reservasi → GI'],
     ['hps', 'HPS / OE', 'calc', 'Evaluasi penawaran vendor', 'Tahap 5'],
   ]],
   ['Laporan', [['kpi', 'KPI Inventory', 'gauge', 'Service level, TOR, slow moving & dead stock', 'Tahap 5']]],
@@ -34,7 +38,7 @@ const MENU = [
 ];
 const ROUTES = Object.fromEntries(MENU.flatMap(([, items]) => items.map((i) => [i[0], i])));
 const DEFAULT_MRP_PLANTS = ['W101', 'W102', 'W802', 'W803'];
-const PLANT_NAME = { W101: 'Rantau', W102: 'Pangkalan Susu', W802: 'Jambi', W803: 'Lirik' };
+const PLANT_NAME = { W101: 'Rantau', W102: 'Pangkalan Susu', W802: 'Jambi', W803: 'Lirik', W105: 'Prabumulih', W106: 'Pendopo', W801: 'Limau', W809: 'Adera', W811: 'Ramba' };
 const METHOD = { tko: 'Metode TKO / Pedoman (disarankan)', excel: 'Metode Excel lama (untuk validasi)' };
 const TKO_FIELDS = [['amuMonths', 'AMU dari berapa bulan terakhir', 'bln'], ['nonContractLT', 'Tambahan lead time pengadaan bila tanpa kontrak', 'bln'], ['roqMonths', 'Reorder quantity (Max = ROP + n × AMU)', 'bln'], ['ssCapMonths', 'Batas safety stock maintenance/slow', 'bln × AMU'], ['chemSSMonths', 'Safety stock chemical/catalyst', 'bln × AMU'], ['chemP', 'Periode review chemical (P)', 'bln'], ['excessGeneral', 'Batas berlebih (umum)', 'bln'], ['excessChem', 'Batas berlebih (chemical)', 'bln']];
 const BASIS = { hist: 'Histori saja (sama dengan Excel)', max: 'Terbesar antara histori dan RKM', 'rkm-new': 'RKM hanya untuk item tanpa histori' };
@@ -79,7 +83,9 @@ function sideData() {
     row(S.mrpWB, 'MRP', S.mrpWB ? fmt(S.mrpRes.size, 0) + ' item' : 'belum ada') +
     row(S.rkmFiles.length, 'RKM', S.rkmFiles.length ? S.rkmFiles.length + ' file' : 'belum ada') +
     row(S.me3n, 'Kontrak', S.me3n ? fmt(S.me3n.docs.size, 0) + ' OA' : 'belum ada') +
-    row(S.me2n, 'PO/RO', S.me2n ? fmt(S.me2n.lines.length, 0) + ' baris' : 'belum ada');
+    row(S.me2n, 'PO/RO', S.me2n ? fmt(S.me2n.lines.length, 0) + ' baris' : 'belum ada') +
+    row(S.mb51, 'MB51', S.mb51 ? fmt(S.mb51.moves.length, 0) + ' gerakan' : 'belum ada') +
+    row(S.mb25, 'MB25', S.mb25 ? fmt(S.mb25.lines.length, 0) + ' reservasi' : 'belum ada');
 }
 function route() {
   const k = (location.hash.match(/#\/([\w-]+)/) || [, 'beranda'])[1];
@@ -94,7 +100,7 @@ function route() {
 function recompute() {
   if (!S.mrpWB) { S.mrpRes = null; S.mrp = null; S.rkmMatched = []; return; }
   const stockMap = S.mb52 ? new Map(S.mb52.items.map((i) => [i.material + '|' + i.plant, i.soh])) : null;
-  const o = { stockMap, method: S.set.method, tko: S.set.tko, contractPick: S.me3n ? S.me3n.pick : null, ospoMap: S.me2n ? S.me2n.ospo : null };
+  const o = { stockMap, method: S.set.method, tko: S.set.tko, contractPick: S.me3n ? S.me3n.pick : null, ospoMap: S.me2n ? S.me2n.ospo : null, mb25Map: S.mb25 ? S.mb25.open : null };
   const base = MRP.run(S.mrpWB, o);
   S.rkmMatched = RKM.match(S.rkmFiles, base, S.mrpWB);
   S.mrpRes = MRP.run(S.mrpWB, Object.assign({}, o, { rkmMap: RKM.totals(S.rkmMatched), basis: S.set.basis }));
@@ -116,6 +122,8 @@ async function loadMB52(file) { S.mb52 = Parser.parseMB52(XLSX, await file.array
 async function loadMRP(file) { S.mrpWB = MRP.parseWorkbook(XLSX, await file.arrayBuffer()); S.mrpName = file.name; }
 async function loadME3N(file) { S.me3n = Contract.parseME3N(XLSX, await file.arrayBuffer()); S.me3nName = file.name; }
 async function loadME2N(file) { S.me2n = Contract.parseME2N(XLSX, await file.arrayBuffer()); S.me2nName = file.name; }
+async function loadMB51(file) { S.mb51 = Trace.parseMB51(XLSX, await file.arrayBuffer()); S.mb51Name = file.name; }
+async function loadMB25(file) { S.mb25 = Trace.parseMB25(XLSX, await file.arrayBuffer()); S.mb25Name = file.name; }
 async function loadRKM(file, name) {
   const f = RKM.parseFile(XLSX, await file.arrayBuffer(), name || file.name);
   const saved = (store.get('rkmPlant') || {})[f.fileName]; if (saved) f.plant = saved;
@@ -140,6 +148,8 @@ async function loadFolder(h) {
     if (c.mrp) { await tick(); await loadMRP(c.mrp.file); log.push('MRP: ' + c.mrp.name); }
     if (c.me3n) { await tick(); await loadME3N(c.me3n.file); log.push('Kontrak: ' + c.me3n.name); }
     if (c.me2n) { await tick(); await loadME2N(c.me2n.file); log.push('PO: ' + c.me2n.name); }
+    if (c.mb51) { await tick(); await loadMB51(c.mb51.file); log.push('MB51: ' + c.mb51.name); }
+    if (c.mb25) { await tick(); await loadMB25(c.mb25.file); log.push('MB25: ' + c.mb25.name); }
     if (c.regulasi) { S.regulasi = { name: c.regulasi.name, text: await c.regulasi.file.text() }; log.push('Regulasi: ' + c.regulasi.name); }
     for (const r of c.rkm) { try { await loadRKM(r.file, r.name); log.push('RKM: ' + r.name); } catch (e) { log.push('⚠ ' + r.name + ' — ' + e.message); } }
     recompute(); route();
@@ -301,7 +311,7 @@ const PAGES = {
       <label class="drop"><input type="file" id="${id}" accept=".xlsx,.xlsm,.xls" ${multi ? 'multiple' : ''}><div class="big">📄</div><b>Pilih file Excel${multi ? ' (boleh banyak)' : ''}</b><div class="muted">${hint}</div></label>
       <div class="status-line ${info ? 'ok' : ''}" id="${id}m">${info || 'Belum ada file.'}</div></div>`;
     $('view').innerHTML = `<div class="card folder"><div><h3>📁 Folder data (otomatis tiap login)</h3>
-        <p class="muted">${fs ? 'Pilih satu folder di laptop yang berisi file MB52, MRP, dan RKM. Web mengambil MB52, MRP, ME3N, ME2N yang <b>paling baru</b>, serta <b>semua</b> file RKM. Nama file harus memuat kata "MB52", "MRP", "ME3N", "ME2N", atau "RKM". Login berikutnya cukup 1 klik.' : 'Browser ini tidak mendukung akses folder. Pakai Chrome atau Edge di laptop, atau upload manual di bawah.'}</p></div>
+        <p class="muted">${fs ? 'Pilih satu folder di laptop yang berisi file MB52, MRP, dan RKM. Web mengambil MB52, MRP, ME3N, ME2N, MB51, MB25 yang <b>paling baru</b>, serta <b>semua</b> file RKM. Nama file harus memuat kata "MB52", "MRP", "ME3N", "ME2N", "MB51", "MB25", atau "RKM". Login berikutnya cukup 1 klik.' : 'Browser ini tidak mendukung akses folder. Pakai Chrome atau Edge di laptop, atau upload manual di bawah.'}</p></div>
         ${fs ? '<div class="row"><button class="btn primary" id="fp1">Pilih folder</button><button class="btn" id="fp2">Lupakan folder</button></div>' : ''}</div>
       <div class="card"><b>🔒 Aman:</b> <span class="muted">file hanya dibaca di browser kamu dan hilang saat halaman ditutup. Tidak ada yang dikirim ke server atau repo.</span></div>
       <div class="grid">
@@ -310,6 +320,8 @@ const PAGES = {
         ${box('f3', '3. RKM lapangan', 'Format template SHU, 1 file per lapangan', S.rkmFiles.length && `✓ ${S.rkmFiles.length} file`, true)}
         ${box('f4', '4. Kontrak ME3N', 'Download ME3N (Outline Agreement)', S.me3n && `✓ ${esc(S.me3nName)} · ${fmt(S.me3n.docs.size, 0)} kontrak · ${fmt(S.me3n.items.length, 0)} item`)}
         ${box('f5', '5. PO/RO ME2N', 'Download ME2N (PO & RO)', S.me2n && `✓ ${esc(S.me2nName)} · ${fmt(S.me2n.lines.length, 0)} baris`)}
+        ${box('f6', '6. Pergerakan MB51', 'Download MB51 (GR, GI, transfer)', S.mb51 && `✓ ${esc(S.mb51Name)} · ${fmt(S.mb51.moves.length, 0)} gerakan · ${S.mb51.range ? dstr(S.mb51.range[0]) + ' s.d. ' + dstr(S.mb51.range[1]) : ''}`)}
+        ${box('f7', '7. Reservasi MB25', 'Download MB25 (reservasi)', S.mb25 && `✓ ${esc(S.mb25Name)} · ${fmt(S.mb25.lines.length, 0)} baris`)}
       </div>
       ${S.rkmFiles.length ? `<div class="card"><h3>File RKM</h3><div class="table-wrap flat"><table><tr><th>File</th><th>Asset</th><th class="num">Baris</th><th>Plant</th><th class="num">Cocok ke MRP</th><th></th></tr>
         ${S.rkmFiles.map((f, i) => { const m = S.rkmMatched.filter((x) => x.file === f.fileName); return `<tr><td>${esc(f.fileName)}</td><td>${esc(f.asset)}</td><td class="num">${fmt(f.items.length, 0)}</td>
@@ -323,7 +335,7 @@ const PAGES = {
       const files = [...e.target.files]; if (!files.length) return; const m = $(id + 'm'); m.className = 'status-line'; m.textContent = 'Memproses…'; await tick();
       try { for (const f of files) await fn(f); recompute(); PAGES.data(); sideData(); } catch (err) { m.className = 'status-line bad'; m.textContent = 'Gagal: ' + err.message; }
     });
-    load('f1', loadMB52); load('f2', loadMRP); load('f3', (f) => loadRKM(f)); load('f4', loadME3N); load('f5', loadME2N);
+    load('f1', loadMB52); load('f2', loadMRP); load('f3', (f) => loadRKM(f)); load('f4', loadME3N); load('f5', loadME2N); load('f6', loadMB51); load('f7', loadMB25);
     document.querySelectorAll('.rp').forEach((s) => (s.onchange = () => {
       const f = S.rkmFiles[s.dataset.i]; f.plant = s.value; const m = store.get('rkmPlant') || {}; m[f.fileName] = s.value; store.set('rkmPlant', m); recompute(); PAGES.data();
     }));
@@ -425,6 +437,119 @@ PAGES.kontrak = function () {
     ['Pengiriman terlambat', S.me2n ? fmt(late.length, 0) + ' baris' : '-', 'bad'], ['Nilai sisa kirim (IDR)', S.me2n ? rp(sum(lines.filter((l) => l.currency === 'IDR'), (l) => l.openValue)) : '-', 'info']]
     .map(([k, v, c]) => `<div class="tile ${c}"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('')}</div>`;
   tabbed('kTab', TABS, tiles + (S.me2n ? '' : '<div class="card"><span class="muted">Upload ME2N untuk melihat PO/RO berjalan dan pengiriman terlambat.</span></div>'));
+};
+
+
+// ---------- Expediting (format mengikuti sheet "Expediting" MIM Z1) ----------
+const ex = { all() { return store.get('expediting') || {}; }, get(k) { return this.all()[k] || {}; }, set(k, v) { const a = this.all(); a[k] = v; store.set('expediting', a); } };
+const MANUAL = ['', 'Routing Approval', 'PO/RO on delivery', 'Outstanding (late)', 'Selesai', 'Batal'];
+const fieldName = (plants) => plants.split(', ').map((p) => (PLANT_NAME[p] ? 'PEP ' + PLANT_NAME[p] : p)).join(', ');
+PAGES.expediting = function () {
+  if (!S.me2n) { $('view').innerHTML = needFile('file ME2N', 'Expediting dibaca dari ME2N (PO/RO). Tambahkan MB51 untuk status GR gudang dan MB25 untuk reservasi.'); return; }
+  const allPlants = [...new Set(S.me2n.lines.map((l) => l.plant).filter(Boolean))].sort();
+  const sel = new Set(store.get('expPlants') || allPlants), stockOnly = store.get('expStockOnly') ?? true;
+  const today = new Date(), t0 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const rows = Trace.expediting(S.me2n, S.mb51, today, { plants: sel, stockOnly }).map((e) => {
+    const m = ex.get(e.doc); const kontr = m.kontrak ? new Date(m.kontrak) : null;
+    let status = e.status, cls = e.cls, late = e.lateDays;
+    if (e.open > 0 && kontr && kontr < t0) { late = Math.round((t0 - kontr) / 864e5); if (!e.inspeksi) { status = 'Outstanding (late)'; cls = 'low'; } }
+    if (m.manual) { status = m.manual; cls = m.manual === 'Outstanding (late)' ? 'low' : m.manual === 'Selesai' ? 'ok' : m.manual === 'Batal' ? 'mute' : m.manual === 'Routing Approval' ? 'warn' : 'info'; }
+    const mundur = kontr && e.deliv ? Math.round((e.deliv - kontr) / 864e5) : 0;
+    return Object.assign({}, e, { status, cls, late, kontr, mundur, note: m.note || '', manual: m.manual || '' });
+  });
+  const aktif = rows.filter((e) => e.open > 0 && e.manual !== 'Selesai' && e.manual !== 'Batal');
+  const late = aktif.filter((e) => e.status === 'Outstanding (late)');
+  const done = rows.filter((e) => e.open <= 0 || e.manual === 'Selesai');
+  // reservasi terbuka yang sudah jatuh tempo → cek apakah gudang sudah GI
+  const stock = new Map(S.mb52 ? S.mb52.items.map((i) => [i.material + '|' + i.plant, i.soh]) : []);
+  const resv = S.mb25 ? S.mb25.lines.filter((l) => !l.finalIssue && l.diff > 0 && (!sel.size || sel.has(l.plant)) && l.reqDate && l.reqDate <= t0)
+    .map((l) => { const st = stock.get(l.material + '|' + l.plant); return Object.assign({}, l, { stock: st, telat: Math.round((t0 - l.reqDate) / 864e5),
+      gi: st == null ? ['Stok tidak diketahui', 'mute'] : st >= l.diff ? ['Stok ada · belum GI', 'warn'] : st > 0 ? ['Stok kurang', 'low'] : ['Stok kosong', 'low'] }); })
+    .sort((a, b) => b.telat - a.telat) : [];
+  const grTxt = (e) => (!S.mb51 ? '-' : e.grIn || e.grRel ? `Tiba ${fmt(e.grIn)}${e.firstIn ? ' (' + dstr(e.firstIn) + ')' : ''} · Rilis ${fmt(e.grRel)}${e.lastRel ? ' (' + dstr(e.lastRel) + ')' : ''}` : 'Belum ada GR*');
+  const cols = [['No. PR', (e) => `<span class="mono">${esc(e.pr || '-')}</span>`, '', (e) => e.pr], ['No. PO/RO', (e) => `<a class="mono" href="#/lacak" data-q="${esc(e.doc)}">${esc(e.doc)}</a> ${pill(e.type, e.type === 'RO' ? 'info' : 'mute')}`, '', (e) => e.doc],
+    ['WK/Field', (e) => esc(fieldName(e.plant)), '', (e) => fieldName(e.plant)], ['Description', (e) => esc(e.desc)], ['Nilai', (e) => money(e.value, e.currency), 'num', (e) => e.value], ['CR', (e) => esc(e.currency)],
+    ['Deliv Date (SAP)', (e) => dstr(e.deliv), '', (e) => dstr(e.deliv)],
+    ['Tgl kirim kontrak', (e) => `<input type="date" class="exk" data-k="${esc(e.doc)}" value="${e.kontr ? new Date(e.kontr.getTime() - e.kontr.getTimezoneOffset() * 6e4).toISOString().slice(0, 10) : ''}">${e.mundur > 0 ? ' ' + pill('mundur ' + e.mundur + ' hr', 'warn') : ''}`, '', (e) => (e.kontr ? dstr(e.kontr) : '')],
+    ['Status', (e) => pill(e.status, e.cls) + (e.late ? ' ' + pill(e.late + ' hr', 'low') : ''), '', (e) => e.status],
+    ['Status manual', (e) => `<select class="exm" data-k="${esc(e.doc)}">${MANUAL.map((m) => `<option ${m === e.manual ? 'selected' : ''} value="${m}">${m || '— otomatis —'}</option>`).join('')}</select>`, '', (e) => e.manual],
+    ['Note', (e) => `<input class="exn" data-k="${esc(e.doc)}" value="${esc(e.note)}" placeholder="catatan">`, '', (e) => e.note],
+    ['GR gudang (MB51)', (e) => esc(grTxt(e)), '', grTxt], ['Sisa kirim', (e) => fmt(e.open), 'num', (e) => e.open], ['Vendor', (e) => esc(e.vendor)]];
+  const rCols = [['Reservasi', (l) => `<a class="mono" href="#/lacak" data-q="${esc(l.resv)}">${esc(l.resv)}</a>/${esc(l.item)}`, '', (l) => l.resv], ['Plant', (l) => esc(l.plant)], ['Material', (l) => `<a class="mono" href="#/lacak" data-q="${esc(l.material)}">${esc(l.material)}</a>`, '', (l) => l.material],
+    ['Deskripsi', (l) => esc(l.desc)], ['Tgl butuh', (l) => dstr(l.reqDate), '', (l) => dstr(l.reqDate)], ['Lewat', (l) => fmt(l.telat, 0) + ' hr', 'num', (l) => l.telat], ['Sisa reservasi', (l) => fmt(l.diff) + ' ' + esc(l.uom), 'num', (l) => l.diff],
+    ['Stok (MB52)', (l) => (l.stock == null ? '-' : fmt(l.stock)), 'num', (l) => l.stock], ['Status GI', (l) => pill(l.gi[0], l.gi[1]), '', (l) => l.gi[0]], ['Penerima', (l) => esc(l.recipient || l.costCenter || l.wbs)], ['Mvt', (l) => esc(l.mt)]];
+  const text = (e) => e.doc + ' ' + e.pr + ' ' + e.desc + ' ' + e.vendor + ' ' + fieldName(e.plant) + ' ' + e.note;
+  const note = S.mb51 ? `* MB51 yang dimuat mencakup ${S.mb51.range ? dstr(S.mb51.range[0]) + ' s.d. ' + dstr(S.mb51.range[1]) : '-'}; GR sebelum periode itu tidak terlihat. Status "Selesai" tetap dari ME2N (sisa kirim = 0).` : 'Upload MB51 untuk melihat status GR gudang (103 tiba/inspeksi, 105 rilis ke stok).';
+  const TABS = {
+    aktif: ['PO/RO aktif', aktif, cols, text, note], late: ['Terlambat', late, cols, text, 'Terlambat dihitung dari "Tgl kirim kontrak" kalau diisi, kalau tidak dari Deliv Date di SAP (yang bisa sudah dimundurkan).'],
+    done: ['Selesai GR', done, cols, text, note], semua: ['Semua', rows, cols, text, note],
+  };
+  if (S.mb25) TABS.resv = ['Reservasi belum di-GI', resv, rCols, (l) => l.resv + ' ' + l.material + ' ' + l.desc + ' ' + l.recipient, 'Reservasi (MB25) yang tanggal butuhnya sudah lewat tetapi belum diambil penuh. "Stok ada · belum GI" = tindak lanjut ke warehouse.'];
+  const sum = (a) => a.filter((e) => e.currency === 'IDR').reduce((x, e) => x + e.openValue, 0);
+  const tiles = `<div class="tiles">${[['TOTAL PO/RO aktif', fmt(aktif.length, 0), 'info'], ['ON DELIVERY', fmt(aktif.filter((e) => /on delivery/i.test(e.status)).length, 0), 'info'],
+    ['LATE', fmt(late.length, 0), 'bad'], ['TIBA · INSPEKSI', fmt(aktif.filter((e) => e.inspeksi).length, 0), 'warn'], ['APPROVAL', fmt(aktif.filter((e) => e.status === 'Routing Approval').length, 0), 'warn'],
+    ['Nilai sisa kirim (IDR)', rp(sum(aktif)), 'info'], ['Reservasi belum GI', S.mb25 ? fmt(resv.length, 0) : '-', 'bad']].map(([k, v, c]) => `<div class="tile ${c}"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('')}</div>`;
+  const filt = `<div class="card"><div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px"><b>Plant</b>
+    <label class="inline"><input type="checkbox" id="exStock" ${stockOnly ? 'checked' : ''}> hanya material stock (tanpa account assignment)</label></div>
+    <div class="chips" id="exChips">${allPlants.map((p) => `<label class="chip ${sel.has(p) ? 'on' : ''}"><input type="checkbox" value="${esc(p)}" ${sel.has(p) ? 'checked' : ''}>${esc(plantLabel(p))}</label>`).join('')}</div></div>`;
+  tabbed('eTab', TABS, tiles + filt);
+  $('exChips').onchange = (e) => { e.target.parentElement.classList.toggle('on', e.target.checked); store.set('expPlants', [...document.querySelectorAll('#exChips input:checked')].map((i) => i.value)); route(); };
+  $('exStock').onchange = (e) => { store.set('expStockOnly', e.target.checked); route(); };
+  const bind = () => {
+    document.querySelectorAll('.exn').forEach((i) => (i.onchange = () => { const v = ex.get(i.dataset.k); v.note = i.value.trim(); ex.set(i.dataset.k, v); }));
+    document.querySelectorAll('.exm').forEach((i) => (i.onchange = () => { const v = ex.get(i.dataset.k); v.manual = i.value; ex.set(i.dataset.k, v); route(); }));
+    document.querySelectorAll('.exk').forEach((i) => (i.onchange = () => { const v = ex.get(i.dataset.k); v.kontrak = i.value || null; ex.set(i.dataset.k, v); route(); }));
+    document.querySelectorAll('a[data-q]').forEach((a) => (a.onclick = () => sessionStorage.setItem('lacakQ', a.dataset.q)));
+  };
+  bind(); new MutationObserver(bind).observe($('res'), { childList: true });
+};
+
+// ---------- Lacak material ----------
+PAGES.lacak = function () {
+  const q0 = sessionStorage.getItem('lacakQ') || S.lacakQ || ''; sessionStorage.removeItem('lacakQ');
+  const have = [S.me2n && 'ME2N', S.mb51 && 'MB51', S.mb25 && 'MB25', S.mb52 && 'MB52', S.mrpRes && 'MRP'].filter(Boolean);
+  $('view').innerHTML = `<div class="card"><div class="filters"><input id="lq" placeholder="Ketik kode material, No. PO/RO, No. PR, atau No. reservasi…" value="${esc(q0)}"><button class="btn primary" id="lgo">Lacak</button></div>
+    <p class="muted small">Sumber yang dimuat: ${have.length ? have.join(', ') : 'belum ada'}. Semakin lengkap filenya, semakin lengkap jejaknya.</p></div><div id="lres"></div>`;
+  const go = () => {
+    const q = $('lq').value.trim(); S.lacakQ = q; if (!q) { $('lres').innerHTML = ''; return; }
+    const out = [];
+    // 1) dokumen PO/RO atau PR
+    const poLines = S.me2n ? S.me2n.lines.filter((l) => l.doc === q || l.pr === q) : [];
+    const resvLines = S.mb25 ? S.mb25.lines.filter((l) => l.resv === q) : [];
+    const resvMoves = S.mb51 ? S.mb51.moves.filter((m) => m.resv === q) : [];
+    let mats = new Set();
+    if (poLines.length) {
+      out.push(`<div class="card"><h3>Dokumen ${esc(q)}</h3>` + table(poLines, [['Dokumen', (l) => `<span class="mono">${esc(l.doc)}/${esc(l.item)}</span>`], ['PR', (l) => esc(l.pr)], ['Jenis', (l) => pill(l.type, 'info')], ['Plant', (l) => esc(l.plant)],
+        ['Material', (l) => `<a href="#" class="mono lm" data-m="${esc(l.material)}">${esc(l.material)}</a>`], ['Deskripsi', (l) => esc(l.desc)], ['Qty', (l) => fmt(l.qty) + ' ' + esc(l.uom), 'num'], ['Sisa kirim', (l) => fmt(l.openQty), 'num'],
+        ['Jadwal', (l) => dstr(l.delivery)], ['GR (MB51)', (l) => { const g = S.mb51 && S.mb51.gr.get(l.doc + '|' + String(+l.item || l.item)); return g ? `Tiba ${fmt(g.inQty)} · Rilis ${fmt(g.relQty)}` : '-'; }], ['Vendor', (l) => esc(l.vendor)]]) + '</div>');
+      poLines.forEach((l) => mats.add(l.material + '|' + l.plant));
+    }
+    if (resvLines.length || resvMoves.length) {
+      out.push(`<div class="card"><h3>Reservasi ${esc(q)}</h3>` + (resvLines.length ? table(resvLines, [['Item', (l) => esc(l.item)], ['Plant', (l) => esc(l.plant)], ['Material', (l) => `<a href="#" class="mono lm" data-m="${esc(l.material)}">${esc(l.material)}</a>`], ['Deskripsi', (l) => esc(l.desc)],
+        ['Butuh', (l) => dstr(l.reqDate)], ['Diminta', (l) => fmt(l.reqQty), 'num'], ['Sudah GI', (l) => fmt(l.removed), 'num'], ['Sisa', (l) => fmt(l.diff), 'num'], ['Penerima', (l) => esc(l.recipient || l.costCenter)]]) : '<p class="muted">Tidak ada di MB25 (mungkin sudah selesai).</p>') +
+        (resvMoves.length ? '<h4>GI dari gudang (MB51)</h4>' + table(resvMoves, [['Tanggal', (m) => dstr(m.date)], ['Mvt', (m) => esc(m.mt + ' ' + m.mtText)], ['Material', (m) => esc(m.material)], ['Qty', (m) => fmt(m.qty) + ' ' + esc(m.uom), 'num'], ['Dok. material', (m) => esc(m.matDoc)], ['Keterangan', (m) => esc(m.header)]]) : '') + '</div>');
+      resvLines.forEach((l) => mats.add(l.material + '|' + l.plant));
+    }
+    // 2) material
+    const isMat = (S.mb52 && S.mb52.items.some((i) => i.material === q)) || (S.mrpRes && [...S.mrpRes.values()].some((r) => r.material === q)) || (S.me2n && S.me2n.lines.some((l) => l.material === q)) || (S.mb51 && S.mb51.moves.some((m) => m.material === q));
+    if (isMat) mats = new Set([q + '|']);
+    if (!out.length && !isMat) { $('lres').innerHTML = `<div class="card empty"><div class="big">🔍</div>Tidak ditemukan di data yang dimuat.</div>`; return; }
+    for (const key of mats) {
+      const [mat, plant] = key.split('|');
+      const ev = Trace.traceMaterial(mat, plant || null, { me2n: S.me2n, mb51: S.mb51, mb25: S.mb25 });
+      const stockRows = S.mb52 ? S.mb52.items.filter((i) => i.material === mat && (!plant || i.plant === plant)) : [];
+      const mrpRows = S.mrpRes ? [...S.mrpRes.values()].filter((r) => r.material === mat && (!plant || r.plant === plant)) : [];
+      const desc = (stockRows[0] && stockRows[0].desc) || (mrpRows[0] && mrpRows[0].desc) || (ev[0] && '') || '';
+      const stepCls = { PR: 'mute', PO: 'info', RO: 'info', 'GR (inspeksi)': 'warn', 'GR (rilis stok)': 'ok', Reservasi: 'warn', GI: 'low', Transfer: 'mute' };
+      out.push(`<div class="card"><h3>Material <span class="mono">${esc(mat)}</span>${plant ? ' · ' + esc(plantLabel(plant)) : ''}</h3><p class="muted">${esc(desc)}</p>
+        <div class="grid">${stockRows.length ? `<div><b>Stok sekarang (MB52)</b>${table(stockRows, [['Plant', (i) => esc(i.plant)], ['Stok', (i) => fmt(i.soh) + ' ' + esc(i.uom), 'num'], ['Nilai', (i) => rp(i.value), 'num']])}</div>` : ''}
+        ${mrpRows.length ? `<div><b>MRP</b>${table(mrpRows, [['Plant', (r) => esc(r.plant)], ['Aging', (r) => agingPill(r.aging)], ['Min', (r) => fmt(r.min2), 'num'], ['Max', (r) => fmt(r.max2), 'num'], ['OS PO', (r) => fmt(r.ospo), 'num'], ['Reservasi', (r) => fmt(r.mb25), 'num'], ['To Order', (r) => fmt(r.toOrder), 'num'], ['Kontrak', (r) => esc(r.oa || '-')]])}</div>` : ''}</div>
+        <h4>Jejak (${fmt(ev.length, 0)} kejadian)</h4>${ev.length ? `<ol class="timeline">${ev.map((e) => `<li><span class="when">${dstr(e.date)}</span>${pill(e.step, stepCls[e.step] || 'mute')} <span class="mono small">${esc(e.plant)}</span> ${esc(e.text)} <b class="${e.qty < 0 ? 'neg' : ''}">${fmt(e.qty)} ${esc(e.uom)}</b></li>`).join('')}</ol>` : '<p class="muted">Belum ada kejadian di ME2N/MB51/MB25.</p>'}</div>`);
+    }
+    $('lres').innerHTML = out.join('');
+    document.querySelectorAll('.lm').forEach((a) => (a.onclick = (e) => { e.preventDefault(); $('lq').value = a.dataset.m; go(); }));
+  };
+  $('lgo').onclick = go; $('lq').onkeydown = (e) => { if (e.key === 'Enter') go(); }; go();
 };
 
 // ---------- Vendor & PR/PO ----------
