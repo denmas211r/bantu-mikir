@@ -85,7 +85,7 @@
     const isChem = new RegExp(P.chemRegex, 'i').test(r.desc || '');
     let effAging = basis === 'RKM' && (aging === 'SP' || aging === 'DS') ? 'FS' : aging; // item baru dari RKM direncanakan sebagai rutin
     const mdFS = effAging === 'MD' && P.mdAsFS; if (mdFS) effAging = 'FS';            // Moderate diperlakukan seperti FS (perlu konfirmasi user)
-    const cls = isProject ? 'Program' : effAging === 'FS' ? (isChem ? 'Rutin · Chemical' : 'Rutin · Maintenance') : effAging === 'MD' ? 'Rutin · Slow (ROP manual)' : 'On Demand';
+    const cls = isProject ? 'Program' : effAging === 'FS' ? (isChem ? 'Rutin chemical' : 'Rutin maintenance') : effAging === 'MD' ? 'Rutin slow (ROP manual)' : 'On Demand';
     const out = { method: 'tko', amu, amuHist, sdmi, aging, since, agingUsed: effAging, cls, basis, lt: r.lt, tEff: null, ss: 0, min: null, max: null, min2: null, max2: null, toOrder: 0, surplus: 0, cover: null, berlebih: false, note: '' };
     const stock = r.stock || 0, ospo = r.ospo || 0, res = r.mb25 || 0, avail = stock + ospo - res;
     out.cover = amu > 0 ? stock / amu : stock > 0 ? Infinity : 0;
@@ -98,10 +98,10 @@
     if (r.lt == null || r.lt === '' || !isFinite(r.lt)) { out.note = 'LT tidak ada'; return out; }
     const T = r.lt + (r.hasContract === 'Yes' ? 0 : P.nonContractLT); out.tEff = T;
     const z = r.critical ? P.zCrit : P.z;
-    if (cls === 'Rutin · Chemical') {
+    if (cls === 'Rutin chemical') {
       out.ss = roundup(P.chemSSMonths * amu);
       out.min = amu * T + out.ss; out.max = amu * (P.chemP + T) + out.ss;
-    } else if (cls === 'Rutin · Maintenance') {
+    } else if (cls === 'Rutin maintenance') {
       out.ss = roundup(Math.min(z * sdmi * Math.sqrt(T), P.ssCapMonths * amu)); // dibatasi agar tidak berlebih untuk pemakaian tak rutin
       out.min = amu * T + out.ss;
       // 3 pilihan rumus Max (lihat Pengaturan): A = 2×(AMU×T)+SS · B = AMU×T+2×SS · C = ROP + ROQ×AMU
@@ -117,7 +117,7 @@
     if (mdFS) out.note = 'Moderate → dihitung sebagai FS (konfirmasi user)';
     out.toOrder = avail < out.min2 ? roundup(Math.max(0, out.max2 - avail)) : 0;
     out.surplus = Math.max(0, stock - out.max2);
-    out.berlebih = isFinite(out.cover) && out.cover > (cls === 'Rutin · Chemical' ? P.excessChem : P.excessGeneral);
+    out.berlebih = isFinite(out.cover) && out.cover > (cls === 'Rutin chemical' ? P.excessChem : P.excessGeneral);
     return out;
   }
 

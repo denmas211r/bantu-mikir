@@ -80,11 +80,11 @@
       if (mb51) for (const l of L) { const g = mb51.gr.get(l.doc + '|' + stripItem(l.item)); if (!g) continue; grIn += g.inQty; grRel += g.relQty; if (g.firstIn && (!firstIn || g.firstIn < firstIn)) firstIn = g.firstIn; if (g.lastRel && (!lastRel || g.lastRel > lastRel)) lastRel = g.lastRel; }
       const inspeksi = grIn - grRel > 1e-9; // sudah tiba (103) tapi belum dirilis (105)
       let status, cls;
-      if (open <= 1e-9) { status = 'Selesai (GR penuh)'; cls = 'ok'; }
-      else if (inspeksi) { status = 'Tiba di gudang · inspeksi'; cls = 'info'; }
-      else if (deliv && deliv < t0) { status = 'Outstanding (late)'; cls = 'low'; }
-      else if (open < qty - 1e-9) { status = 'Partial · on delivery'; cls = 'warn'; }
-      else { status = 'PO/RO on delivery'; cls = 'info'; }
+      if (open <= 1e-9) { status = 'Selesai GR'; cls = 'ok'; }
+      else if (inspeksi) { status = 'Tiba, menunggu inspeksi'; cls = 'info'; }
+      else if (deliv && deliv < t0) { status = 'Terlambat'; cls = 'low'; }
+      else if (open < qty - 1e-9) { status = 'Diterima sebagian'; cls = 'warn'; }
+      else { status = 'Dalam pengiriman'; cls = 'info'; }
       const f = L[0];
       out.push({ doc, type: f.type, pr: [...new Set(L.map((l) => l.pr).filter(Boolean))].join(', '), plant: [...new Set(L.map((l) => l.plant))].join(', '), pg: f.pg, vendor: f.vendor, vendorCode: f.vendorCode,
         oa: f.oa, desc: f.desc + (L.length > 1 ? ` (+${L.length - 1} item)` : ''), items: L.length, qty, open, value, openValue, currency: f.currency, docDate: f.docDate, deliv,
