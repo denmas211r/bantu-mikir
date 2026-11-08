@@ -49,6 +49,71 @@
     return out;
   }
 
+  // ================= Metode TKO (disempurnakan sesuai pedoman & TKO perusahaan) =================
+  // Ringkasan aturan (detail di dokumen privat Project, bukan di repo):
+  //   Aging   : FS = ada pemakaian ≤12 bln · MD ≤24 bln · SP ≤60 bln · DS >60 bln (dari pemakaian terakhir)
+  //   AMU     : rata-rata |pemakaian| N bulan terakhir (default 24)
+  //   T       : lead time + tambahan lead time pengadaan bila item tidak punya kontrak (default 5 bln)
+  //   Kategori: Project → Program (BOM − (O+S)); FS chemical/catalyst; FS maintenance; MD → rutin slow; SP/DS → on demand
+  //   SS      : chemical = n bln × AMU (default 3) · maintenance & slow = z × SdMI × √T (service level 95%/99%), maks 3 bln × AMU
+  //   Min(ROP): FS = AMU×T + SS · MD = SS
+  //   Max     : chemical = AMU×(P+T) + SS · maintenance = ROP + ROQ×AMU (default 6) · MD = SS; Max ≥ Min, dibulatkan
+  //   Order   : tersedia = Stok + OS PO − Reservasi(MB25); bila tersedia < Min → Max − tersedia
+  //             Program/on demand: RKM + Reservasi − (Stok + OS PO)
+  //   Berlebih: cakupan stok > batas bulan (umum 12, chemical 5)
+  const TKO_DEFAULT = { amuMonths: 24, z: 1.645, zCrit: 2.326, nonContractLT: 5, roqMonths: 6, chemSSMonths: 3, ssCapMonths: 3, chemP: 1, excessGeneral: 12, excessChem: 5,
+    chemRegex: '^(?!.*BATTERY).*(CHEMICAL|CATALYST|SULFATE|SULPHATE|KAPORIT|CHLORINE|HYPOCHLORITE|HYDROXIDE|DEMULSIFIER|CORROSION INHIBITOR|SCALE INHIBITOR|BIOCIDE|SURFACTANT|SCAVENGER|DEFOAM|SOLVENT|POLYMER|COAGULANT|FLOCCULANT|HYDROCHLORIC|CAUSTIC|SODA ASH)' };
+  function stdev(a) { if (a.length < 2) return 0; const m = a.reduce((x, y) => x + y, 0) / a.length; return Math.sqrt(a.reduce((s, v) => s + (v - m) ** 2, 0) / (a.length - 1)); }
+  function agingTKO(usageAll) {
+    let last = -1; for (let i = usageAll.length - 1; i >= 0; i--) if (usageAll[i]) { last = i; break; }
+    if (last < 0) return { aging: 'DS', since: Infinity };
+    const since = usageAll.length - 1 - last; // 0 = bulan terakhir data
+    return { aging: since < 12 ? 'FS' : since < 24 ? 'MD' : since < 60 ? 'SP' : 'DS', since };
+  }
+  function calcTKO(r, opt = {}) {
+    const P = Object.assign({}, TKO_DEFAULT, opt.tko || {});
+    const u = (r.usageAll || []).map((v) => Math.abs(v || 0));
+    const win = u.slice(-P.amuMonths);
+    const { aging, since } = agingTKO(u);
+    const amuHist = win.reduce((a, b) => a + b, 0) / P.amuMonths;
+    const sdmi = stdev(win);
+    let amu = amuHist, basis = 'Histori';
+    const rkmM = r.rkmYear ? r.rkmYear / 12 : 0;
+    if (opt.basis === 'max' && rkmM > amuHist) { amu = rkmM; basis = 'RKM'; }
+    if (opt.basis === 'rkm-new' && !amuHist && rkmM) { amu = rkmM; basis = 'RKM'; }
+    const isProject = /^project$/i.test(String(r.cat || '').trim());
+    const isChem = new RegExp(P.chemRegex, 'i').test(r.desc || '');
+    const effAging = basis === 'RKM' && (aging === 'SP' || aging === 'DS') ? 'FS' : aging; // item baru dari RKM direncanakan sebagai rutin
+    const cls = isProject ? 'Program' : effAging === 'FS' ? (isChem ? 'Rutin · Chemical' : 'Rutin · Maintenance') : effAging === 'MD' ? 'Rutin · Slow (ROP manual)' : 'On Demand';
+    const out = { method: 'tko', amu, amuHist, sdmi, aging, since, agingUsed: effAging, cls, basis, lt: r.lt, tEff: null, ss: 0, min: null, max: null, min2: null, max2: null, toOrder: 0, surplus: 0, cover: null, berlebih: false, note: '' };
+    const stock = r.stock || 0, ospo = r.ospo || 0, res = r.mb25 || 0, avail = stock + ospo - res;
+    out.cover = amu > 0 ? stock / amu : stock > 0 ? Infinity : 0;
+    if (cls === 'Program' || cls === 'On Demand') {
+      out.toOrder = roundup(Math.max(0, (r.rkmYear || 0) + res - stock - ospo));
+      out.surplus = Math.max(0, stock - res - (r.rkmYear || 0));
+      if (aging === 'DS' && stock > 0) out.note = 'Kandidat dead stock (cek prospek & peralatan induk)';
+      return out;
+    }
+    if (r.lt == null || r.lt === '' || !isFinite(r.lt)) { out.note = 'LT tidak ada'; return out; }
+    const T = r.lt + (r.hasContract === 'Yes' ? 0 : P.nonContractLT); out.tEff = T;
+    const z = r.critical ? P.zCrit : P.z;
+    if (cls === 'Rutin · Chemical') {
+      out.ss = roundup(P.chemSSMonths * amu);
+      out.min = amu * T + out.ss; out.max = amu * (P.chemP + T) + out.ss;
+    } else if (cls === 'Rutin · Maintenance') {
+      out.ss = roundup(Math.min(z * sdmi * Math.sqrt(T), P.ssCapMonths * amu)); // dibatasi agar tidak berlebih untuk pemakaian tak rutin
+      out.min = amu * T + out.ss; out.max = out.min + P.roqMonths * amu;
+    } else { // MD → rutin slow moving: ROP = SS, order lot-for-lot sampai SS
+      out.ss = roundup(Math.min(z * sdmi * Math.sqrt(T), P.ssCapMonths * amu));
+      out.min = out.ss; out.max = out.ss; out.note = 'ROP manual: review dengan user';
+    }
+    out.min2 = roundup(out.min); out.max2 = Math.max(roundup(out.max), out.min2);
+    out.toOrder = avail < out.min2 ? roundup(Math.max(0, out.max2 - avail)) : 0;
+    out.surplus = Math.max(0, stock - out.max2);
+    out.berlebih = isFinite(out.cover) && out.cover > (cls === 'Rutin · Chemical' ? P.excessChem : P.excessGeneral);
+    return out;
+  }
+
   // Baca file MRP: sheet MRP (histori + stock/OSPO/MB25) dan LeadTime (LT, contract, OA)
   function parseWorkbook(XLSX, buf) {
     const wb = XLSX.read(new Uint8Array(buf), { type: 'array', sheets: ['MRP', 'LeadTime'] });
@@ -95,7 +160,11 @@
   function run(wbData, opt = {}) {
     const { rows, lt } = wbData;
     const sumAvg = new Map();
-    rows.forEach((r) => { const k = r.material + '|' + r.plant; sumAvg.set(k, (sumAvg.get(k) || 0) + r.usage36.reduce((x, y) => x + y, 0) / 36); });
+    const dupUsage = new Map();
+    rows.forEach((r) => {
+      const k = r.material + '|' + r.plant; sumAvg.set(k, (sumAvg.get(k) || 0) + r.usage36.reduce((x, y) => x + y, 0) / 36);
+      const prev = dupUsage.get(k); dupUsage.set(k, prev ? prev.map((v, i) => v + (r.usageAll[i] || 0)) : r.usageAll.slice());
+    });
     const out = new Map();
     for (const r of rows) {
       const key = r.material + '|' + r.plant;
@@ -103,15 +172,21 @@
       const master = lt.get(r.material); const ltRow = r.kimap ? wbData.ltByKimap.get(r.kimap) : null;
       const stock = opt.stockMap && opt.stockMap.has(key) ? opt.stockMap.get(key) : opt.stockMap ? 0 : r.stock;
       const rkm = opt.rkmMap ? opt.rkmMap.get(key) || 0 : 0;
-      const res = calc({ usage36: r.usage36, amuSum: sumAvg.get(key), lt: ltRow ? ltRow.lt : master ? master.lt : null,
-        hasContract: master ? master.hasContract : '', stock, ospo: r.ospo, mb25: r.mb25, rkmYear: rkm }, opt);
-      out.set(key, Object.assign({ key, material: r.material, plant: r.plant, kimap: r.kimap, desc: r.desc, uom: r.uom, field: r.field, cat: r.cat || (master && master.cat) || '',
+      const ltv = ltRow ? ltRow.lt : master ? master.lt : null, hc = master ? master.hasContract : '';
+      const cat = r.cat || (master && master.cat) || '';
+      const ex = calc({ usage36: r.usage36, amuSum: sumAvg.get(key), lt: ltv, hasContract: hc, stock, ospo: r.ospo, mb25: r.mb25, rkmYear: rkm }, opt);
+      // histori bulanan digabung untuk baris duplikat Material+Plant
+      const usageAll = (dupUsage.get(key) || r.usageAll);
+      const tk = calcTKO({ usageAll, lt: ltv, hasContract: hc, cat, desc: r.desc, stock, ospo: r.ospo, mb25: r.mb25, rkmYear: rkm, critical: opt.criticalSet ? opt.criticalSet.has(key) : false }, opt);
+      ex.method = 'excel';
+      const res = opt.method === 'excel' ? ex : tk;
+      out.set(key, Object.assign({ key, material: r.material, plant: r.plant, kimap: r.kimap, desc: r.desc, uom: r.uom, field: r.field, cat,
         stock, ospo: r.ospo, mb25: r.mb25, rkm, oa: master ? master.oa : '', pic: master ? master.pic : '', sisaHari: master ? master.sisaHari : null,
-        hasContract: master ? master.hasContract : '', excel: r.excel, usageAll: r.usageAll }, res));
+        hasContract: hc, excel: r.excel, usageAll, alt: { excel: ex, tko: tk } }, res));
     }
     return out;
   }
 
-  root.MRP = { calc, parseWorkbook, run, agingOf, roundup };
+  root.MRP = { calc, calcTKO, agingTKO, TKO_DEFAULT, parseWorkbook, run, agingOf, roundup };
   if (typeof module !== 'undefined') module.exports = root.MRP;
 })(typeof window !== 'undefined' ? window : globalThis);

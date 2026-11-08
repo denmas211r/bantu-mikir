@@ -16,6 +16,11 @@ Ide dan logika meniru https://github.com/StackGeefer/Warehouse-SCM. Kode ditulis
 - Dilarang commit data SAP/kontrak/harga vendor asli dalam bentuk mentah. Hanya file terenkripsi, dan hanya setelah user (Digi) konfirmasi eksplisit.
 - Password login harus kuat (passphrase panjang), bukan kata sederhana.
 
+## Aturan bisnis (otak project)
+- Acuan proses bisnis & rumus MRP: dokumen pedoman/TKO internal perusahaan. Ringkasannya disimpan PRIVAT di Project MIM (claude.ai), file `claude/otak-mim-aturan-bisnis.md`.
+- JANGAN commit isi/kutipan/PDF dokumen internal ke repo ini (repo publik). Di kode cukup rumusnya.
+- Mesin MRP punya 2 metode: `tko` (default, sesuai pedoman) dan `excel` (replika file MRP lama, untuk validasi, harus tetap cocok 100%).
+
 ## Role (tim MIM kecil)
 Owner, Co-Owner, Viewer, plus role sesuai kebutuhan (mis. Planner, Procurement). Detail ada di SPEC.md.
 

@@ -33,6 +33,8 @@ const MENU = [
 const ROUTES = Object.fromEntries(MENU.flatMap(([, items]) => items.map((i) => [i[0], i])));
 const DEFAULT_MRP_PLANTS = ['W101', 'W102', 'W802', 'W803'];
 const PLANT_NAME = { W101: 'Rantau', W102: 'Pangkalan Susu', W802: 'Jambi', W803: 'Lirik' };
+const METHOD = { tko: 'Metode TKO / Pedoman (disarankan)', excel: 'Metode Excel lama (untuk validasi)' };
+const TKO_FIELDS = [['amuMonths', 'AMU dari berapa bulan terakhir', 'bln'], ['nonContractLT', 'Tambahan lead time pengadaan bila tanpa kontrak', 'bln'], ['roqMonths', 'Reorder quantity (Max = ROP + n × AMU)', 'bln'], ['ssCapMonths', 'Batas safety stock maintenance/slow', 'bln × AMU'], ['chemSSMonths', 'Safety stock chemical/catalyst', 'bln × AMU'], ['chemP', 'Periode review chemical (P)', 'bln'], ['excessGeneral', 'Batas berlebih (umum)', 'bln'], ['excessChem', 'Batas berlebih (chemical)', 'bln']];
 const BASIS = { hist: 'Histori saja (sama dengan Excel)', max: 'Terbesar antara histori dan RKM', 'rkm-new': 'RKM hanya untuk item tanpa histori' };
 
 let S = null; // sesi
@@ -54,7 +56,7 @@ $('lf').onsubmit = async (e) => {
     const { role, key } = await Vault.login(entry, $('p').value);
     const data = await Vault.decryptJSON(key, await (await fetch('data/data.enc.json', { cache: 'no-store' })).json());
     S = { role, data, user: $('u').value.trim(), mb52: null, mrpWB: null, rkmFiles: [], mrpRes: null, rkmMatched: [], mrp: null,
-      mrpPlants: new Set(store.get('mrpPlants') || DEFAULT_MRP_PLANTS), set: Object.assign({ basis: 'hist', lliLT: 6 }, store.get('settings') || {}), rkmTab: 'vs' };
+      mrpPlants: new Set(store.get('mrpPlants') || DEFAULT_MRP_PLANTS), set: Object.assign({ basis: 'hist', lliLT: 6, method: 'tko', tko: {} }, store.get('settings') || {}), rkmTab: 'vs' };
     $('login').hidden = true; $('app').hidden = false;
     $('whoName').textContent = S.user; $('whoRole').textContent = role; $('avatar').textContent = S.user[0].toUpperCase();
     buildNav(); route(); initFolder();
@@ -88,9 +90,10 @@ function route() {
 function recompute() {
   if (!S.mrpWB) { S.mrpRes = null; S.mrp = null; S.rkmMatched = []; return; }
   const stockMap = S.mb52 ? new Map(S.mb52.items.map((i) => [i.material + '|' + i.plant, i.soh])) : null;
-  const base = MRP.run(S.mrpWB, { stockMap });
+  const o = { stockMap, method: S.set.method, tko: S.set.tko };
+  const base = MRP.run(S.mrpWB, o);
   S.rkmMatched = RKM.match(S.rkmFiles, base, S.mrpWB);
-  S.mrpRes = MRP.run(S.mrpWB, { stockMap, rkmMap: RKM.totals(S.rkmMatched), basis: S.set.basis });
+  S.mrpRes = MRP.run(S.mrpWB, Object.assign({}, o, { rkmMap: RKM.totals(S.rkmMatched), basis: S.set.basis }));
   const map = new Map();
   for (const r of S.mrpRes.values()) map.set(r.plant + '|' + r.material, { min: r.min2 || 0, max: r.max2 || 0, aging: r.aging, toOrder: r.toOrder });
   S.mrp = { map, plants: [...new Set([...S.mrpRes.values()].map((r) => r.plant))].sort() };
@@ -230,6 +233,9 @@ const PAGES = {
       return Object.assign(o, { nm, due, cover, st });
     }).sort((a, b) => a.due - b.due);
     const orders = res.filter((r) => r.toOrder > 0).sort((a, b) => b.toOrder - a.toOrder);
+    const sehat = res.filter((r) => r.berlebih || (r.method === 'tko' ? r.aging === 'DS' && r.stock > 0 : false) || (r.surplus > 0 && r.stock > 0)).sort((a, b) => (b.surplus || 0) - (a.surplus || 0));
+    const diffKey = (r) => { const a = r.alt.excel, b = r.alt.tko; return a.aging !== b.aging || (a.min2 || 0) !== (b.min2 || 0) || (a.max2 || 0) !== (b.max2 || 0) || a.toOrder !== b.toOrder; };
+    const cmp = res.filter(diffKey);
     const mLabel = (idx) => ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'][((idx % 12) + 12) % 12] + ' ' + Math.floor(idx / 12);
     const amu12 = (r) => r.amuHist * 12;
 
@@ -254,11 +260,22 @@ const PAGES = {
         ['Stok + PO', (o) => (o.r ? fmt(o.cover) : '-'), 'num', (o) => o.cover], ['Status', (o) => pill(o.st[0], o.st[1]), '', (o) => o.st[0]]], (o) => o.x.kimap + ' ' + o.x.desc],
       order: ['Perlu order (To Order)', orders, [['Plant', (r) => esc(r.plant)], ['Material', (r) => `<span class="mono">${esc(r.material)}</span>`], ['Deskripsi', (r) => esc(r.desc)], ['Aging', (r) => agingPill(r.aging), '', (r) => r.aging],
         ['Stok', (r) => fmt(r.stock), 'num', (r) => r.stock], ['OS PO/RO', (r) => fmt(r.ospo), 'num', (r) => r.ospo], ['MB25', (r) => fmt(r.mb25), 'num', (r) => r.mb25], ['Min', (r) => fmt(r.min2), 'num', (r) => r.min2], ['Max', (r) => fmt(r.max2), 'num', (r) => r.max2],
-        ['To Order', (r) => pill(fmt(r.toOrder), 'warn'), 'num', (r) => r.toOrder], ['RKM 2027', (r) => fmt(r.rkm), 'num', (r) => r.rkm], ['Kontrak (OA)', (r) => `<span class="mono">${esc(r.oa)}</span>`, '', (r) => r.oa]], (r) => r.material + ' ' + r.desc + ' ' + r.oa],
+        ['To Order', (r) => pill(fmt(r.toOrder), 'warn'), 'num', (r) => r.toOrder], ['RKM 2027', (r) => fmt(r.rkm), 'num', (r) => r.rkm], ['Kelas', (r) => esc(r.cls || r.aging), '', (r) => r.cls || r.aging],
+        ['Kontrak (OA)', (r) => (r.oa ? `<span class="mono">${esc(r.oa)}</span>` : pill('PR + OE', 'mute')), '', (r) => r.oa || 'PR + OE']], (r) => r.material + ' ' + r.desc + ' ' + r.oa],
+      sehat: ['Penyehatan stok', sehat, [['Plant', (r) => esc(r.plant)], ['Material', (r) => `<span class="mono">${esc(r.material)}</span>`], ['Deskripsi', (r) => esc(r.desc)], ['Aging', (r) => agingPill(r.aging), '', (r) => r.aging],
+        ['Stok', (r) => fmt(r.stock), 'num', (r) => r.stock], ['Max', (r) => fmt(r.max2), 'num', (r) => r.max2], ['Surplus', (r) => fmt(r.surplus), 'num', (r) => r.surplus],
+        ['Cakupan (bln)', (r) => (r.cover == null ? '-' : isFinite(r.cover) ? fmt(r.cover, 1) : '∞'), 'num', (r) => (isFinite(r.cover) ? r.cover : '')],
+        ['Kategori', (r) => (r.aging === 'DS' && r.stock > 0 ? pill('Kandidat dead stock', 'low') : r.berlebih ? pill('Berlebih', 'warn') : pill('Di atas Max', 'mute')), '', (r) => (r.aging === 'DS' && r.stock > 0 ? 'Kandidat dead stock' : r.berlebih ? 'Berlebih' : 'Di atas Max')]], (r) => r.material + ' ' + r.desc],
+      cmp: ['Banding Excel vs TKO', cmp, [['Plant', (r) => esc(r.plant)], ['Material', (r) => `<span class="mono">${esc(r.material)}</span>`], ['Deskripsi', (r) => esc(r.desc)],
+        ['Aging Excel→TKO', (r) => `${esc(r.alt.excel.aging)} → <b>${esc(r.alt.tko.aging)}</b>`, '', (r) => r.alt.excel.aging + '→' + r.alt.tko.aging],
+        ['Min Excel', (r) => fmt(r.alt.excel.min2), 'num', (r) => r.alt.excel.min2], ['Min TKO', (r) => `<b>${fmt(r.alt.tko.min2)}</b>`, 'num', (r) => r.alt.tko.min2],
+        ['Max Excel', (r) => fmt(r.alt.excel.max2), 'num', (r) => r.alt.excel.max2], ['Max TKO', (r) => `<b>${fmt(r.alt.tko.max2)}</b>`, 'num', (r) => r.alt.tko.max2],
+        ['Order Excel', (r) => fmt(r.alt.excel.toOrder), 'num', (r) => r.alt.excel.toOrder], ['Order TKO', (r) => `<b>${fmt(r.alt.tko.toOrder)}</b>`, 'num', (r) => r.alt.tko.toOrder],
+        ['Kelas TKO', (r) => esc(r.alt.tko.cls), '', (r) => r.alt.tko.cls], ['Catatan', (r) => esc(r.alt.tko.note), '', (r) => r.alt.tko.note]], (r) => r.material + ' ' + r.desc],
     };
     if (!TABS[S.rkmTab]) S.rkmTab = 'vs';
     const noRkmFile = !S.rkmFiles.length ? `<div class="card"><b>Belum ada file RKM.</b> <span class="muted">Tab "Perlu order" tetap jalan dari histori. Upload RKM di <a href="#/data">Data SAP</a> untuk tab lainnya.</span></div>` : '';
-    $('view').innerHTML = `${noRkmFile}<div class="card info-line">Mesin MRP: AMU 3 tahun (${esc(S.mrpWB.window.join(' s.d. '))}) · Basis kebutuhan: <b>${esc(BASIS[S.set.basis])}</b> · <a href="#/pengaturan">ubah</a></div>
+    $('view').innerHTML = `${noRkmFile}<div class="card info-line">Metode: <b>${esc(METHOD[S.set.method])}</b> · Data histori s.d. ${esc(S.mrpWB.window[1])} · Basis kebutuhan: <b>${esc(BASIS[S.set.basis])}</b> · <a href="#/pengaturan">ubah</a></div>
       <div class="tabs">${Object.entries(TABS).map(([k, t]) => `<button class="tab ${k === S.rkmTab ? 'on' : ''}" data-t="${k}">${esc(t[0])} <span class="n">${fmt(t[1].length, 0)}</span></button>`).join('')}</div>
       <div class="filters"><input id="q" placeholder="Saring KIMAP / deskripsi / fungsi…"><button class="btn" id="xl">⬇ Unduh Excel</button></div>
       <div id="cnt" class="count"></div><div id="res"></div>${S.rkmTab === 'lli' ? '<p class="muted small">* bulan kebutuhan tidak diisi di RKM, dianggap mulai Januari 2027.</p>' : ''}`;
@@ -308,6 +325,11 @@ const PAGES = {
       <p class="muted">Semua plant di MB52 tetap bisa dicari. Status Min/Max hanya dihitung untuk plant yang dipilih.</p>
       <div class="chips" id="chips">${all.map((p) => `<label class="chip ${S.mrpPlants.has(p) ? 'on' : ''}"><input type="checkbox" value="${esc(p)}" ${S.mrpPlants.has(p) ? 'checked' : ''}>${esc(plantLabel(p))}</label>`).join('')}</div>
       <div class="status-line" id="sum"></div></div>
+      <div class="card"><h3>Metode perhitungan MRP</h3>
+      <div class="radios">${Object.entries(METHOD).map(([k, t]) => `<label class="radio ${S.set.method === k ? 'on' : ''}"><input type="radio" name="method" value="${k}" ${S.set.method === k ? 'checked' : ''}>${esc(t)}</label>`).join('')}</div>
+      ${S.set.method === 'tko' ? `<div class="params">${TKO_FIELDS.map(([k, t, u]) => `<label>${esc(t)}<span><input type="number" step="0.5" min="0" data-k="${k}" value="${S.set.tko[k] != null ? S.set.tko[k] : MRP.TKO_DEFAULT[k]}"> ${u}</span></label>`).join('')}
+        <label>Service level non-critical<span><select data-z="z">${[[1.282, '90%'], [1.645, '95%'], [2.054, '98%'], [2.326, '99%']].map(([z, t]) => `<option value="${z}" ${(S.set.tko.z || MRP.TKO_DEFAULT.z) == z ? 'selected' : ''}>${t}</option>`).join('')}</select></span></label></div>
+        <p class="muted small">Aging: FS = dipakai ≤ 12 bln · MD ≤ 24 bln · SP ≤ 60 bln · DS > 60 bln. Material Project dihitung sebagai program (RKM − stok − PO), tanpa Min/Max. <a href="#" id="tkoReset">Kembalikan default</a></p>` : ''}</div>
       <div class="card"><h3>Basis kebutuhan (input RKM ke mesin MRP)</h3>
       <p class="muted">Rumus Min/Max tetap sama dengan file MRP. Yang diatur di sini hanya angka AMU yang dipakai.</p>
       <div class="radios">${Object.entries(BASIS).map(([k, t]) => `<label class="radio ${S.set.basis === k ? 'on' : ''}"><input type="radio" name="basis" value="${k}" ${S.set.basis === k ? 'checked' : ''}>${esc(t)}</label>`).join('')}</div>
@@ -318,6 +340,10 @@ const PAGES = {
     const saveSet = () => { store.set('settings', S.set); recompute(); };
     $('chips').onchange = (e) => { e.target.parentElement.classList.toggle('on', e.target.checked);
       S.mrpPlants = new Set([...document.querySelectorAll('#chips input:checked')].map((i) => i.value)); store.set('mrpPlants', [...S.mrpPlants]); summary(); };
+    document.querySelectorAll('input[name=method]').forEach((r) => (r.onchange = () => { S.set.method = r.value; saveSet(); PAGES.pengaturan(); }));
+    document.querySelectorAll('.params input[data-k]').forEach((i) => (i.onchange = () => { const v = parseFloat(i.value); if (isFinite(v) && v >= 0) { S.set.tko[i.dataset.k] = v; saveSet(); } }));
+    document.querySelectorAll('.params select[data-z]').forEach((i) => (i.onchange = () => { S.set.tko.z = parseFloat(i.value); saveSet(); }));
+    if ($('tkoReset')) $('tkoReset').onclick = (e) => { e.preventDefault(); S.set.tko = {}; saveSet(); PAGES.pengaturan(); };
     document.querySelectorAll('input[name=basis]').forEach((r) => (r.onchange = () => { S.set.basis = r.value; saveSet(); PAGES.pengaturan(); }));
     $('lli').onchange = () => { const v = Math.max(1, Math.min(36, +$('lli').value || 6)); S.set.lliLT = v; saveSet(); };
     summary();

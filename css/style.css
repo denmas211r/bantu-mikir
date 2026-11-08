@@ -118,3 +118,6 @@ th,td{padding:10px 12px;border-bottom:1px solid var(--line)} tr:hover td{backgro
 .radios{display:grid;gap:8px;margin-top:8px} .radio{display:flex;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:10px;cursor:pointer}
 .radio.on{border-color:var(--brand);background:var(--brand-soft)} .inline{display:inline-flex;gap:8px;align-items:center}
 @media (max-width:860px){.banner{margin:0 16px 12px}}
+.params{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;margin-top:12px}
+.params label{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px;padding:8px 10px;border:1px solid var(--line);border-radius:10px}
+.params input{width:80px;padding:6px 8px} .params select{padding:6px 8px}
