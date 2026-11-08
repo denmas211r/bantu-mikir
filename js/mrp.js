@@ -173,13 +173,16 @@
       const prev = dupUsage.get(k); dupUsage.set(k, prev ? prev.map((v, i) => v + (r.usageAll[i] || 0)) : r.usageAll.slice());
     });
     const out = new Map();
-    for (const r of rows) {
+    for (let r of rows) {
       const key = r.material + '|' + r.plant;
       if (out.has(key)) continue; // baris duplikat → satu hasil (AMU sudah dijumlah)
       const master = lt.get(r.material); const ltRow = r.kimap ? wbData.ltByKimap.get(r.kimap) : null;
       const stock = opt.stockMap && opt.stockMap.has(key) ? opt.stockMap.get(key) : opt.stockMap ? 0 : r.stock;
       const rkm = opt.rkmMap ? opt.rkmMap.get(key) || 0 : 0;
-      const ltv = ltRow ? ltRow.lt : master ? master.lt : null, hc = master ? master.hasContract : '';
+      // Kontrak & OS PO terbaru: kalau file ME3N/ME2N dimuat, pakai itu (lebih baru dari isi file MRP)
+      const kp = opt.contractPick ? opt.contractPick.get(r.material) || (r.kimap && opt.contractPick.get(r.kimap)) : null;
+      const ltv = ltRow ? ltRow.lt : master ? master.lt : null, hc = opt.contractPick ? (kp ? 'Yes' : 'No') : master ? master.hasContract : '';
+      if (opt.ospoMap) r = Object.assign({}, r, { ospo: opt.ospoMap.get(r.material + '|' + r.plant) || 0 });
       const cat = r.cat || (master && master.cat) || '';
       const ex = calc({ usage36: r.usage36, amuSum: sumAvg.get(key), lt: ltv, hasContract: hc, stock, ospo: r.ospo, mb25: r.mb25, rkmYear: rkm }, opt);
       // histori bulanan digabung untuk baris duplikat Material+Plant
@@ -188,7 +191,8 @@
       ex.method = 'excel';
       const res = opt.method === 'excel' ? ex : tk;
       out.set(key, Object.assign({ key, material: r.material, plant: r.plant, kimap: r.kimap, desc: r.desc, uom: r.uom, field: r.field, cat,
-        stock, ospo: r.ospo, mb25: r.mb25, rkm, oa: master ? master.oa : '', pic: master ? master.pic : '', sisaHari: master ? master.sisaHari : null,
+        stock, ospo: r.ospo, mb25: r.mb25, rkm, oa: kp ? kp.doc : opt.contractPick ? '' : master ? master.oa : '', pic: kp ? kp.pic : master ? master.pic : '', sisaHari: kp ? kp.sisaHari : master ? master.sisaHari : null,
+        contract: kp || null,
         hasContract: hc, excel: r.excel, usageAll, alt: { excel: ex, tko: tk } }, res));
     }
     return out;
