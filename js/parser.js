@@ -59,7 +59,10 @@
       if (!plant || !mat) continue;
       map.set(plant + '|' + mat, {
         kimap: str(g(r, 'kimap final')), desc: str(g(r, 'description')), field: str(g(r, 'field')), cat: str(g(r, 'cat')),
-        lt: num(g(r, 'lt')), amu: num(g(r, 'amu')), min: num(g(r, 'min')), max: num(g(r, 'max')),
+        // Min/Max final = kolom Min2/Max2 (hanya diisi untuk Aging FS/MD); Min/Max biasa = hitungan antara
+        lt: num(g(r, 'lt')), amu: Math.abs(num(g(r, 'amu'))), aging: str(g(r, 'aging')),
+        min: num(g(r, 'min2' in c ? 'min2' : 'min')), max: num(g(r, 'max2' in c ? 'max2' : 'max')),
+        ss: num(g(r, 'ss')), stockMRP: num(g(r, 'stock')), mb25: num(g(r, 'mb25')), contract: str(g(r, 'reff contract')).replace(/^#N\/A$/, ''),
         osPO: num(g(r, 'os po/ro')), toOrder: num(g(r, 'to order')),
       });
     }
