@@ -317,3 +317,5 @@ table.abc-m td.risk b { color: var(--bad); } table.abc-m td.on { background: var
 .st.wrap { white-space: normal; }
 .chk { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--ink-2); cursor: pointer; } .chk input { width: 16px; height: 16px; }
 .rk-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; } .rk-bar .muted { font-size: 12.5px; }
+table.opt-z input { width: 130px; text-align: right; } table.opt-z tr.tot th, table.opt-z tr.tot td { border-top: 2px solid var(--line); background: var(--surface-2); }
+.tab[disabled] { opacity: .45; cursor: not-allowed; }

@@ -245,15 +245,21 @@
   const ymLabel = (k) => BLN[+k.slice(5) - 1] + ' ' + k.slice(0, 4);
   // urutan & penjelasan kategori dari tabel Mvt user
   const CAT = [
-    ['PO/RO', 'Terima dari vendor lewat PO/RO'], ['Trf Rec', 'Terima transfer dari plant lain'], ['MTA Rec', 'Terima lewat MTA (KKKS/AP lain)'], ['BAU Rec', 'Terima BAU'],
-    ['Maxter Rec', 'Terima Maxter'], ['Return', 'Retur dari pemakai'], ['Return DS', 'Retur ke stok dead stock'], ['Own Use', 'Pemakaian sendiri (WO, cost center, network)'],
-    ['Trf Iss', 'Kirim transfer ke plant lain'], ['MTA Iss', 'Keluar lewat MTA (KKKS/AP lain)'], ['BAU Iss', 'Keluar BAU'], ['FUPP Iss', 'Keluar FUPP'], ['GI Adj', 'Penyesuaian stok (GI adjustment)'],
-    ['Cancel Rec', 'Batal terima'], ['Cancel BAU Rec', 'Batal terima BAU'], ['Cancel BAU Iss', 'Batal keluar BAU'], ['Not Included', 'Tidak dihitung: blocked stock, dalam perjalanan, atau pembalikan'], ['', 'Belum terklasifikasi (kunci Mvt belum ada di tabel)'],
+    ['PO/RO', 'Terima dari vendor lewat PO/RO'], ['Batal PO/RO', 'Pembatalan terima PO/RO'], ['Retur ke vendor', 'Barang dikembalikan ke vendor'],
+    ['BAU Rec', 'Terima BAU (STO) dari plant lain'], ['Batal BAU Rec', 'Pembatalan terima BAU'], ['MTA Rec', 'Terima lewat MTA dari KKKS lain'], ['Batal MTA Rec', 'Pembatalan terima MTA'],
+    ['Trf Rec', 'Terima transfer antar plant (301)'], ['Batal Trf Rec', 'Pembatalan terima transfer'], ['Maxter Rec', 'Stok khusus/Maxter jadi stok sendiri'], ['Batal Maxter Rec', 'Pembatalan Maxter'],
+    ['Return', 'Material kembali ke gudang dari pemakai'], ['Batal Return', 'Pembatalan retur'], ['Return DS', 'Pindah dari plant DS ke plant aktif'],
+    ['Own Use', 'Pemakaian sendiri (cost center, order, WBS, network)'], ['Batal Own Use', 'Pembatalan pemakaian (pengurang Own Use)'],
+    ['BAU Iss', 'Kirim BAU (STO) ke plant lain'], ['Batal BAU Iss', 'Pembatalan kirim BAU'], ['MTA Iss', 'Keluar ke KKKS lain lewat MTA'], ['Batal MTA Iss', 'Pembatalan MTA'],
+    ['Trf Iss', 'Kirim transfer antar plant (301)'], ['Batal Trf Iss', 'Pembatalan kirim transfer'], ['Konversi Kode', 'Ganti kode material (309), barang tidak keluar gudang'], ['Batal Konversi Kode', 'Pembatalan ganti kode'],
+    ['FUPP Iss', 'Keluar untuk scrap/FUPP'], ['Batal FUPP', 'Pembatalan FUPP'], ['GI Adj', 'Penyesuaian stok'], ['Selisih Opname', 'Selisih stock opname'],
+    ['Not Included', 'Tidak dihitung: blocked stock, dalam perjalanan, sisi lawan, atau pindah SLoc'], ['', 'Belum terklasifikasi (kunci Mvt belum ada di tabel)'],
   ];
   const CAT_I = new Map(CAT.map(([c], i) => [c, i])), CAT_D = new Map(CAT);
   const catName = (c) => c || 'Belum terklasifikasi';
-  const PARTY = { 'MTA Iss': 'MTA (KKKS/AP lain)', 'MTA Rec': 'MTA (KKKS/AP lain)', 'BAU Iss': 'BAU', 'BAU Rec': 'BAU', 'Cancel BAU Iss': 'BAU', 'Cancel BAU Rec': 'BAU', 'Maxter Rec': 'Maxter', 'FUPP Iss': 'FUPP',
-    'Own Use': 'Pemakai (Own Use)', 'Return': 'Pemakai (retur)', 'Return DS': 'Retur DS', 'GI Adj': 'Penyesuaian stok' };
+  const PARTY = { 'MTA Iss': 'MTA (KKKS lain)', 'Batal MTA Iss': 'MTA (KKKS lain)', 'MTA Rec': 'MTA (KKKS lain)', 'Batal MTA Rec': 'MTA (KKKS lain)', 'Maxter Rec': 'Maxter (stok khusus)', 'Batal Maxter Rec': 'Maxter (stok khusus)',
+    'FUPP Iss': 'FUPP/scrap', 'Batal FUPP': 'FUPP/scrap', 'Own Use': 'Pemakai (Own Use)', 'Batal Own Use': 'Pemakai (Own Use)', 'Return': 'Pemakai (retur)', 'Batal Return': 'Pemakai (retur)',
+    'Return DS': 'Plant DS', 'GI Adj': 'Penyesuaian stok', 'Selisih Opname': 'Stock opname', 'Konversi Kode': 'Kode material lain', 'Batal Konversi Kode': 'Kode material lain', 'Retur ke vendor': 'Vendor' };
   const cache = new WeakMap();
   function prep() {
     if (!S.mb51) return null;
@@ -304,7 +310,7 @@
     const G = S.gf;
     const base = D.moves.filter((x) => x.month >= G.from && x.month <= G.to && (!G.wk.size || G.wk.has(x.m.wk)) && (!G.plant.size || G.plant.has(x.m.plant))
       && (!G.cat.size || G.cat.has(x.cat)) && (G.ni || x.cat !== 'Not Included' || G.cat.has('Not Included')));
-    const TABS = [['ringkas', 'Ringkasan per kategori'], ['alur', 'Alur dari → ke'], ['rekap', 'Rekap bulanan'], ['detail', 'Detail gerakan']];
+    const TABS = [['ringkas', 'Ringkasan per kategori'], ['alur', 'Alur dari → ke'], ['rekap', 'Rekap bulanan'], ['detail', 'Detail gerakan'], ['aturan', 'Aturan MvT']];
     $('gTabs').innerHTML = TABS.map(([k, t]) => `<button class="tab ${k === G.tab ? 'on' : ''}" data-t="${k}">${t}</button>`).join('');
     $('gTabs').querySelectorAll('.tab').forEach((b) => (b.onclick = () => { G.tab = b.dataset.t; draw(D); }));
     const body = $('gBody'), note = $('gNote');
@@ -353,6 +359,20 @@
         [{ label: 'Total', num: true, filter: false, get: (o) => o.t, html: (o) => `<b>${show(o.t)}</b>` }]) });
       UI.seg($('gDim'), [['cat', 'Per kategori'], ['plant', 'Per plant'], ['pc', 'Plant × kategori'], ['mat', 'Per material']], G.dim, (v) => { G.dim = v; draw(D); });
       UI.seg($('gMeas'), [['idr', 'Nilai'], ['n', 'Jumlah gerakan']].concat(G.dim === 'mat' ? [['qty', 'Qty']] : []), G.meas === 'qty' && G.dim !== 'mat' ? 'idr' : G.meas, (v) => { G.meas = v; draw(D); });
+    } else if (G.tab === 'aturan') {
+      note.innerHTML = 'Cara web mengklasifikasikan setiap baris MB51. Kunci = Movement Type + tanda qty; khusus penerimaan (101–106) dibedakan menurut 2 digit awal No. PO: 42 = STO (BAU), 94 = MTA, 92 = jenis khusus. Kolom "Optimasi DS" menunjukkan Mvt yang dihitung di laporan optimasi DS. Tabel dikoreksi mengikuti arti Movement Type di SAP; kolom terakhir menjelaskan bedanya dengan tabel lama.';
+      const used = new Map(); D.moves.forEach((x) => used.set(x.m.mkey, (used.get(x.m.mkey) || 0) + 1));
+      UI.table(body, { id: 'gerak-aturan', rows: Master.MVT_TABLE, name: 'Aturan MvT', placeholder: 'Cari Mvt, kategori, atau penjelasan…', match: (r, q) => hit(r.join(' '), expand(q)), cols: [
+        { label: 'Kunci', nowrap: true, get: (r) => r[0], html: (r) => `<b class="mono">${esc(r[0])}</b>` },
+        { label: 'Mvt', get: (r) => r[0].slice(0, 3) },
+        { label: 'Arah', get: (r) => (r[0].endsWith('+') ? 'Masuk (+)' : 'Keluar (−)') },
+        { label: 'Teks SAP', get: (r) => r[2] },
+        { label: 'Kategori', get: (r) => r[1], html: (r) => `<b>${esc(r[1])}</b>` },
+        { label: 'Arti di SAP', wide: true, w: 3, get: (r) => r[3] },
+        { label: 'Optimasi DS', get: (r) => r[4] === 'OWN USE' ? 'Internal Usage' : r[4] === 'BAU' ? 'BAU' : r[4] === 'MTA' ? 'MTA' : r[4] === '309' ? 'Opsional (309)' : 'Tidak dihitung' },
+        { label: 'Baris di data', num: true, filter: false, get: (r) => used.get(r[0]) || 0, html: (r) => fmt(used.get(r[0]) || 0, 0) },
+        { label: 'Koreksi dari tabel lama', wide: true, w: 2.2, get: (r) => r[5], html: (r) => (r[5] ? `<span class="muted">${esc(r[5])}</span>` : '') },
+      ] });
     } else {
       const fl = G.flow && base.filter((x) => x.from + '→' + x.to + '→' + x.cat === G.flow);
       const rows = (fl || base).slice().sort((a, b) => (b.m.date || 0) - (a.m.date || 0));

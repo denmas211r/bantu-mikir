@@ -27,7 +27,7 @@
     for (const r of rows) {
       const mt = s(r[c('Movement Type')]); if (!mt) continue;
       moves.push({ plant: s(r[c('Plant')]), sloc: s(r[c('Storage Location')]), mt, mtText: s(r[c('Movement Type Text')]), po: s(r[c('Purchase Order')]), poItem: stripItem(r[c('Item')]),
-        material: s(r[c('Material')]), desc: s(r[c('Material Description')]), qty: n(r[c('Quantity')]), uom: s(r[c('Unit of Entry')]), amount: n(r[c('Amount in LC')]), cur: s(r[c('Currency')]),
+        material: s(r[c('Material')]), desc: s(r[c('Material Description')]), qty: n(r[c('Quantity')]), uom: s(r[c('Unit of Entry')]) || s(r[c('Base Unit of Measure')]), amount: n(r[c('Amount in LC')]), cur: s(r[c('Currency')]),
         date: toDate(r[c('Posting Date')], XLSX), resv: s(r[c('Reservation')]).replace(/^0$/, ''), header: s(r[c('Document Header Text')]), user: s(r[c('User name')]),
         ref: s(r[c('Reference')]), matDoc: s(r[c('Material Document')]), year: s(r[c('Material Doc. Year')]), time: s(r[c('Time of Entry')]), batch: s(r[c('Batch')]) });
     }
@@ -49,7 +49,7 @@
   function finishMB51(moves) {
     // kategori Mvt (Own Use, PO/RO, Trf, MTA, BAU, Return, …) dari tabel referensi
     const MS = root.Master || (typeof Master !== 'undefined' ? Master : null);
-    if (MS) moves.forEach((m) => { const k = MS.mvtKey(m); m.mkey = k.key; m.cat = k.cat; });
+    if (MS) moves.forEach((m) => { const k = MS.mvtKey(m); m.mkey = k.key; m.cat = k.cat; m.grp = k.grp; });
     // pasangan transfer antar plant: satu Material Document berisi baris minus (plant asal) dan plus (plant tujuan)
     const pair = new Map();
     moves.forEach((m) => { if (!TRF.has(m.mt)) return; const k = m.matDoc + '|' + m.material; const p = pair.get(k) || pair.set(k, { out: new Set(), in: new Set() }).get(k); (m.qty < 0 ? p.out : p.in).add(m.plant); });

@@ -1,6 +1,7 @@
 // ============ MIM Inventory Analyst — App (routing + halaman) ============
 const ICON = {
   home: '<path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/>',
+  recycle: '<path d="M7 19H4l2.5-3.5M17 5h3l-2.5 3.5M4.5 15.5A8 8 0 0 0 18 17M19.5 8.5A8 8 0 0 0 6 7"/>',
   flow: '<path d="M4 8h14M14 4l4 4-4 4M20 16H6M10 12l-4 4 4 4"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
   chart: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
@@ -22,6 +23,7 @@ const MENU = [
   ['Material & stok', [
     ['cari', 'Cari Material', 'search', 'Stok per plant dari MB52 dengan Min/Max dari mesin MRP'],
     ['rkm', 'RKM x MRP', 'chart', 'Perhitungan MRP dengan RKM 2027 sebagai input'],
+    ['optim', 'Optimasi DS & BAU', 'recycle', 'Pemakaian deadstock lewat Internal Usage, BAU, dan MTA, plus laporan BAU per bulan'],
     ['gerak', 'Pergerakan Material', 'flow', 'Klasifikasi MB51 per kategori Mvt: dari mana ke mana, Own Use, transfer, MTA, BAU'],
   ]],
   ['Pengadaan', [
@@ -204,6 +206,7 @@ async function loadSAP(k, file) {
   if (k === 'mb52') { S.plantWK = new Map(); S.mb52.items.forEach((i) => S.plantWK.set(i.plant, i.wk)); }
 }
 const loadMB52 = (f) => loadSAP('mb52', f), loadME3N = (f) => loadSAP('me3n', f), loadME2N = (f) => loadSAP('me2n', f), loadMB51 = (f) => loadSAP('mb51', f), loadMB25 = (f) => loadSAP('mb25', f);
+async function loadDS(file) { S.ds = DS.parseDS(XLSX, await file.arrayBuffer()); S.ver = (S.ver || 0) + 1; srcMark('ds', file); }
 async function loadMRP(file) { S.mrpWB = MRP.parseWorkbook(XLSX, await file.arrayBuffer()); S.mrpName = file.name; srcMark('mrp', file, 'PEP'); }
 function srcMark(k, file, wk = '') { S.src[k] = S.src[k] || {}; const key = k === 'rkm' ? file.name : k === 'mb51' ? wk + '|' + file.name : wk || '-'; if (k === 'rkm') wk = file.name; S.src[k][key] = { name: file.name, at: new Date(), wk }; }
 async function loadRKM(file, name) {
@@ -233,9 +236,10 @@ async function loadFolder(h) {
   const log = [];
   try {
     const c = Folder.classify(await Folder.listExcel(h));
-    S.raw = {}; S.src = {}; S.mb51Files = {}; ['mb52', 'me3n', 'me2n', 'mb51', 'mb25'].forEach((k) => (S[k] = null));
+    S.raw = {}; S.src = {}; S.mb51Files = {}; S.ds = null; ['mb52', 'me3n', 'me2n', 'mb51', 'mb25'].forEach((k) => (S[k] = null));
     for (const k of ['mb52', 'me3n', 'me2n', 'mb51', 'mb25']) for (const f of c[k] || []) { await tick(); await loadSAP(k, f.file); log.push(f.name); }
     if (c.mrp) { await tick(); await loadMRP(c.mrp.file); log.push(c.mrp.name); }
+    if (c.ds) { await tick(); try { await loadDS(c.ds.file); log.push(c.ds.name); } catch (e) { log.push('Gagal: ' + c.ds.name + ' (' + e.message + ')'); } }
     if (c.regulasi) { S.regulasi = { name: c.regulasi.name, text: await c.regulasi.file.text() }; log.push(c.regulasi.name); }
     for (const r of c.rkm) { try { await loadRKM(r.file, r.name); log.push(r.name); } catch (e) { log.push('Gagal: ' + r.name + ' (' + e.message + ')'); } }
     recompute(); route();
@@ -249,7 +253,7 @@ async function loadFolder(h) {
 const expand = (q) => q.toLowerCase().split(/\s+/).filter(Boolean).map((x) => S.data.synonyms.find((s) => s.includes(x)) || [x]);
 const hit = (text, groups) => groups.every((g) => g.some((t) => text.toLowerCase().includes(t)));
 let timer; const debounce = (fn) => { clearTimeout(timer); timer = setTimeout(fn, 200); };
-const SRC_LABEL = { mb52: 'MB52', mrp: 'MRP', me3n: 'ME3N', me2n: 'ME2N', mb51: 'MB51', mb25: 'MB25', rkm: 'RKM' };
+const SRC_LABEL = { ds: 'DS', mb52: 'MB52', mrp: 'MRP', me3n: 'ME3N', me2n: 'ME2N', mb51: 'MB51', mb25: 'MB25', rkm: 'RKM' };
 const srcFiles = (k) => (S.src[k] ? Object.values(S.src[k]) : []);
 const srcLine = (...keys) => { const t = keys.flatMap((k) => srcFiles(k).map((f) => `${SRC_LABEL[k]}${f.wk && k !== 'rkm' ? ' ' + f.wk : ''} ${f.name}`)); return t.length ? `<p class="source">Sumber: ${esc(t.join('; '))}</p>` : ''; };
 const pill = (t, cls) => `<span class="pill ${cls}">${esc(t)}</span>`;
@@ -462,6 +466,8 @@ const PAGES = {
       ['mb51', 'MB51', 'Pergerakan material (GR, GI, transfer)', S.mb51 && `${fmt(S.mb51.moves.length, 0)} gerakan`, S.mb51 && S.mb51.range && `${dstr(S.mb51.range[0])} s.d. ${dstr(S.mb51.range[1])}` + wkSplit('mb51', (p) => p.moves.length)],
       ['mb25', 'MB25', 'Reservasi material', S.mb25 && `${fmt(S.mb25.lines.length, 0)} baris`, S.mb25 && `${fmt(S.mb25.open.size, 0)} material masih direservasi` + wkSplit('mb25', (p) => p.lines.length)],
       ['rkm', 'RKM', 'Rencana kebutuhan material per lapangan', S.rkmFiles.length && `${S.rkmFiles.length} file`, S.rkmFiles.length && `${fmt(S.rkmFiles.reduce((a, f) => a + f.items.length, 0), 0)} baris`],
+      ['ds', 'DS', 'Daftar deadstock akhir tahun (form MA-01, sheet DS PEP/PHE) sebagai dasar optimasi DS. Nama file memuat "Deadstock" atau "DS"', S.ds && `${fmt(S.ds.rows.length, 0)} material×plant`,
+        S.ds && `per ${dstr(S.ds.asOf)}, ${S.ds.sheets.map((x) => `${x.name} ${fmt(x.rows, 0)}`).join(', ')}${S.ds.kurs ? `, kurs IDR ${fmt(S.ds.kurs, 0)}/USD` : ''}`],
     ];
     $('view').innerHTML = `<section class="panel"><div class="panel-h"><h2>Folder data</h2>
         <span class="right">${fs ? `<button class="btn" id="fp1">Pilih folder</button><button class="btn ghost" id="fp2">Lupakan folder</button>` : ''}</span></div>
@@ -481,7 +487,7 @@ const PAGES = {
       $('fp1').onclick = async () => { try { const h = await Folder.pick(); await loadFolder(h); } catch (e) { if (e.name !== 'AbortError') banner('Gagal: ' + esc(e.message), 'bad'); } };
       $('fp2').onclick = async () => { await Folder.forget(); S.folderName = null; banner('Folder dilupakan. Data yang sudah dimuat tetap ada sampai halaman ditutup.', 'warn'); route(); };
     }
-    const LOAD = { mb52: loadMB52, mrp: loadMRP, me3n: loadME3N, me2n: loadME2N, mb51: loadMB51, mb25: loadMB25, rkm: (f) => loadRKM(f) };
+    const LOAD = { mb52: loadMB52, mrp: loadMRP, me3n: loadME3N, me2n: loadME2N, mb51: loadMB51, mb25: loadMB25, rkm: (f) => loadRKM(f), ds: loadDS };
     document.querySelectorAll('.up').forEach((inp) => (inp.onchange = async (e) => {
       const files = [...e.target.files]; if (!files.length) return; $('upMsg').textContent = 'Memproses ' + files.map((f) => f.name).join(', ') + '…'; await tick();
       try { for (const f of files) await LOAD[inp.dataset.k](f); recompute(); route(); } catch (err) { $('upMsg').textContent = 'Gagal membaca file: ' + err.message; $('upMsg').className = 'small neg'; }

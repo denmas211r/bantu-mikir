@@ -40,7 +40,8 @@
     // file SAP: ambil yang terbaru untuk SETIAP client (mis. _100_ = WK PEP, _180_ = WK PHE)
     const perClient = (re) => { const m = new Map(); xl.filter((f) => re.test(base(f))).sort((a, b) => b.file.lastModified - a.file.lastModified)
       .forEach((f) => { const c = (base(f).match(/_(\d{3})_/) || [, ''])[1]; if (!m.has(c)) m.set(c, f); }); return [...m.values()]; };
-    return { mb52: perClient(/mb52/i), mrp: nw(xl, /mrp/i), me3n: perClient(/me3n/i), me2n: perClient(/me2n/i), mb51: xl.filter((f) => /mb51/i.test(base(f))).sort((a, b) => a.file.lastModified - b.file.lastModified), // MB51: semua file (upload berkala), digabung mb25: perClient(/mb25/i),
+    return { mb52: perClient(/mb52/i), mrp: nw(xl, /mrp/i), me3n: perClient(/me3n/i), me2n: perClient(/me2n/i), mb51: xl.filter((f) => /mb51/i.test(base(f))).sort((a, b) => a.file.lastModified - b.file.lastModified), mb25: perClient(/mb25/i), // MB51: semua file (upload berkala) digabung
+      ds: nw(xl.filter((f) => !/mb5[12]|me[23]n|mb25|mrp|rkm/i.test(base(f))), /deadstock|(^|[_\s-])ds([_\s.-]|$)/i),
       rkm: xl.filter((f) => /rkm/i.test(base(f))), regulasi: nw(md, /regulasi|pedoman|otak/i) };
   }
   root.Folder = { supported, pick, loadHandle, forget, permission, listExcel, classify };
