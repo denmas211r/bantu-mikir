@@ -1,6 +1,7 @@
 // ============ MIM Inventory Analyst — App (routing + halaman) ============
 const ICON = {
   home: '<path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/>',
+  flow: '<path d="M4 8h14M14 4l4 4-4 4M20 16H6M10 12l-4 4 4 4"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
   chart: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
   doc: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/>',
@@ -21,6 +22,7 @@ const MENU = [
   ['Material & stok', [
     ['cari', 'Cari Material', 'search', 'Stok per plant dari MB52 dengan Min/Max dari mesin MRP'],
     ['rkm', 'RKM x MRP', 'chart', 'Perhitungan MRP dengan RKM 2027 sebagai input'],
+    ['gerak', 'Pergerakan Material', 'flow', 'Klasifikasi MB51 per kategori Mvt: dari mana ke mana, Own Use, transfer, MTA, BAU'],
   ]],
   ['Pengadaan', [
     ['kontrak', 'Kontrak (OA)', 'doc', 'Masa berlaku, sisa nilai, dan PO/RO berjalan'],
@@ -192,14 +194,18 @@ const MERGE = {
 const PARSE = { mb52: (b) => Parser.parseMB52(XLSX, b), me3n: (b) => Contract.parseME3N(XLSX, b), me2n: (b) => Contract.parseME2N(XLSX, b), mb51: (b) => Trace.parseMB51(XLSX, b), mb25: (b) => Trace.parseMB25(XLSX, b) };
 async function loadSAP(k, file) {
   const wk = wkOfFile(file.name);
-  S.raw[k] = S.raw[k] || {}; S.raw[k][wk] = PARSE[k](await file.arrayBuffer());
+  S.raw[k] = S.raw[k] || {};
+  if (k === 'mb51') { // MB51 boleh banyak file per client (upload berkala): digabung, baris dobel dibuang
+    const F = (S.mb51Files = S.mb51Files || {}); F[wk] = F[wk] || new Map(); F[wk].set(file.name, PARSE.mb51(await file.arrayBuffer()).moves);
+    S.raw.mb51[wk] = Trace.mergeMB51([...F[wk].values()]);
+  } else S.raw[k][wk] = PARSE[k](await file.arrayBuffer());
   S[k] = MERGE[k](byWK(S.raw[k]));
   srcMark(k, file, wk);
   if (k === 'mb52') { S.plantWK = new Map(); S.mb52.items.forEach((i) => S.plantWK.set(i.plant, i.wk)); }
 }
 const loadMB52 = (f) => loadSAP('mb52', f), loadME3N = (f) => loadSAP('me3n', f), loadME2N = (f) => loadSAP('me2n', f), loadMB51 = (f) => loadSAP('mb51', f), loadMB25 = (f) => loadSAP('mb25', f);
 async function loadMRP(file) { S.mrpWB = MRP.parseWorkbook(XLSX, await file.arrayBuffer()); S.mrpName = file.name; srcMark('mrp', file, 'PEP'); }
-function srcMark(k, file, wk = '') { S.src[k] = S.src[k] || {}; if (k === 'rkm') wk = file.name; S.src[k][wk || '-'] = { name: file.name, at: new Date(), wk }; }
+function srcMark(k, file, wk = '') { S.src[k] = S.src[k] || {}; const key = k === 'rkm' ? file.name : k === 'mb51' ? wk + '|' + file.name : wk || '-'; if (k === 'rkm') wk = file.name; S.src[k][key] = { name: file.name, at: new Date(), wk }; }
 async function loadRKM(file, name) {
   const f = RKM.parseFile(XLSX, await file.arrayBuffer(), name || file.name);
   const saved = (store.get('rkmPlant') || {})[f.fileName]; if (saved) f.plant = saved;
@@ -227,7 +233,7 @@ async function loadFolder(h) {
   const log = [];
   try {
     const c = Folder.classify(await Folder.listExcel(h));
-    S.raw = {}; S.src = {}; ['mb52', 'me3n', 'me2n', 'mb51', 'mb25'].forEach((k) => (S[k] = null));
+    S.raw = {}; S.src = {}; S.mb51Files = {}; ['mb52', 'me3n', 'me2n', 'mb51', 'mb25'].forEach((k) => (S[k] = null));
     for (const k of ['mb52', 'me3n', 'me2n', 'mb51', 'mb25']) for (const f of c[k] || []) { await tick(); await loadSAP(k, f.file); log.push(f.name); }
     if (c.mrp) { await tick(); await loadMRP(c.mrp.file); log.push(c.mrp.name); }
     if (c.regulasi) { S.regulasi = { name: c.regulasi.name, text: await c.regulasi.file.text() }; log.push(c.regulasi.name); }

@@ -315,3 +315,5 @@ table.abc-m td.risk b { color: var(--bad); } table.abc-m td.on { background: var
 .abc-grid { grid-template-columns: 1fr; gap: 18px; }
 .abc-ins { display: block; columns: 2 420px; column-gap: 32px; } .abc-ins li { break-inside: avoid; margin-bottom: 10px; }
 .st.wrap { white-space: normal; }
+.chk { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--ink-2); cursor: pointer; } .chk input { width: 16px; height: 16px; }
+.rk-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; } .rk-bar .muted { font-size: 12.5px; }
