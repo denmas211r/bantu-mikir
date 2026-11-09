@@ -29,8 +29,9 @@
   const isChemMG = (material) => { const g = mgOf(material); return !!(g && CHEM_MG.has(g.mg)); };
 
   // ----- Plant WK PHE (dari file referensi) -----
-  const PHE_PLANT = { SO02: ['NSO Point A', 'PHE NSO'], SOAG: ['NSO AG', 'PHE NSO'], JM02: ['Jambi Merang', 'PHE JM'], JM03: ['Jambi Merang 3', 'PHE JM'],
-    OG02: ['Air Serdang', 'PHE OK'], OG03: ['Metur', 'PHE OK'], RT02: ['Pendopo (RT)', 'PHE RT'], RT03: ['Air Itam', 'PHE RT'] };
+  // [nama, area, zona] — PHE NSO & JM masuk Zona 1, PHE OK & RT masuk Zona 4 (konfirmasi user 9 Nov 2026)
+  const PHE_PLANT = { SO02: ['NSO Point A', 'PHE NSO', 'Zona 1'], SOAG: ['NSO AG', 'PHE NSO', 'Zona 1'], JM02: ['Jambi Merang', 'PHE JM', 'Zona 1'], JM03: ['Jambi Merang 3', 'PHE JM', 'Zona 1'],
+    OG02: ['Air Serdang', 'PHE OK', 'Zona 4'], OG03: ['Metur', 'PHE OK', 'Zona 4'], RT02: ['Pendopo (RT)', 'PHE RT', 'Zona 4'], RT03: ['Air Itam', 'PHE RT', 'Zona 4'] };
 
   // ----- Kelompok barang (untuk ringkasan kontrak) -----
   // urutan penting: aturan yang lebih spesifik di atas

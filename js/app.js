@@ -37,10 +37,10 @@ const MENU = [
 const ROUTES = Object.fromEntries(MENU.flatMap(([, items]) => items.map((i) => [i[0], i])));
 const DEFAULT_MRP_PLANTS = ['W101', 'W102', 'W802', 'W803'];
 const DEFAULT_ZONA = Object.assign({ W101: 'Zona 1', W102: 'Zona 1', W802: 'Zona 1', W803: 'Zona 1', W105: 'Zona 4', W106: 'Zona 4', W801: 'Zona 4', W809: 'Zona 4', W811: 'Zona 4' },
-  Object.fromEntries(Object.entries(Master.PHE_PLANT).map(([p, [, a]]) => [p, a])));
-const ZONA_LIST = ['Zona 1', 'Zona 4', 'PHE NSO', 'PHE JM', 'PHE OK', 'PHE RT', 'Lainnya'];
-const zonaOf = (p) => (S.set.zona || {})[p] || DEFAULT_ZONA[p] || 'Lainnya';
-const ZONA_COLOR = { 'Zona 1': 'var(--z1)', 'Zona 4': 'var(--z4)', 'PHE NSO': 'var(--z5)', 'PHE JM': 'var(--z6)', 'PHE OK': 'var(--z7)', 'PHE RT': 'var(--z8)', Lainnya: 'var(--z0)' };
+  Object.fromEntries(Object.entries(Master.PHE_PLANT).map(([p, [, , z]]) => [p, z])));
+const ZONA_LIST = ['Zona 1', 'Zona 4', 'Lainnya'];
+const zonaOf = (p) => { const z = (S.set.zona || {})[p]; return (ZONA_LIST.includes(z) && z) || DEFAULT_ZONA[p] || 'Lainnya'; };
+const ZONA_COLOR = { 'Zona 1': 'var(--z1)', 'Zona 4': 'var(--z4)', Lainnya: 'var(--z0)' };
 const PLANT_NAME = Object.assign({ W101: 'Rantau', W102: 'Pangkalan Susu', W802: 'Jambi', W803: 'Lirik', W105: 'Prabumulih', W106: 'Pendopo', W801: 'Limau', W809: 'Adera', W811: 'Ramba' },
   Object.fromEntries(Object.entries(Master.PHE_PLANT).map(([p, [n]]) => [p, n])));
 const METHOD = { tko: 'Metode TKO / Pedoman (disarankan)', excel: 'Metode Excel lama (untuk validasi)' };
@@ -75,8 +75,9 @@ $('lf').onsubmit = async (e) => {
 };
 $('out').onclick = () => location.reload();
 $('menuBtn').onclick = () => $('sidebar').classList.toggle('open');
-$('collapse').onclick = () => { const c = $('app').classList.toggle('collapsed'); store.set('sideCollapsed', c); };
-if (store.get('sideCollapsed')) $('app').classList.add('collapsed');
+const setSide = (c) => { $('app').classList.toggle('collapsed', c); const t = c ? 'Tampilkan menu' : 'Sembunyikan menu'; $('collapse').title = t; $('collapse').setAttribute('aria-label', t); };
+$('collapse').onclick = () => { const c = !$('app').classList.contains('collapsed'); setSide(c); store.set('sideCollapsed', c); };
+setSide(!!store.get('sideCollapsed'));
 window.addEventListener('hashchange', () => S && route());
 
 function buildNav() {
@@ -340,8 +341,8 @@ const PAGES = {
           ${plainTable(['A', 'B', 'C'], [['Kelas', (k) => `<b>${k}</b>`], ['Batas', (k) => (k === 'A' ? '80% nilai' : k === 'B' ? '80–95%' : '95–100%')], ['Item', (k) => fmt(abc[k].n, 0), 'num'], ['% item', (k) => pct(abc[k].n, pool.length), 'num'], ['Nilai', (k) => cmoney(abc[k].v), 'num'], ['% nilai', (k) => pct(abc[k].v, tot), 'num']])}
         </section>
       </div>
-      <section class="panel"><div class="panel-h"><h2>10 material dengan nilai stok terbesar</h2><span class="sub">${esc(selTxt)}</span><span class="right"><a href="#/cari">Buka Cari Material</a></span></div>
-        ${plainTable(pool.slice(0, 10), [['Material', (i) => `<a class="mono mlink" href="#" data-mat="${esc(i.material)}">${esc(i.material)}</a>`], ['Deskripsi', (i) => esc(i.desc)], ['Warehouse', (i) => esc(plantLabel(i.plant))], ['Stok', (i) => fmt(i.soh) + ' ' + esc(i.uom), 'num'], ['Nilai', (i) => cmoney(idrOf(i)), 'num'], ['Kelas', (i) => i._abc]])}</section>
+      <section class="panel"><div class="panel-h"><h2>Material terbesar</h2><span class="sub">${esc(selTxt)}</span><span class="right"><a href="#/cari">Buka Cari Material</a></span></div>
+        <div class="filters top-f"><span id="tN"></span><span id="tBy"></span><span id="tAgg"></span></div><div id="tTop"></div></section>
       <div class="grid-2">
         <section class="panel"><div class="panel-h"><h2>Expediting</h2><span class="sub">${esc(selTxt)}</span><span class="right"><a href="#/expediting">Buka Expediting</a></span></div>${exHTML}</section>
         <section class="panel"><div class="panel-h"><h2>Material perlu order</h2><span class="sub">${esc(selTxt)}</span><span class="right"><a href="#/order">Buka RO & PR</a></span></div>${toHTML}</section>
@@ -358,6 +359,7 @@ const PAGES = {
       onToggle: (k) => { S.dash.wh.has(k) ? S.dash.wh.delete(k) : S.dash.wh.add(k); route(); },
     }); else $('dBars').innerHTML = '<p class="muted small">Tambahkan MB52 untuk melihat nilai stok.</p>';
     document.querySelectorAll('a[data-q]').forEach((a) => (a.onclick = () => sessionStorage.setItem('lacakQ', a.dataset.q)));
+    drawTop(pool, idrOf, cmoney);
   },
 
   cari() {
@@ -542,6 +544,40 @@ function rkmPHE(res) {
     sehat: ['Penyehatan stok', sehat, base.concat([['Surplus', (r) => fmt(r.surplus), 'num', (r) => r.surplus], ['Cakupan (bln)', (r) => (isFinite(r.cover) ? fmt(r.cover, 1) : '∞'), 'num', (r) => (isFinite(r.cover) ? r.cover : '')]]), (r) => r.material + ' ' + r.desc],
   };
   tabbed('rkmPheTab', TABS, mrpNote() + srcLine('mb52', 'mb51', 'me3n', 'me2n'));
+}
+
+// Beranda: material terbesar, bisa diatur jumlah (Top N atau Top %), ukuran (nilai total, harga per unit, qty), dan per warehouse atau gabung
+function drawTop(pool, idrOf, cmoney) {
+  const T = S.dashTop || (S.dashTop = Object.assign({ n: '10', by: 'value', agg: 'wh' }, store.get('dashTop') || {}));
+  const save = () => { store.set('dashTop', T); drawTop(pool, idrOf, cmoney); };
+  let rows = pool.map((i) => ({ material: i.material, desc: i.desc, uom: i.uom, soh: i.soh || 0, idr: idrOf(i), plants: [i.plant], abc: i._abc }));
+  if (T.agg === 'mat') {
+    const m = new Map(); const rank = { A: 0, B: 1, C: 2 };
+    rows.forEach((r) => { const g = m.get(r.material); if (!g) m.set(r.material, Object.assign({}, r, { plants: [...r.plants] }));
+      else { g.soh += r.soh; g.idr += r.idr; g.plants.push(...r.plants); if (rank[r.abc] < rank[g.abc]) g.abc = r.abc; } });
+    rows = [...m.values()];
+  }
+  rows.forEach((r) => (r.unit = r.soh > 0 ? r.idr / r.soh : 0));
+  const key = { value: (r) => r.idr, unit: (r) => r.unit, qty: (r) => r.soh }[T.by];
+  rows.sort((a, b) => key(b) - key(a));
+  const n = T.n.startsWith('p') ? Math.ceil(rows.length * +T.n.slice(1) / 100) : +T.n;
+  const top = rows.slice(0, n), sum = top.reduce((a, r) => a + r.idr, 0), all = rows.reduce((a, r) => a + r.idr, 0);
+  const sel = (id, label, opts, v, on) => { $(id).innerHTML = `<label class="select"><span>${label}</span><select class="bare">${opts.map(([k, t]) => `<option value="${k}"${k === v ? ' selected' : ''}>${t}</option>`).join('')}</select></label>`; $(id).querySelector('select').onchange = (e) => on(e.target.value); };
+  sel('tN', 'Tampilkan', [['10', 'Top 10'], ['20', 'Top 20'], ['50', 'Top 50'], ['100', 'Top 100'], ['p5', 'Top 5% item'], ['p10', 'Top 10% item'], ['p20', 'Top 20% item']], T.n, (v) => { T.n = v; save(); });
+  sel('tBy', 'Urut menurut', [['value', 'Nilai stok (total)'], ['unit', 'Harga per unit'], ['qty', 'Qty stok']], T.by, (v) => { T.by = v; save(); });
+  UI.seg($('tAgg'), [['wh', 'Per warehouse'], ['mat', 'Gabung per material']], T.agg, (v) => { T.agg = v; save(); });
+  const cols = [
+    { label: 'Material', nowrap: true, get: (r) => r.material, html: (r) => `<a class="mono mlink" href="#" data-mat="${esc(r.material)}">${esc(r.material)}</a>` },
+    { label: 'Deskripsi', wide: true, get: (r) => r.desc },
+    { label: T.agg === 'mat' ? 'Warehouse' : 'Warehouse', get: (r) => (r.plants.length > 1 ? r.plants.length + ' warehouse' : plantLabel(r.plants[0])), title: '' },
+    { label: 'Stok', num: true, filter: false, get: (r) => r.soh, html: (r) => fmt(r.soh) + ' ' + esc(r.uom) },
+    { label: 'Harga per unit', num: true, filter: false, get: (r) => r.unit, html: (r) => cmoney(r.unit) },
+    { label: 'Nilai stok', num: true, filter: false, get: (r) => r.idr, html: (r) => cmoney(r.idr) },
+    { label: 'Porsi', num: true, filter: false, get: (r) => (all ? r.idr / all : 0), html: (r) => (all ? fmt((r.idr / all) * 100, 1) + '%' : '') },
+    { label: 'Kelas', get: (r) => r.abc },
+  ];
+  $('tTop').innerHTML = `<p class="source">${fmt(top.length, 0)} dari ${fmt(rows.length, 0)} ${T.agg === 'mat' ? 'material' : 'baris material×warehouse'}, total ${cmoney(sum)} (${all ? fmt((sum / all) * 100, 1) : 0}% dari nilai stok terpilih).</p><div id="tTopT"></div>`;
+  UI.table($('tTopT'), { id: 'dash-top-' + T.agg, rows: top, cols, name: 'Material terbesar', match: (r, q) => hit(r.material + ' ' + r.desc, expand(q)), placeholder: 'Cari di daftar ini…' });
 }
 
 // ---------- Tab generik (dipakai halaman Kontrak & Order) ----------

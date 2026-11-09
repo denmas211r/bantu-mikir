@@ -285,3 +285,13 @@ table.kel-t tr.clickable { cursor: pointer; } table.kel-t tr.clickable:hover td 
 .dt th.num .th-sort .ico { right: auto; left: 2px; }
 .dt th.num .th { padding-left: 18px; }
 .dt th.num .th { padding-left: 6px; } .dt th.num[aria-sort=ascending] .th, .dt th.num[aria-sort=descending] .th { padding-left: 18px; }
+
+/* ---------- Sidebar diciutkan: tanpa judul grup, ikon rata tengah ---------- */
+.app.collapsed .nav-group { display: block; height: 0; padding: 0; margin: 10px 12px; font-size: 0; border-top: 1px solid rgba(255,255,255,.1); overflow: hidden; }
+.app.collapsed .nav-group:first-child { margin-top: 4px; border-top: 0; }
+.app.collapsed .nav a { width: 40px; margin: 0 auto; }
+.collapse-btn { width: 36px; height: 36px; padding: 0; justify-content: center; margin-left: 4px; }
+.collapse-btn svg { stroke-linecap: round; stroke-linejoin: round; }
+.app.collapsed .collapse-btn { margin: 0 auto; } .app.collapsed .collapse-btn .chev { transform: rotate(180deg); transform-origin: 14.75px 12px; }
+.top-f { margin-bottom: 10px; }
+.app.collapsed .side-foot { justify-items: center; } .app.collapsed .side-user { flex-direction: column; gap: 6px; padding: 4px 0; }
