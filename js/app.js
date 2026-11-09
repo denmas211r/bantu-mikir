@@ -337,16 +337,13 @@ const PAGES = {
         <section class="panel"><div class="panel-h"><h2>Nilai stok per warehouse</h2><span class="sub">Klik batang untuk memilih satu atau beberapa warehouse</span></div><div id="dBars"></div></section>
         <section class="panel"><div class="panel-h"><h2>Per zona</h2></div>
           ${plainTable(zrows, [['Zona', (r) => `<span class="nowrap"><span class="zdot" style="background:${ZONA_COLOR[r.z] || ZONA_COLOR.Lainnya}"></span>${esc(r.z)}</span>`], ['WH', (r) => fmt(r.wh, 0), 'num'], ['Item', (r) => fmt(r.n, 0), 'num'], ['Nilai', (r) => cmoney(r.v), 'num'], ['Porsi', (r) => pct(r.v, ztot), 'num']])}
-          <div class="panel-h" style="margin-top:18px"><h2>Analisis ABC</h2><span class="sub">${esc(selTxt)}</span></div>
-          ${plainTable(['A', 'B', 'C'], [['Kelas', (k) => `<b>${k}</b>`], ['Batas', (k) => (k === 'A' ? '80% nilai' : k === 'B' ? '80–95%' : '95–100%')], ['Item', (k) => fmt(abc[k].n, 0), 'num'], ['% item', (k) => pct(abc[k].n, pool.length), 'num'], ['Nilai', (k) => cmoney(abc[k].v), 'num'], ['% nilai', (k) => pct(abc[k].v, tot), 'num']])}
+          <div class="panel-h" style="margin-top:20px"><h2>Expediting</h2><span class="sub">${esc(selTxt)}</span><span class="right"><a href="#/expediting">Buka Expediting</a></span></div>${exHTML}
         </section>
       </div>
+      <section class="panel" id="abcPanel"></section>
       <section class="panel"><div class="panel-h"><h2>Material terbesar</h2><span class="sub">${esc(selTxt)}</span><span class="right"><a href="#/cari">Buka Cari Material</a></span></div>
         <div class="filters top-f"><span id="tN"></span><span id="tBy"></span><span id="tAgg"></span></div><div id="tTop"></div></section>
-      <div class="grid-2">
-        <section class="panel"><div class="panel-h"><h2>Expediting</h2><span class="sub">${esc(selTxt)}</span><span class="right"><a href="#/expediting">Buka Expediting</a></span></div>${exHTML}</section>
-        <section class="panel"><div class="panel-h"><h2>Material perlu order</h2><span class="sub">${esc(selTxt)}</span><span class="right"><a href="#/order">Buka RO & PR</a></span></div>${toHTML}</section>
-      </div>`;
+      <section class="panel"><div class="panel-h"><h2>Material perlu order</h2><span class="sub">${esc(selTxt)}</span><span class="right"><a href="#/order">Buka RO & PR</a></span></div>${toHTML}</section>`;
     UI.seg($('dCur'), [['IDR', 'IDR'], ['USD', 'USD']], cur, (v) => { S.dash.cur = v; route(); });
     UI.multi($('dWK'), { label: 'WK', options: [...new Set((S.mb52 ? S.mb52.items : []).map((i) => i.wk))].sort().map((w) => ({ value: w, label: 'WK ' + w })), selected: S.dash.wk, onChange: () => { clearTimeout(window._dT); window._dT = setTimeout(route, 500); } });
     UI.multi($('dZona'), { label: 'Zona', options: zonas.map((z) => ({ value: z, label: z })), selected: S.dash.zona, onChange: () => { clearTimeout(window._dT); window._dT = setTimeout(route, 500); } });
@@ -360,6 +357,7 @@ const PAGES = {
     }); else $('dBars').innerHTML = '<p class="muted small">Tambahkan MB52 untuk melihat nilai stok.</p>';
     document.querySelectorAll('a[data-q]').forEach((a) => (a.onclick = () => sessionStorage.setItem('lacakQ', a.dataset.q)));
     drawTop(pool, idrOf, cmoney);
+    drawABC(pool, idrOf, cmoney, selTxt);
   },
 
   cari() {
@@ -578,6 +576,73 @@ function drawTop(pool, idrOf, cmoney) {
   ];
   $('tTop').innerHTML = `<p class="source">${fmt(top.length, 0)} dari ${fmt(rows.length, 0)} ${T.agg === 'mat' ? 'material' : 'baris material×warehouse'}, total ${cmoney(sum)} (${all ? fmt((sum / all) * 100, 1) : 0}% dari nilai stok terpilih).</p><div id="tTopT"></div>`;
   UI.table($('tTopT'), { id: 'dash-top-' + T.agg, rows: top, cols, name: 'Material terbesar', match: (r, q) => hit(r.material + ' ' + r.desc, expand(q)), placeholder: 'Cari di daftar ini…' });
+}
+
+// Beranda: Analisis ABC = kelas nilai × kelas pergerakan (aging), lengkap dengan insight dan tindakan sesuai Pedoman
+function drawABC(pool, idrOf, cmoney, selTxt) {
+  const A = S.abc || (S.abc = Object.assign({ basis: 'stok', cell: '' }, store.get('abcSet') || {}));
+  const save = () => { store.set('abcSet', A); drawABC(pool, idrOf, cmoney, selTxt); };
+  const AG = ['FS', 'MD', 'SP', 'DS', '–'], AGN = { FS: 'Fast', MD: 'Moderate', SP: 'Slow', DS: 'Dead stock', '–': 'Belum dipantau MRP' };
+  const rows = pool.map((i) => {
+    const r = S.mrpRes && S.mrpRes.get(i.material + '|' + i.plant), idr = idrOf(i), unit = i.soh > 0 ? idr / i.soh : 0;
+    const u12 = r && r.usageAll ? r.usageAll.slice(-12).reduce((a, v) => a + Math.abs(v || 0), 0) : 0;
+    return { material: i.material, desc: i.desc, uom: i.uom, plant: i.plant, soh: i.soh, idr, unit, u12, use: u12 * unit, aging: (r && r.aging) || '–', r,
+      cover: r && r.amu > 0 ? i.soh / r.amu : null, surplusV: r && r.berlebih && r.max2 != null ? Math.max(0, i.soh - r.max2) * unit : 0 };
+  });
+  // kelas ABC menurut dasar yang dipilih
+  const val = A.basis === 'pakai' ? (x) => x.use : (x) => x.idr;
+  const tot = rows.reduce((a, x) => a + val(x), 0); let cum = 0, nA = 0;
+  [...rows].sort((a, b) => val(b) - val(a)).forEach((x) => { const v = val(x); if (v <= 0) { x.k = 'C'; return; } cum += v; x.k = cum / tot <= 0.8 || !nA ? 'A' : cum / tot <= 0.95 ? 'B' : 'C'; if (x.k === 'A') nA++; });
+  const sum = (xs) => xs.reduce((a, x) => a + x.idr, 0), allV = sum(rows);
+  const cell = (k, g) => rows.filter((x) => x.k === k && x.aging === g);
+  const pc = (a, b) => (b ? fmt((a / b) * 100, 1) + '%' : '0%');
+  // tindakan per baris
+  const act = (x) => { const r = x.r;
+    if (x.aging === 'DS') return ['bad', 'Tawarkan ke plant/WK lain, lalu usul penghapusan'];
+    if (x.aging === 'SP') return ['bad', 'Cek prospek dan peralatan induk, tawarkan ke yang butuh'];
+    if (r && r.berlebih) return ['warn', 'Stop order, transfer kelebihan ke plant lain'];
+    if (r && r.toOrder > 0) return r.contract ? ['', 'Terbitkan RO lewat OA ' + r.contract.doc] : ['warn', 'Perlu order tanpa kontrak, usulkan OA/COO'];
+    if (x.aging === 'MD') return ['', 'Pantau, konfirmasi kebutuhan ke user'];
+    if (x.aging === '–') return ['', 'Belum dipantau MRP'];
+    return ['ok', 'Aman, pantau Min/Max']; };
+  rows.forEach((x) => (x.act = act(x)));
+  // insight
+  const kA = rows.filter((x) => x.k === 'A'), kC = rows.filter((x) => x.k === 'C');
+  const idleA = kA.filter((x) => ['MD', 'SP', 'DS'].includes(x.aging)), deadAll = rows.filter((x) => x.aging === 'DS' || x.aging === 'SP');
+  const lebih = rows.filter((x) => x.k !== 'C' && x.r && x.r.berlebih), noOA = rows.filter((x) => x.k !== 'C' && x.r && x.r.toOrder > 0 && !x.r.contract);
+  const unmon = rows.filter((x) => x.aging === '–'), deadC = kC.filter((x) => x.aging === 'DS');
+  const ins = [];
+  if (A.basis === 'pakai') ins.push(['', `<b>${fmt(kA.length, 0)} baris kelas A</b> (${pc(kA.length, rows.length)} dari semua baris) menyerap 80% nilai pemakaian 12 bulan, yaitu <b>${cmoney(kA.reduce((a, x) => a + x.use, 0))}</b> per tahun, dengan stok tertahan ${cmoney(sum(kA))}. Ini material yang paling sering dibeli: pastikan semuanya tercover OA dan Min/Max di-review tiap bulan.`]);
+  else ins.push(['', `<b>${fmt(kA.length, 0)} baris kelas A</b> (${pc(kA.length, rows.length)} dari semua baris) menyimpan <b>${cmoney(sum(kA))}</b> (${pc(sum(kA), allV)} nilai stok). Kontrol paling ketat di sini: review Min/Max tiap bulan dan pastikan semua tercover OA.`]);
+  if (idleA.length) ins.push(['bad', `<b>${cmoney(sum(idleA))}</b> stok kelas A (${fmt(idleA.length, 0)} baris) tidak dipakai 12 bulan terakhir. Cek prospek pemakaian dan peralatan induknya, tawarkan ke plant atau WK lain (lewat MTA), dan yang lebih dari 5 tahun diusulkan dead stock.`, 'MD,SP,DS', 'A']);
+  if (deadAll.length) ins.push(['bad', `Slow moving dan dead stock di semua kelas: <b>${cmoney(sum(deadAll))}</b> (${pc(sum(deadAll), allV)} nilai stok, ${fmt(deadAll.length, 0)} baris). Ini target penyehatan persediaan (A7-003 §4.f).`]);
+  if (lebih.length) ins.push(['warn', `<b>${fmt(lebih.length, 0)} baris kelas A/B berlebih</b> (stok lebih dari 12 bulan pemakaian, chemical 5 bulan). Kelebihan di atas Max bernilai <b>${cmoney(lebih.reduce((a, x) => a + x.surplusV, 0))}</b>. Jangan dipesan ulang, transfer ke plant yang butuh.`]);
+  if (noOA.length) ins.push(['warn', `<b>${fmt(noOA.length, 0)} baris kelas A/B perlu order tapi belum ada kontrak</b>. Setiap order jadi PR + OE (±5,5 bulan). Usulkan masuk OA/COO jangka panjang (Kraljic bottleneck).`]);
+  if (unmon.length) ins.push(['', `<b>${cmoney(sum(unmon))}</b> (${pc(sum(unmon), allV)}) ada di plant yang belum dipantau MRP, jadi aging dan tindakannya belum bisa dihitung. Tambahkan plant di <a href="#/pengaturan">Pengaturan</a> kalau perlu.`]);
+  ins.push(['ok', `Kelas C: ${fmt(kC.length, 0)} baris (${pc(kC.length, rows.length)}).${A.basis === 'pakai' ? ` Termasuk semua material tanpa pemakaian 12 bulan, dengan stok tertahan ${cmoney(sum(kC))}.` : ` Hanya ${pc(sum(kC), allV)} nilai stok.`} Cukup review setahun sekali.${deadC.length ? ` ${fmt(deadC.length, 0)} di antaranya dead stock, bisa diusulkan penghapusan sekaligus.` : ''}`]);
+  // cell terpilih (default: A × tidak bergerak paling bernilai)
+  if (!A.cell || !A.cell.includes('|')) { const c = ['A|DS', 'A|SP', 'A|MD', 'B|DS', 'B|SP', 'A|FS'].find((c) => cell(...c.split('|')).length); A.cell = c || 'A|FS'; }
+  const [ck, cg] = A.cell.split('|'), list = cell(ck, cg).sort((a, b) => b.idr - a.idr);
+  const risk = (k, g) => k !== 'C' && (g === 'SP' || g === 'DS');
+  $('abcPanel').innerHTML = `<div class="panel-h"><h2>Analisis ABC</h2><span class="sub">${esc(selTxt)}. A = 80% nilai teratas, B = 15% berikutnya, C = sisanya.</span><span class="right" id="abcBasis"></span></div>
+    <div class="abc-grid"><div><h4 class="sub-h">Kelas nilai × pergerakan <small class="muted">klik sel untuk melihat daftarnya</small></h4><div class="plain-wrap"><table class="plain abc-m"><tr><th>Kelas</th>${AG.map((g) => `<th class="num" title="${AGN[g]}">${g === '–' ? 'Tanpa MRP' : g}</th>`).join('')}<th class="num">Total</th></tr>
+      ${['A', 'B', 'C'].map((k) => `<tr><th>${k}</th>${AG.map((g) => { const xs = cell(k, g); return `<td class="num${xs.length ? ' pick' : ''}${A.cell === k + '|' + g ? ' on' : ''}${risk(k, g) && xs.length ? ' risk' : ''}" data-c="${k}|${g}">${xs.length ? `<b>${cmoney(sum(xs))}</b><small>${fmt(xs.length, 0)} baris</small>` : '<span class="muted">–</span>'}</td>`; }).join('')}
+        <td class="num"><b>${cmoney(sum(rows.filter((x) => x.k === k)))}</b><small>${fmt(rows.filter((x) => x.k === k).length, 0)} baris</small></td></tr>`).join('')}</table></div>
+      <p class="muted small" style="margin-top:6px">FS dipakai ≤ 12 bulan, MD ≤ 24 bulan, SP ≤ 60 bulan, DS lebih dari 60 bulan tidak dipakai (B7-004). Angka di sel = nilai stok. Sel merah = nilai besar yang tidak bergerak.${A.basis === 'pakai' ? ' Dengan dasar pemakaian, material yang tidak dipakai 12 bulan otomatis masuk kelas C.' : ''}</p></div>
+      <div><h4 class="sub-h">Insight dan tindakan</h4><ul class="reco abc-ins">${ins.map(([c, t]) => `<li class="${c}"><span>${t}</span></li>`).join('')}</ul></div></div>
+    <h4 class="sub-h">Kelas ${esc(ck)}, ${esc(AGN[cg])}: ${fmt(list.length, 0)} baris, ${cmoney(sum(list))}</h4><div id="abcList"></div>`;
+  UI.seg($('abcBasis'), [['stok', 'Dasar: nilai stok'], ['pakai', 'Dasar: nilai pemakaian 12 bln']], A.basis, (v) => { A.basis = v; A.cell = ''; save(); });
+  $('abcPanel').querySelectorAll('td.pick').forEach((td) => (td.onclick = () => { A.cell = td.dataset.c; save(); }));
+  UI.table($('abcList'), { id: 'dash-abc', rows: list, name: `ABC ${ck} ${cg}`, match: (x, q) => hit(x.material + ' ' + x.desc, expand(q)), placeholder: 'Cari di daftar ini…', cols: [
+    { label: 'Material', nowrap: true, get: (x) => x.material, html: (x) => `<a class="mono mlink" href="#" data-mat="${esc(x.material)}">${esc(x.material)}</a>` },
+    { label: 'Deskripsi', wide: true, get: (x) => x.desc },
+    { label: 'Warehouse', get: (x) => plantLabel(x.plant) },
+    { label: 'Stok', num: true, filter: false, get: (x) => x.soh, html: (x) => fmt(x.soh) + ' ' + esc(x.uom) },
+    { label: 'Nilai stok', num: true, filter: false, get: (x) => x.idr, html: (x) => cmoney(x.idr) },
+    { label: 'Pakai', sub: '12 bulan', num: true, filter: false, get: (x) => (x.r ? x.u12 : null), html: (x) => (x.r ? fmt(x.u12) : '') },
+    { label: 'Cakupan', sub: 'bulan', num: true, filter: false, get: (x) => x.cover, html: (x) => (x.cover == null ? (x.r ? '∞' : '') : fmt(x.cover, 1)) },
+    { label: 'Tindakan', wide: true, get: (x) => x.act[1], html: (x) => `<span class="st wrap ${x.act[0] === 'bad' ? 'low' : x.act[0] === 'warn' ? 'warn' : x.act[0] === 'ok' ? 'ok' : 'mute'}">${esc(x.act[1])}</span>` },
+  ] });
 }
 
 // ---------- Tab generik (dipakai halaman Kontrak & Order) ----------

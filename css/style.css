@@ -295,3 +295,23 @@ table.kel-t tr.clickable { cursor: pointer; } table.kel-t tr.clickable:hover td 
 .app.collapsed .collapse-btn { margin: 0 auto; } .app.collapsed .collapse-btn .chev { transform: rotate(180deg); transform-origin: 14.75px 12px; }
 .top-f { margin-bottom: 10px; }
 .app.collapsed .side-foot { justify-items: center; } .app.collapsed .side-user { flex-direction: column; gap: 6px; padding: 4px 0; }
+
+/* ---------- Analisis ABC ---------- */
+.abc-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 24px; margin-bottom: 8px; }
+@media (max-width: 1180px) { .abc-grid { grid-template-columns: 1fr; } }
+table.abc-m td, table.abc-m th { padding: 8px 10px; } table.abc-m td small { display: block; color: var(--muted); font-size: 12px; font-weight: 400; }
+table.abc-m td.pick { cursor: pointer; } table.abc-m td.pick:hover { background: #f4f7fb; }
+table.abc-m td.risk b { color: var(--bad); } table.abc-m td.on { background: var(--brand-soft); box-shadow: inset 0 0 0 2px var(--brand); }
+.sub-h small { font-weight: 400; font-size: 12px; }
+
+/* ---------- Sidebar: scrollbar tipis, mode ciut bersih ---------- */
+.nav { scrollbar-width: none; } .nav::-webkit-scrollbar { display: none; }
+.app.collapsed .nav-group { margin: 0; height: 12px; border: 0; }
+.app.collapsed .nav-group:first-child { height: 4px; }
+.app.collapsed .nav a { width: 40px; height: 40px; margin: 0 auto 2px; }
+.side-btn:focus { outline: none; } .side-btn:focus-visible { outline: 2px solid #8fb6ea; outline-offset: 1px; }
+.app.collapsed .sidebar { padding-left: 0; padding-right: 0; } .app.collapsed .brand { margin: 0 10px; }
+.app.collapsed .side-foot { margin: 0 10px; }
+.abc-grid { grid-template-columns: 1fr; gap: 18px; }
+.abc-ins { display: block; columns: 2 420px; column-gap: 32px; } .abc-ins li { break-inside: avoid; margin-bottom: 10px; }
+.st.wrap { white-space: normal; }
