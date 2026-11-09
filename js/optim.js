@@ -22,6 +22,7 @@
     const gr = new Map(); moves.forEach((m) => { if (m.mkey === '10142+' && m.po) (gr.get(m.po) || gr.set(m.po, []).get(m.po)).push(m); });
     cache = { key, res: { ds, moves, gr } }; return cache.res;
   }
+  window.optimCompute = compute;
   const saveOpt = () => { const o = O(); store.set('optSet', { include309: o.include309, bauSameZona: o.bauSameZona }); };
 
   PAGES.optim = function () {
@@ -128,8 +129,8 @@
     const grOf = (m) => { const a = m.po && R.gr.get(m.po); if (!a) return null; const b = a.filter((x) => !m._bau || !m._bau.dest || x.plant === m._bau.dest); return (b.length ? b : a).sort((x, y) => x.date - y.date)[0]; };
     const nUnknown = all.filter((m) => m._bau && !m._bau.dest).length;
     el.innerHTML = `<div class="filters"><span id="oKind"></span><span id="oValid"></span><span id="oMon"></span></div>
-      <p class="tab-note">${grp === 'BAU' ? 'BAU = kirim STO (351, PO berawalan 42) ke plant lain, dikurangi pembatalannya (352). Tujuan dibaca dari baris pasangan 351+ di Material Document yang sama, lalu dari kata kunci di header text, lalu isian manual. BAU sah kalau zona asal ≠ zona tujuan (aturan workbook DS).' : 'MTA = keluar ke KKKS lain (963) dikurangi pembatalannya (964). Selalu sah.'}
-      ${nUnknown ? ` <b class="neg">${fmt(nUnknown, 0)} baris belum diketahui tujuannya</b>, isi di kolom Ke (pilih "Belum sah" untuk melihatnya).` : ''} Nilai USD dari MB51 (IDR ÷ kurs ${fmt(kursDS(), 0)}); "Klaim DS" = bagian yang memakai kuota DS.</p>
+      ${nUnknown ? `<p class="tab-note"><b class="neg">${fmt(nUnknown, 0)} baris belum diketahui tujuannya.</b> Pilih "Belum sah / tujuan kosong", lalu isi kolom Ke.</p>` : ''}
+      <p class="tab-note">${grp === 'BAU' ? 'BAU = kirim barang ke plant lain lewat STO (Mvt 351), dikurangi pembatalannya (352). BAU sah kalau zona asal berbeda dengan zona tujuan (aturan workbook DS). Tujuan dibaca dari baris pasangan 351+ di Material Document yang sama, lalu dari kata kunci di header text, lalu isian manual.' : 'MTA = barang keluar ke KKKS lain (Mvt 963), dikurangi pembatalannya (964). Selalu sah.'} Nilai USD dari MB51 (IDR ÷ kurs ${fmt(kursDS(), 0)}). "Klaim DS" = bagian yang memakai kuota deadstock.</p>
       <h4 class="sub-h">Rekap per bulan</h4><div id="oSum"></div><h4 class="sub-h">Detail per material</h4><div id="oDet"></div>`;
     UI.seg($('oKind'), [['BAU', 'BAU'], ['MTA', 'MTA']], grp, (v) => { o.kind = v; o.months.clear(); route(); });
     UI.seg($('oValid'), [['sah', 'Sah'], ['belum', 'Belum sah / tujuan kosong'], ['semua', 'Semua']], o.valid, (v) => { o.valid = v; route(); });

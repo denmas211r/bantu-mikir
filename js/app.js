@@ -18,23 +18,26 @@ const ICON = {
 const svg = (k) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICON[k]}</svg>`;
 
 // Menu: [grup, [route, label, icon, sub-judul, tahap belum jadi?]]
+// Menu mengikuti alur kerja Analyst dari awal sampai akhir: cek stok → hitung kebutuhan → pesan → pantau → laporkan.
 const MENU = [
-  ['Utama', [['beranda', 'Beranda', 'home', 'Posisi stok, pengadaan, dan pengiriman']]],
-  ['Material & stok', [
-    ['cari', 'Cari Material', 'search', 'Stok per plant dari MB52 dengan Min/Max dari mesin MRP'],
-    ['rkm', 'RKM x MRP', 'chart', 'Perhitungan MRP dengan RKM 2027 sebagai input'],
-    ['optim', 'Optimasi DS & BAU', 'recycle', 'Pemakaian deadstock lewat Internal Usage, BAU, dan MTA, plus laporan BAU per bulan'],
-    ['gerak', 'Pergerakan Material', 'flow', 'Klasifikasi MB51 per kategori Mvt: dari mana ke mana, Own Use, transfer, MTA, BAU'],
+  ['Ringkasan', [['beranda', 'Beranda', 'home', 'Gambaran cepat dari stok sampai laporan']]],
+  ['1. Stok', [
+    ['cari', 'Cari Material', 'search', 'Cek stok sebuah material di semua gudang, lengkap dengan analisisnya'],
+    ['gerak', 'Keluar-Masuk Barang', 'flow', 'Barang apa yang masuk dan keluar gudang, dari mana dan ke mana'],
   ]],
-  ['Pengadaan', [
-    ['kontrak', 'Kontrak (OA)', 'doc', 'Masa berlaku, sisa nilai, dan PO/RO berjalan'],
-    ['order', 'RO & PR', 'cart', 'Draft RO, draft PR + OE, kandidat kontrak, kontak vendor'],
-    ['expediting', 'Expediting', 'truck', 'Progres PO/RO sampai diterima gudang, dan reservasi yang belum diambil'],
-    ['lacak', 'Lacak Material', 'route', 'Jejak PR, PO/RO, GR, stok, reservasi, dan GI'],
+  ['2. Rencana', [
+    ['rkm', 'Kebutuhan & MRP', 'chart', 'Hitung stok minimum dan maksimum, dan kapan harus pesan'],
+    ['order', 'Perlu Dipesan', 'cart', 'Barang yang harus dipesan: lewat kontrak (RO) atau permintaan pembelian baru (PR)'],
   ]],
-  ['Panduan', [['regulasi', 'Regulasi & Logika', 'book', 'Aturan Pedoman/TKO dan logika perhitungan web ini']]],
-  ['Data', [
-    ['data', 'Data SAP', 'db', 'Sumber data yang dipakai web ini'],
+  ['3. Pengadaan', [
+    ['kontrak', 'Kontrak', 'doc', 'Kontrak vendor yang masih berlaku, sisa nilainya, dan kapan habis'],
+    ['expediting', 'Pantau Pesanan', 'truck', 'Pesanan yang belum datang, terlambat, atau belum diambil user'],
+    ['lacak', 'Lacak Material', 'route', 'Jejak satu material atau dokumen dari permintaan sampai dipakai'],
+  ]],
+  ['4. Laporan', [['optim', 'Deadstock & BAU', 'recycle', 'Berapa deadstock yang sudah terpakai atau dipindah, dan laporan BAU per bulan']]],
+  ['Bantuan', [
+    ['regulasi', 'Panduan & Aturan', 'book', 'Aturan Pedoman/TKO dan cara web ini menghitung'],
+    ['data', 'Data SAP', 'db', 'File SAP yang dibaca web ini'],
     ['pengaturan', 'Pengaturan', 'gear', 'Plant, zona, kurs, dan parameter MRP'],
   ]],
 ];
@@ -318,12 +321,14 @@ const PAGES = {
     const zrows = zonas.map((z) => { const w = allWH.filter((p) => zonaOf(p) === z); return { z, wh: w.length, n: w.reduce((a, p) => a + perWH.get(p).n, 0), v: w.reduce((a, p) => a + perWH.get(p).value, 0) }; });
     const ztot = zrows.reduce((a, r) => a + r.v, 0);
 
+    const flow = {};
     // Expediting
     let exHTML = '<p class="muted small">Tambahkan ME2N untuk melihat progres PO/RO.</p>';
     if (S.me2n) {
       const ex = Trace.expediting(S.me2n, S.mb51, today, { plants: selWH, stockOnly: store.get('expStockOnly') ?? true }).filter((e) => e.open > 0);
       const c = (st) => ex.filter((e) => e.status === st).length;
       const late = ex.filter((e) => e.status === 'Terlambat').sort((a, b) => b.lateDays - a.lateDays).slice(0, 5);
+      flow.po = ex.length; flow.late = c('Terlambat');
       exHTML = `<div class="kv"><div><span>PO/RO aktif</span><b>${fmt(ex.length, 0)}</b></div><div><span>Dikirim</span><b>${fmt(c('Dalam pengiriman') + c('Diterima sebagian'), 0)}</b></div>
         <div><span>Terlambat</span><b class="${late.length ? 'neg' : ''}">${fmt(c('Terlambat'), 0)}</b></div><div><span>Sisa kirim</span><b>${cmoney(ex.reduce((a, e) => a + toIDR(e.openValue, e.currency), 0))}</b></div></div>
         <h4 class="sub-h">Paling lama terlambat</h4>${plainTable(late, [['PO/RO', (e) => `<a class="mono" href="#/lacak" data-q="${esc(e.doc)}">${esc(e.doc)}</a>`], ['Deskripsi', (e) => esc(e.desc)], ['Lapangan', (e) => esc(PLANT_NAME[e.plant] || e.plant)], ['Hari', (e) => fmt(e.lateDays, 0), 'num']])}`;
@@ -335,6 +340,7 @@ const PAGES = {
       const ord = [...S.mrpRes.values()].filter((r) => S.mrpPlants.has(r.plant) && (!S.mb52 || inSel(r.plant)) && r.toOrder > 0)
         .map((r) => ({ r, v: r.contract ? r.toOrder * toIDR(r.contract.price, r.contract.currency) : r.toOrder * (mbPrice.get(r.key) || 0) })).sort((a, b) => b.v - a.v);
       const ro = ord.filter((o) => o.r.contract), pr = ord.filter((o) => !o.r.contract);
+      flow.ord = ord.length; flow.ro = ro.length; flow.pr = pr.length;
       toHTML = `<div class="kv"><div><span>Perlu order</span><b>${fmt(ord.length, 0)}</b></div><div><span>Lewat RO</span><b>${fmt(ro.length, 0)}</b></div>
         <div><span>Lewat PR + OE</span><b>${fmt(pr.length, 0)}</b></div><div><span>Estimasi nilai</span><b>${cmoney(ord.reduce((a, o) => a + o.v, 0))}</b></div></div>
         <h4 class="sub-h">Nilai terbesar</h4>${plainTable(ord.slice(0, 5), [['Material', (o) => `<a class="mono mlink" href="#" data-mat="${esc(o.r.material)}">${esc(o.r.material)}</a>`], ['Deskripsi', (o) => esc(o.r.desc)], ['Plant', (o) => esc(o.r.plant)], ['Qty', (o) => fmt(o.r.toOrder), 'num'], ['Estimasi', (o) => (o.v ? cmoney(o.v) : '-'), 'num']])}`;
@@ -343,17 +349,18 @@ const PAGES = {
     $('view').innerHTML = `<div class="filters dash-f"><span id="dCur"></span><span id="dWK"></span><span id="dZona"></span><span id="dWH"></span>
         ${S.dash.wh.size || S.dash.zona.size || S.dash.wk.size ? '<button class="btn ghost" id="dReset">Hapus pilihan</button>' : ''}
         <span class="source dash-src">Nilai dikonversi ke ${cur} dengan kurs IDR ${fmt(kurs, 0)}/USD</span></div>
+      ${flowStrip(flow, cmoney(items.filter((i) => inSel(i.plant)).reduce((a, i) => a + idrOf(i), 0)), new Set(items.filter((i) => inSel(i.plant) && i.soh > 0).map((i) => i.material)).size)}
       <div class="grid-3">
         <section class="panel"><div class="panel-h"><h2>Nilai stok per warehouse</h2><span class="sub">Klik batang untuk memilih satu atau beberapa warehouse</span></div><div id="dBars"></div></section>
         <section class="panel"><div class="panel-h"><h2>Per zona</h2></div>
           ${plainTable(zrows, [['Zona', (r) => `<span class="nowrap"><span class="zdot" style="background:${ZONA_COLOR[r.z] || ZONA_COLOR.Lainnya}"></span>${esc(r.z)}</span>`], ['WH', (r) => fmt(r.wh, 0), 'num'], ['Item', (r) => fmt(r.n, 0), 'num'], ['Nilai', (r) => cmoney(r.v), 'num'], ['Porsi', (r) => pct(r.v, ztot), 'num']])}
-          <div class="panel-h" style="margin-top:20px"><h2>Expediting</h2><span class="sub">${esc(selTxt)}</span><span class="right"><a href="#/expediting">Buka Expediting</a></span></div>${exHTML}
+          <div class="panel-h" style="margin-top:20px"><h2>Pantau pesanan</h2><span class="sub">${esc(selTxt)}</span><span class="right"><a href="#/expediting">Buka Pantau Pesanan</a></span></div>${exHTML}
         </section>
       </div>
-      <section class="panel" id="abcPanel"></section>
-      <section class="panel"><div class="panel-h"><h2>Material terbesar</h2><span class="sub">${esc(selTxt)}</span><span class="right"><a href="#/cari">Buka Cari Material</a></span></div>
+      <section class="panel" id="abcPanel" data-fold="abc"></section>
+      <section class="panel" data-fold="top"><div class="panel-h"><h2>Material terbesar</h2><span class="sub">${esc(selTxt)}</span><span class="right"><a href="#/cari">Buka Cari Material</a></span></div>
         <div class="filters top-f"><span id="tN"></span><span id="tBy"></span><span id="tAgg"></span></div><div id="tTop"></div></section>
-      <section class="panel"><div class="panel-h"><h2>Material perlu order</h2><span class="sub">${esc(selTxt)}</span><span class="right"><a href="#/order">Buka RO & PR</a></span></div>${toHTML}</section>`;
+      <section class="panel"><div class="panel-h"><h2>Material perlu order</h2><span class="sub">${esc(selTxt)}</span><span class="right"><a href="#/order">Buka Perlu Dipesan</a></span></div>${toHTML}</section>`;
     UI.seg($('dCur'), [['IDR', 'IDR'], ['USD', 'USD']], cur, (v) => { S.dash.cur = v; route(); });
     UI.multi($('dWK'), { label: 'WK', options: [...new Set((S.mb52 ? S.mb52.items : []).map((i) => i.wk))].sort().map((w) => ({ value: w, label: 'WK ' + w })), selected: S.dash.wk, onChange: () => { clearTimeout(window._dT); window._dT = setTimeout(route, 500); } });
     UI.multi($('dZona'), { label: 'Zona', options: zonas.map((z) => ({ value: z, label: z })), selected: S.dash.zona, onChange: () => { clearTimeout(window._dT); window._dT = setTimeout(route, 500); } });
@@ -513,7 +520,7 @@ const PAGES = {
           <label>Rumus Max untuk maintenance<span><select data-s="maxFormula">${[['A', 'A: 2 × AMU × T + SS'], ['B', 'B: AMU × T + 2 × SS'], ['C', 'C: ROP + n × AMU'], ['BC', 'B untuk kontrak, C tanpa kontrak']].map(([v, t]) => `<option value="${v}" ${P('maxFormula') === v ? 'selected' : ''}>${t}</option>`).join('')}</select></span></label>
           <label>Moderate (MD) dihitung sebagai FS<span><select data-s="mdAsFS"><option value="1" ${P('mdAsFS') ? 'selected' : ''}>Ya, perlu konfirmasi user</option><option value="0" ${P('mdAsFS') ? '' : 'selected'}>Tidak, Min = Max = SS</option></select></span></label>
           <label>Service level non-critical<span><select data-z="z">${[[1.282, '90%'], [1.645, '95%'], [2.054, '98%'], [2.326, '99%']].map(([z, t]) => `<option value="${z}" ${P('z') == z ? 'selected' : ''}>${t}</option>`).join('')}</select></span></label></div>
-          <p class="muted small" style="margin-top:8px">Penjelasan rumus ada di <a href="#/regulasi">Regulasi & Logika</a>. <a href="#" id="tkoReset">Kembalikan default</a></p>` : ''}</section>
+          <p class="muted small" style="margin-top:8px">Penjelasan rumus ada di <a href="#/regulasi">Panduan & Aturan</a>. <a href="#" id="tkoReset">Kembalikan default</a></p>` : ''}</section>
       <section class="panel"><div class="panel-h"><h2>MRP WK PHE</h2><span class="sub">Sementara, sampai file MRP PHE dibuat</span></div>
         <div class="params"><label>Lead time default bila material tidak ada di master MRP PEP<span><input type="number" id="pheLT" min="0.5" max="36" step="0.5" value="${S.set.pheLT || 3}"></span></label></div>
         <p class="muted small" style="margin-top:8px">Pemakaian diambil dari MB51 client 180: Mvt kategori Own Use dan Return, tanpa GI ke network/proyek (221, 222, 949, 950). Aturan ini sama dengan file MRP PEP (dicek Oktober 2026, cocok 363 dari 364 material×plant).</p></section>
@@ -555,6 +562,66 @@ function rkmPHE(res) {
   };
   tabbed('rkmPheTab', TABS, mrpNote() + srcLine('mb52', 'mb51', 'me3n', 'me2n'));
 }
+
+// Beranda: alur kerja end-to-end, satu angka kunci per langkah
+function flowStrip(f, stokTxt, nMat) {
+  const k = S.me3n ? [...S.me3n.docs.values()].filter((d) => d.sisaHari == null || d.sisaHari >= 0) : null;
+  const soon = k ? k.filter((d) => d.sisaHari != null && d.sisaHari <= 90).length : 0;
+  let dsTxt = null; try { const R = window.optimCompute && S.ds && S.mb51 ? window.optimCompute() : null;
+    if (R && R.ds) { const tot = R.ds.rows.reduce((a, r) => a + r.total, 0), used = R.ds.rows.reduce((a, r) => a + r.usedUsd, 0); dsTxt = [fmt(tot ? (used / tot) * 100 : 0, 1) + '%', `${money(used, 'USD')} dari ${money(tot, 'USD')} deadstock sudah terpakai`]; } } catch (e) { /* abaikan */ }
+  const step = (n, href, title, what, big, small) => `<a class="flow-step" href="${href}"><span class="fs-n">${n}</span><span class="fs-t">${title}</span><span class="fs-w">${what}</span>
+    <b class="fs-v">${big == null ? '–' : big}</b><span class="fs-s">${small || ''}</span></a>`;
+  return `<section class="flow"><h2 class="flow-h">Alur kerja</h2><div class="flow-row">
+    ${step(1, '#/cari', 'Cek stok', 'Berapa barang yang ada di gudang', S.mb52 ? stokTxt : null, S.mb52 ? `${fmt(nMat, 0)} material berstok` : 'Butuh MB52')}
+    ${step(2, '#/order', 'Hitung kebutuhan', 'Barang yang stoknya di bawah minimum', f.ord != null ? fmt(f.ord, 0) : null, f.ord != null ? `${fmt(f.ro, 0)} lewat kontrak (RO), ${fmt(f.pr, 0)} perlu PR baru` : 'Butuh file MRP')}
+    ${step(3, '#/kontrak', 'Pesan lewat kontrak', 'Kontrak vendor yang masih berlaku', k ? fmt(k.length, 0) : null, k ? (soon ? `${fmt(soon, 0)} habis dalam 90 hari` : 'Tidak ada yang segera habis') : 'Butuh ME3N')}
+    ${step(4, '#/expediting', 'Pantau pesanan', 'PO/RO yang belum diterima penuh', f.po != null ? fmt(f.po, 0) : null, f.po != null ? (f.late ? `<span class="neg">${fmt(f.late, 0)} terlambat</span>` : 'Tidak ada yang terlambat') : 'Butuh ME2N')}
+    ${step(5, '#/optim', 'Laporkan', 'Deadstock yang sudah terpakai tahun ini', dsTxt ? dsTxt[0] : null, dsTxt ? dsTxt[1] : 'Butuh MB51 + file DS')}
+  </div></section>`;
+}
+
+// Kamus istilah untuk pembaca awam (tombol "Istilah" di kanan atas)
+const GLOSSARY = [
+  ['Data SAP', [['MB52', 'Daftar stok per gudang saat ini.'], ['MB51', 'Riwayat barang masuk dan keluar gudang.'], ['MB25', 'Reservasi: permintaan barang dari user yang belum diambil.'],
+    ['ME2N', 'Daftar PO dan RO (pesanan ke vendor).'], ['ME3N', 'Daftar kontrak vendor (OA).'], ['MRP', 'Perhitungan otomatis kapan dan berapa barang harus dipesan.']]],
+  ['Pengadaan', [['OA', 'Outline Agreement: kontrak payung dengan vendor, berisi daftar barang dan harga untuk beberapa tahun.'], ['RO', 'Release Order: pesanan barang yang diambil dari kontrak (OA). Cepat, karena harga sudah disepakati.'],
+    ['PR', 'Purchase Requisition: permintaan pembelian baru kalau barang belum ada kontraknya. Prosesnya lama (±5–6 bulan).'], ['OE / HPS', 'Owner Estimate: perkiraan harga sebelum tender.'],
+    ['PO', 'Purchase Order: pesanan resmi ke vendor.'], ['GR', 'Goods Receipt: barang sudah diterima gudang.'], ['GI', 'Goods Issue: barang dikeluarkan dari gudang untuk dipakai.'], ['Expediting', 'Memantau dan menagih pesanan supaya datang tepat waktu.']]],
+  ['Perencanaan stok', [['Min / ROP', 'Batas bawah stok. Kalau stok + pesanan berjalan di bawah ini, saatnya pesan.'], ['Max', 'Batas atas stok. Pesan secukupnya sampai angka ini.'],
+    ['AMU', 'Average Monthly Usage: rata-rata pemakaian per bulan.'], ['LT', 'Lead time: lama waktu dari pesan sampai barang datang.'], ['SS', 'Safety stock: stok cadangan untuk jaga-jaga.'],
+    ['RKM', 'Rencana Kebutuhan Material dari user untuk tahun depan.'], ['Berlebih', 'Stok lebih dari 12 bulan pemakaian (chemical 5 bulan). Jangan dipesan lagi.'], ['One Gate Ordering', 'Cek dulu stok di gudang lain, ex-proyek, atau KKKS lain sebelum membeli.']]],
+  ['Pergerakan & deadstock', [['FS / MD / SP / DS', 'Kelas pergerakan: Fast (dipakai ≤ 1 tahun), Moderate (≤ 2 tahun), Slow (≤ 5 tahun), Dead stock (lebih dari 5 tahun tidak dipakai).'],
+    ['Internal Usage / Own Use', 'Barang dipakai sendiri oleh lapangan (WO, cost center, proyek).'], ['BAU', 'Barang dikirim ke gudang/plant lain lewat STO.'], ['MTA', 'Material Transfer Agreement: barang dipindah ke KKKS lain.'],
+    ['STO', 'Stock Transport Order: dokumen pindah barang antar plant (nomor berawalan 42).'], ['Mvt', 'Movement type: kode SAP jenis gerakan barang, mis. 291 = dipakai, 351 = dikirim ke plant lain.'],
+    ['ABC', 'A = sedikit material yang menyerap 80% nilai, C = banyak material bernilai kecil.']]],
+  ['Organisasi', [['WK PEP / PHE', 'Dua wilayah kerja di SAP: client 100 = PEP (nilai IDR), client 180 = PHE (nilai USD).'], ['Zona', 'Kelompok lapangan. Zona 1 = Rantau, P. Susu, Jambi, Lirik, PHE NSO & JM. Zona 4 = Prabumulih, Pendopo, Limau, Adera, Ramba, PHE OK & RT.'],
+    ['Plant', 'Kode gudang di SAP, mis. W101 = Rantau.'], ['KIMAP', 'Kode material (10 atau 12 karakter).']]],
+];
+function openGlossary() {
+  UI.drawer(`<div class="d-head"><h2>Kamus istilah</h2><p class="muted">Singkatan yang sering muncul di web ini.</p></div>${GLOSSARY.map(([g, xs]) => `<section class="d-sec"><h3>${g}</h3><dl class="gloss">${xs.map(([t, d]) => `<dt>${t}</dt><dd>${d}</dd>`).join('')}</dl></section>`).join('')}`, { label: 'Kamus istilah' });
+}
+
+// Catatan panjang diringkas jadi satu baris + tombol "Selengkapnya"; panel analisis bisa dilipat
+function tidy(root) {
+  root.querySelectorAll('.tab-note:not([data-t]), p.source:not([data-t])').forEach((el) => {
+    el.dataset.t = '1';
+    if (el.classList.contains('source')) { el.title = el.textContent; return; }
+    if (el.querySelector('button, select, input, label, .neg') || el.textContent.length < 130) return;
+    el.classList.add('clamp');
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'more-btn'; b.textContent = 'Selengkapnya';
+    b.onclick = () => { const c = el.classList.toggle('clamp'); b.textContent = c ? 'Selengkapnya' : 'Ringkas'; }; el.after(b);
+  });
+  root.querySelectorAll('section.panel[data-fold]').forEach((p) => {
+    const key = 'fold:' + p.dataset.fold, h = p.querySelector(':scope > .panel-h'); if (!h) return;
+    if (!p.dataset.fi) { p.dataset.fi = '1'; p.classList.toggle('folded', store.get(key) ?? true); }
+    if (!h.querySelector('.fold-btn')) { const b = document.createElement('button'); b.type = 'button'; b.className = 'btn ghost fold-btn'; h.appendChild(b); }
+    const b = h.querySelector('.fold-btn'), lbl = p.classList.contains('folded') ? 'Tampilkan' : 'Sembunyikan'; if (b.textContent !== lbl) b.textContent = lbl;
+    b.onclick = () => { const f = p.classList.toggle('folded'); store.set(key, f); b.textContent = f ? 'Tampilkan' : 'Sembunyikan'; };
+  });
+}
+const tidyObs = new MutationObserver(() => { tidyObs.disconnect(); try { tidy($('view')); } finally { tidyObs.observe($('view'), { childList: true, subtree: true }); } });
+tidyObs.observe($('view'), { childList: true, subtree: true });
+$('glossBtn').onclick = openGlossary;
 
 // Beranda: material terbesar, bisa diatur jumlah (Top N atau Top %), ukuran (nilai total, harga per unit, qty), dan per warehouse atau gabung
 function drawTop(pool, idrOf, cmoney) {
@@ -636,7 +703,7 @@ function drawABC(pool, idrOf, cmoney, selTxt) {
   if (!A.cell || !A.cell.includes('|')) { const c = ['A|DS', 'A|SP', 'A|MD', 'B|DS', 'B|SP', 'A|FS'].find((c) => cell(...c.split('|')).length); A.cell = c || 'A|FS'; }
   const [ck, cg] = A.cell.split('|'), list = cell(ck, cg).sort((a, b) => b.idr - a.idr);
   const risk = (k, g) => k !== 'C' && (g === 'SP' || g === 'DS');
-  $('abcPanel').innerHTML = `<div class="panel-h"><h2>Analisis ABC</h2><span class="sub">${esc(selTxt)}. A = 80% nilai teratas, B = 15% berikutnya, C = sisanya.</span><span class="right" id="abcBasis"></span></div>
+  $('abcPanel').innerHTML = `<div class="panel-h"><h2>Analisis ABC</h2><span class="sub">Material mana yang paling mahal, dan mana yang diam di gudang. A = 80% nilai teratas, B = 15% berikutnya, C = sisanya.</span><span class="right" id="abcBasis"></span></div>
     <div class="abc-grid"><div><h4 class="sub-h">Kelas nilai × pergerakan <small class="muted">klik sel untuk melihat daftarnya</small></h4><div class="plain-wrap"><table class="plain abc-m"><tr><th>Kelas</th>${AG.map((g) => `<th class="num" title="${AGN[g]}">${g === '–' ? 'Tanpa MRP' : g}</th>`).join('')}<th class="num">Total</th></tr>
       ${['A', 'B', 'C'].map((k) => `<tr><th>${k}</th>${AG.map((g) => { const xs = cell(k, g); return `<td class="num${xs.length ? ' pick' : ''}${A.cell === k + '|' + g ? ' on' : ''}${risk(k, g) && xs.length ? ' risk' : ''}" data-c="${k}|${g}">${xs.length ? `<b>${cmoney(sum(xs))}</b><small>${fmt(xs.length, 0)} baris</small>` : '<span class="muted">–</span>'}</td>`; }).join('')}
         <td class="num"><b>${cmoney(sum(rows.filter((x) => x.k === k)))}</b><small>${fmt(rows.filter((x) => x.k === k).length, 0)} baris</small></td></tr>`).join('')}</table></div>

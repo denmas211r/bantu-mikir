@@ -293,7 +293,7 @@
       <div class="filters"><label class="select"><span>Dari</span><select class="bare" id="gFrom">${D.months.map((m) => opt(m, G.from)).join('')}</select></label>
         <label class="select"><span>Sampai</span><select class="bare" id="gTo">${D.months.map((m) => opt(m, G.to)).join('')}</select></label>
         <span id="gWK"></span><span id="gPl"></span><span id="gCat"></span>
-        <label class="chk"><input type="checkbox" id="gNI"${G.ni ? ' checked' : ''}> Tampilkan "Not Included"</label></div>
+        <label class="chk"><input type="checkbox" id="gNI"${G.ni ? ' checked' : ''}> Tampilkan juga gerakan yang tidak dihitung</label></div>
       <div class="tabs" role="tablist" id="gTabs"></div><p class="tab-note" id="gNote"></p><div id="gBody"></div>`;
     const redraw = () => draw(D);
     $('gFrom').onchange = (e) => { G.from = e.target.value; if (G.to < G.from) G.to = G.from; route(); };
@@ -321,7 +321,7 @@
       note.innerHTML = `${fmt(base.length, 0)} gerakan, ${ymLabel(G.from)} s.d. ${ymLabel(G.to)}. Nilai = Amount in LC (USD dikonversi ke IDR). Klik baris untuk melihat detailnya.`;
       const g = new Map(); base.forEach((x) => { const o = g.get(x.cat) || g.set(x.cat, { cat: x.cat, xs: [], keys: new Set(), inQ: 0, outQ: 0 }).get(x.cat); o.xs.push(x); o.keys.add(x.m.mkey); x.m.qty > 0 ? o.inQ++ : o.outQ++; });
       const rows = [...g.values()].sort((a, b) => (CAT_I.get(a.cat) ?? 99) - (CAT_I.get(b.cat) ?? 99));
-      UI.table(body, { id: 'gerak-ringkas', rows, name: 'Ringkasan pergerakan', rowKey: (o) => o.cat || '-', onRow: (k) => { G.cat = new Set([k === '-' ? '' : k]); G.tab = 'detail'; route(); }, cols: [
+      UI.table(body, { id: 'gerak-ringkas2', rows, name: 'Ringkasan pergerakan', rowKey: (o) => o.cat || '-', onRow: (k) => { G.cat = new Set([k === '-' ? '' : k]); G.tab = 'detail'; route(); }, cols: [
         { label: 'Kategori', get: (o) => catName(o.cat), html: (o) => `<b>${esc(catName(o.cat))}</b>` },
         { label: 'Keterangan', wide: true, get: (o) => CAT_D.get(o.cat) || '' },
         { label: 'Arah', get: (o) => (o.inQ && o.outQ ? 'Masuk & keluar' : o.inQ ? 'Masuk' : 'Keluar') },
@@ -329,7 +329,7 @@
         { label: 'Material', num: true, filter: false, get: (o) => nMat(o.xs), html: (o) => fmt(nMat(o.xs), 0) },
         { label: 'Plant', num: true, filter: false, get: (o) => new Set(o.xs.map((x) => x.m.plant)).size, html: (o) => fmt(new Set(o.xs.map((x) => x.m.plant)).size, 0) },
         { label: 'Nilai', num: true, filter: false, get: (o) => o.xs.reduce((a, x) => a + x.idr, 0), html: (o) => idr(o.xs.reduce((a, x) => a + x.idr, 0)) },
-        { label: 'Kunci Mvt', get: (o) => [...o.keys].sort().join(', '), html: (o) => `<span class="muted small">${esc([...o.keys].sort().join(', '))}</span>` },
+        { label: 'Kunci Mvt', hide: true, get: (o) => [...o.keys].sort().join(', '), html: (o) => `<span class="muted small">${esc([...o.keys].sort().join(', '))}</span>` },
       ] });
     } else if (G.tab === 'alur') {
       note.innerHTML = 'Asal dan tujuan disimpulkan dari MB51: transfer antar plant dipasangkan lewat Material Document yang sama (baris minus = plant asal, plus = plant tujuan); vendor diambil dari ME2N lewat nomor PO; MTA, BAU, dan Own Use dari kategori Mvt. Klik baris untuk melihat gerakannya.';
