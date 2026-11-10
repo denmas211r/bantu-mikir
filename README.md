@@ -1,7 +1,7 @@
 # MIM Inventory Analyst · Zona 1
 
 Web statis (GitHub Pages) untuk kerja Inventory Analyst MIM Zona 1.
-Live: https://denmas211r.github.io/mim-inventory-web/
+Live: https://denmas211r.github.io/bantu-mikir/
 
 ## Struktur
 | File / folder | Isi |
