@@ -857,7 +857,7 @@ PAGES.lacak = function () {
     const resvMoves = S.mb51 ? S.mb51.moves.filter((m) => m.resv === q) : [];
     let mats = new Set();
     if (poLines.length) {
-      out.push(`<div class="panel"><h3>Dokumen ${esc(q)}</h3>` + plainTable(poLines, [['Dokumen', (l) => `<span class="mono">${esc(l.doc)}/${esc(l.item)}</span> <span class="muted small">${esc(l.type)}</span>${l.pr ? `<br><span class="muted small">PR ${esc(l.pr)}</span>` : ''}`], ['Plant', (l) => esc(l.plant)],
+      out.push(`<div class="panel"><h3>Dokumen ${esc(q)}</h3>` + plainTable(poLines, [['Dokumen', (l) => `<span class="mono">${esc(l.doc)}/${esc(l.item)}</span> <span class="muted small">${esc(l.type)}</span>${l.pr ? `<br><span class="muted small">PR ${esc(l.pr)}</span>` : ''}`], ['Dari OA', (l) => (l.oa ? `<span class="mono">${esc(l.oa)}</span>` : '<span class="muted">-</span>'), '', (l) => l.oa], ['Plant', (l) => esc(l.plant)],
         ['Material', (l) => `<a href="#" class="mono lm" data-m="${esc(l.material)}">${esc(l.material)}</a>`], ['Deskripsi', (l) => esc(l.desc)], ['Qty', (l) => fmt(l.qty) + ' ' + esc(l.uom), 'num'], ['Sisa kirim', (l) => fmt(l.openQty), 'num'],
         ['Jadwal', (l) => dstr(l.delivery)], ['GR (MB51)', (l) => { const g = S.mb51 && S.mb51.gr.get(l.doc + '|' + String(+l.item || l.item)); return g ? `Tiba ${fmt(g.inQty)}, rilis ${fmt(g.relQty)}` : ''; }], ['Vendor', (l) => esc(l.vendor)]]) + '</div>');
       poLines.forEach((l) => mats.add(l.material + '|' + l.plant));

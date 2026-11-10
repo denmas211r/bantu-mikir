@@ -124,7 +124,7 @@
     const ev = [], hit = (m, p) => m === mat && (!plant || p === plant);
     if (src.me2n) for (const l of src.me2n.lines) if (hit(l.material, l.plant) && !l.deleted) {
       if (l.pr) ev.push({ date: l.docDate, step: 'PR', doc: l.pr, plant: l.plant, text: `PR ${l.pr} → ${l.type} ${l.doc}`, qty: l.qty, uom: l.uom });
-      ev.push({ date: l.docDate, step: l.type, doc: l.doc + '/' + l.item, plant: l.plant, text: `${l.type} ${l.doc} ke ${l.vendor}, jadwal kirim ${l.delivery ? l.delivery.toLocaleDateString('id-ID') : '-'}${l.openQty > 0 ? ` · sisa ${l.openQty} ${l.uom}` : ' · lengkap'}`, qty: l.qty, uom: l.uom });
+      ev.push({ date: l.docDate, step: l.type, doc: l.doc + '/' + l.item, plant: l.plant, text: `${l.type} ${l.doc}${l.oa ? ' (dari OA ' + l.oa + ')' : ''} ke ${l.vendor}, jadwal kirim ${l.delivery ? l.delivery.toLocaleDateString('id-ID') : '-'}${l.openQty > 0 ? ` · sisa ${l.openQty} ${l.uom}` : ' · lengkap'}`, qty: l.qty, uom: l.uom });
     }
     if (src.mb51) for (const m of src.mb51.moves) if (hit(m.material, m.plant)) {
       const step = m.mt in GR_IN ? 'GR (inspeksi)' : m.mt === '105' || m.mt === '106' ? 'GR (rilis stok)' : GI_TYPES.has(m.mt) ? 'GI' : 'Transfer';
