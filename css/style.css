@@ -340,21 +340,32 @@ p.source { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 dl.gloss { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0; } dl.gloss dt { font-weight: 700; } dl.gloss dd { margin: 0; color: var(--ink-2); }
 .flow-step { align-content: start; } .gloss-btn { display: inline-flex; align-items: center; gap: 6px; } .gloss-btn svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
 
-/* ---------- Sidebar: ikon tetap di kiri, hanya lebar dan teks yang berubah ---------- */
-@media (min-width: 861px) {
-  .sidebar, .app.collapsed .sidebar { padding: 14px 12px; }
-  .brand, .app.collapsed .brand { margin: 0; padding: 2px 0 14px; gap: 12px; justify-content: flex-start; }
-  .logo { width: 40px; height: 40px; }
-  .nav a, .app.collapsed .nav a { width: 100%; height: 36px; margin: 0 0 1px; padding: 0 11px; justify-content: flex-start; overflow: hidden; }
-  .nav a svg, .side-btn svg { flex: none; }
-  .nav-group, .app.collapsed .nav-group { box-sizing: border-box; height: 38px; margin: 0; padding: 16px 10px 6px; font-size: 12px; border: 0; overflow: hidden; transition: height .18s, padding .18s, color .1s; }
-  .app.collapsed .nav-group { height: 12px; padding: 0; color: transparent; }
-  .app.collapsed .nav-group:first-child { height: 4px; }
-  .side-foot, .app.collapsed .side-foot { margin: 0; justify-items: stretch; }
-  .side-btn, .collapse-btn, .app.collapsed .side-btn, .app.collapsed .collapse-btn { width: 100%; height: 38px; margin: 0; padding: 0 11px; justify-content: flex-start; overflow: hidden; }
-  .side-user, .app.collapsed .side-user { flex-direction: row; flex-wrap: wrap; justify-content: flex-start; gap: 6px 10px; padding: 4px 0; }
-  .avatar { margin-left: 4px; }
-  .app.collapsed .side-user .icon-btn { margin-left: 4px; }
-  .brand-title, .nav a span, .who, .side-btn span { transition: opacity .15s .1s; }
-  .app.collapsed .brand-title, .app.collapsed .nav a span, .app.collapsed .who, .app.collapsed .side-btn span { display: initial; opacity: 0; pointer-events: none; transition: opacity .08s; }
-}
+/* ---------- Sidebar: satu aturan ukuran untuk menu terbuka dan ciut ---------- */
+/* Ukuran dasar: ikon 18px, item 36px, logo 36px, lebar sidebar 236px (ciut 64px). */
+.sidebar { padding: 14px 12px; }
+.brand { margin: 0; padding: 2px 0 14px; gap: 12px; justify-content: flex-start; }
+.logo { width: 36px; height: 36px; font-size: 13px; }
+.nav { padding: 6px 0 12px; }
+.nav-group { height: auto; margin: 0; padding: 14px 10px 6px; font-size: 12px; border: 0; }
+.nav a { width: 100%; height: 36px; margin: 0 0 2px; padding: 0 11px; gap: 12px; justify-content: flex-start; }
+.nav a svg { width: 18px; height: 18px; flex: none; }
+.side-foot { margin: 0; padding-top: 12px; gap: 8px; justify-items: stretch; }
+.collapse-btn { width: 40px; height: 36px; margin: 0; padding: 0; justify-content: center; }
+.side-btn { height: 36px; }
+.side-user { gap: 10px; padding: 0; }
+.side-user .avatar { margin-left: 4px; }
+.avatar { width: 32px; height: 32px; }
+.side-user .icon-btn { width: 36px; height: 36px; margin-left: auto; }
+
+.app.collapsed .sidebar { padding: 14px 12px; }
+/* Mode ciut: semua item 40px, menempel di kiri (tidak dipusatkan), jadi tidak bergeser saat animasi */
+.app.collapsed .brand { justify-content: flex-start; padding: 2px 0 14px; }
+.app.collapsed .logo { margin-left: 2px; }
+.app.collapsed .nav-group { height: 1px; margin: 10px 0; padding: 0; font-size: 0; color: transparent; border-top: 1px solid rgba(255,255,255,.1); overflow: hidden; }
+.app.collapsed .nav-group:first-child { height: 0; margin-top: 4px; border-top: 0; }
+.app.collapsed .nav a { width: 40px; height: 36px; margin: 0 0 2px; padding: 0; justify-content: center; }
+.app.collapsed .side-foot { justify-items: start; gap: 8px; margin: 0; }
+.app.collapsed .collapse-btn, .app.collapsed .side-btn { width: 40px; height: 36px; margin: 0; padding: 0; justify-content: center; }
+.app.collapsed .side-user { flex-direction: column; align-items: flex-start; gap: 8px; padding: 0; width: 40px; }
+.app.collapsed .side-user .avatar { margin-left: 4px; }
+.app.collapsed .side-user .icon-btn { width: 40px; height: 36px; margin: 0; }
