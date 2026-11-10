@@ -339,3 +339,22 @@ p.source { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gloss-btn { margin-left: 8px; flex: none; }
 dl.gloss { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0; } dl.gloss dt { font-weight: 700; } dl.gloss dd { margin: 0; color: var(--ink-2); }
 .flow-step { align-content: start; } .gloss-btn { display: inline-flex; align-items: center; gap: 6px; } .gloss-btn svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+
+/* ---------- Sidebar: ikon tetap di kiri, hanya lebar dan teks yang berubah ---------- */
+@media (min-width: 861px) {
+  .sidebar, .app.collapsed .sidebar { padding: 14px 12px; }
+  .brand, .app.collapsed .brand { margin: 0; padding: 2px 0 14px; gap: 12px; justify-content: flex-start; }
+  .logo { width: 40px; height: 40px; }
+  .nav a, .app.collapsed .nav a { width: 100%; height: 36px; margin: 0 0 1px; padding: 0 11px; justify-content: flex-start; overflow: hidden; }
+  .nav a svg, .side-btn svg { flex: none; }
+  .nav-group, .app.collapsed .nav-group { box-sizing: border-box; height: 38px; margin: 0; padding: 16px 10px 6px; font-size: 12px; border: 0; overflow: hidden; transition: height .18s, padding .18s, color .1s; }
+  .app.collapsed .nav-group { height: 12px; padding: 0; color: transparent; }
+  .app.collapsed .nav-group:first-child { height: 4px; }
+  .side-foot, .app.collapsed .side-foot { margin: 0; justify-items: stretch; }
+  .side-btn, .collapse-btn, .app.collapsed .side-btn, .app.collapsed .collapse-btn { width: 100%; height: 38px; margin: 0; padding: 0 11px; justify-content: flex-start; overflow: hidden; }
+  .side-user, .app.collapsed .side-user { flex-direction: row; flex-wrap: wrap; justify-content: flex-start; gap: 6px 10px; padding: 4px 0; }
+  .avatar { margin-left: 4px; }
+  .app.collapsed .side-user .icon-btn { margin-left: 4px; }
+  .brand-title, .nav a span, .who, .side-btn span { transition: opacity .15s .1s; }
+  .app.collapsed .brand-title, .app.collapsed .nav a span, .app.collapsed .who, .app.collapsed .side-btn span { display: initial; opacity: 0; pointer-events: none; transition: opacity .08s; }
+}
