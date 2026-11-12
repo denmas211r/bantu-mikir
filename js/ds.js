@@ -3,8 +3,10 @@
 //  • Qty DS per Plant×Material = kuota. Gerakan sesudah tanggal DS diurutkan menurut tanggal (lalu urutan baris).
 //  • Qty efektif = −qty untuk grup yang dihitung: Internal Usage (Own Use dan pembatalannya), BAU yang SAH, MTA (963/964).
 //  • Klaim = MIN(kuota, MAX(0, kumulatif + efektif)) − MIN(kuota, MAX(0, kumulatif)). Nilai = klaim × harga satuan USD di daftar DS.
-//  • BAU sah kalau zona plant asal ≠ zona plant tujuan. Plant tujuan: baris pasangan 351+ (Material Document sama),
-//    lalu kata kunci di Document Header Text, lalu isian manual. MTA ke KKKS lain selalu sah.
+//  • BAU sah kalau zona plant asal ≠ zona plant tujuan. Plant tujuan: isian manual, lalu baris pasangan di Material Document
+//    yang sama (351+ untuk BAU; sisi tujuan 352− untuk pembatalan), lalu kata kunci di Document Header Text. MTA selalu sah.
+//  • BAU sesama zona (opsi o.sameZona): 'skip' = tidak dihitung, 'bau' = dihitung sebagai BAU, 'iu' = dihitung sebagai Internal Usage.
+//  • Tujuan tidak ketemu = penerimaan di luar MB51 (tidak terdeteksi di dalam zona) → dihitung BAU.
 (function (root) {
   const s = (v) => (v == null ? '' : String(v).replace(/\s+/g, ' ').trim());
   const n = (v) => { const x = typeof v === 'number' ? v : Number(String(v == null ? '' : v).replace(/,/g, '')); return isFinite(x) ? x : 0; };
@@ -65,15 +67,21 @@
   function bauInfo(m, o) {
     if (m.grp === 'MTA') return { dest: 'KKKS lain', zFrom: o.zonaOf(m.plant), zTo: 'KKKS lain', valid: true, how: 'MTA', status: 'Sah (MTA ke KKKS lain)' };
     const manual = o.manual && o.manual[moveId(m)];
-    let dest = m.toPlant && m.toPlant !== m.plant ? m.toPlant : '', how = dest ? 'Pasangan 351' : '';
-    if (!dest && manual) { dest = manual; how = 'Manual'; }
+    // isian manual menang; lalu pasangan: BAU (qty −) tujuannya di baris + (toPlant), pembatalan (qty +) tujuannya di baris − (fromPlant)
+    const pair = m.qty > 0 ? m.fromPlant : m.toPlant;
+    let dest = '', how = '';
+    if (manual) { dest = manual; how = 'Manual'; }
+    if (!dest && pair && pair !== m.plant) { dest = pair; how = 'Pasangan 351/352'; }
     if (!dest) { const g = guessPlant(m.header); if (g) { dest = g; how = 'Header text'; } }
     const zFrom = o.zonaOf(m.plant), zTo = dest === 'LUAR' ? 'Luar Zona 1 & 4' : dest ? o.zonaOf(dest) : '';
-    let valid = false, status;
-    if (!dest) status = 'Tujuan belum diketahui';
-    else if (zFrom !== zTo || o.bauSameZona) { valid = true; status = zFrom !== zTo ? `Sah (${zFrom} → ${zTo})` : `Sah (sesama ${zFrom})`; }
-    else status = `Tidak sah (sesama ${zFrom})`;
-    return { dest, how, zFrom, zTo, valid, status };
+    const mode = o.sameZona || (o.bauSameZona ? 'bau' : 'skip');
+    let valid = true, asIU = false, status;
+    if (!dest) { how = 'Di luar MB51'; status = 'Sah (tujuan di luar MB51, dihitung BAU)'; }
+    else if (zFrom !== zTo) status = `Sah (${zFrom} → ${zTo})`;
+    else if (mode === 'iu') { asIU = true; status = `Dihitung Internal Usage (sesama ${zFrom})`; }
+    else if (mode === 'bau') status = `Sah (sesama ${zFrom}, dihitung BAU)`;
+    else { valid = false; status = `Tidak dihitung (sesama ${zFrom})`; }
+    return { dest, how, zFrom, zTo, valid, asIU, status };
   }
 
   // ---- Alokasi kuota DS ----
@@ -86,7 +94,7 @@
     const cum = new Map(), claims = new Map();
     for (const { m } of list) {
       let g = m.grp;
-      if (g === 'BAU' || g === 'MTA') { const b = bauInfo(m, o); m._bau = b; if (!b.valid) continue; }
+      if (g === 'BAU' || g === 'MTA') { const b = bauInfo(m, o); m._bau = b; if (!b.valid) continue; if (b.asIU) g = 'OWN USE'; }
       if (g === '309' && !o.include309) continue;
       const r = byKey.get(m.plant + '|' + m.material);
       if (m.cat === 'Return' && r) r.ret += m.qty;

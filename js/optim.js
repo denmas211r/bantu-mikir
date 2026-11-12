@@ -10,20 +10,20 @@
   const pl = (p) => (p === 'LUAR' ? 'Luar Zona 1 & 4' : p === 'KKKS lain' ? 'KKKS lain (MTA)' : p ? plantLabel(p) : '');
   const DEST_OPTS = () => [...new Set(Object.keys(DEFAULT_ZONA).concat(S.mb52 ? S.mb52.plants || [] : []))].sort().concat(['LUAR']);
 
-  const O = () => S.opt || (S.opt = Object.assign({ tab: 'ringkas', kind: 'BAU', months: new Set(), wk: new Set(), valid: 'sah' }, { include309: false, bauSameZona: false }, store.get('optSet') || {}));
+  const O = () => S.opt || (S.opt = Object.assign({ tab: 'ringkas', kind: 'BAU', months: new Set(), wk: new Set(), valid: 'sah' }, { include309: false, sameZona: 'skip' }, store.get('optSet') || {}));
   let cache = { key: '', res: null };
   function compute() {
     const o = O(), manual = store.get('bauDest') || {}, moves = S.mb51 ? S.mb51.moves : [];
-    const key = [S.ver, moves.length, S.ds ? S.ds.rows.length : 0, o.include309, o.bauSameZona, JSON.stringify(manual)].join('|');
+    const key = [S.ver, moves.length, S.ds ? S.ds.rows.length : 0, o.include309, o.sameZona, JSON.stringify(manual)].join('|');
     if (cache.key === key) return cache.res;
-    const opt = { zonaOf, include309: o.include309, bauSameZona: o.bauSameZona, manual };
+    const opt = { zonaOf, include309: o.include309, sameZona: o.sameZona, manual };
     const ds = S.ds ? DS.optimize(S.ds, moves, opt) : null;
     if (!ds) moves.forEach((m) => { m._bau = m.grp === 'BAU' || m.grp === 'MTA' ? DS.bauInfo(m, opt) : undefined; });
     const gr = new Map(); moves.forEach((m) => { if (m.mkey === '10142+' && m.po) (gr.get(m.po) || gr.set(m.po, []).get(m.po)).push(m); });
     cache = { key, res: { ds, moves, gr } }; return cache.res;
   }
   window.optimCompute = compute;
-  const saveOpt = () => { const o = O(); store.set('optSet', { include309: o.include309, bauSameZona: o.bauSameZona }); };
+  const saveOpt = () => { const o = O(); store.set('optSet', { include309: o.include309, sameZona: o.sameZona }); };
 
   PAGES.optim = function () {
     if (!S.mb51) { $('view').innerHTML = needFile('file MB51', 'Optimasi DS dan laporan BAU dibaca dari MB51 (semua file digabung) dan daftar DS akhir tahun (file bernama "Deadstock …").'); return; }
@@ -34,12 +34,12 @@
       ${R.ds ? '' : '<div class="banner warn"><span>File DS belum dimuat. Laporan BAU & MTA tetap bisa dipakai; ringkasan optimasi DS butuh file daftar DS akhir tahun (sheet "DS PEP"/"DS PHE", form MA-01) di folder data atau lewat <a href="#/data">Data SAP</a>.</span></div>'}
       <div class="filters"><span id="oWK"></span>
         <label class="chk" title="309 = ganti kode material. Di PHE dipakai memindah kode DS ke kode aktif sebelum dipakai."><input type="checkbox" id="o309"${o.include309 ? ' checked' : ''}> Hitung 309 (ganti kode DS ke kode aktif) sebagai pemakaian DS</label>
-        <label class="chk"><input type="checkbox" id="oSame"${o.bauSameZona ? ' checked' : ''}> BAU sesama zona ikut dihitung</label></div>
+        <label class="chk">BAU sesama zona <select id="oSame" aria-label="Perlakuan BAU sesama zona">${[['skip', 'tidak dihitung'], ['iu', 'dihitung sebagai Internal Usage'], ['bau', 'dihitung sebagai BAU']].map(([v, t]) => `<option value="${v}"${o.sameZona === v ? ' selected' : ''}>${t}</option>`).join('')}</select></label></div>
       <div class="tabs" role="tablist">${TABS.map(([k, t]) => `<button class="tab ${k === o.tab ? 'on' : ''}" data-t="${k}" ${!R.ds && k !== 'bau' ? 'disabled' : ''}>${t}</button>`).join('')}</div>
       <div id="oBody"></div>`;
     document.querySelectorAll('.tabs .tab').forEach((b) => (b.onclick = () => { o.tab = b.dataset.t; route(); }));
     $('o309').onchange = (e) => { o.include309 = e.target.checked; saveOpt(); route(); };
-    $('oSame').onchange = (e) => { o.bauSameZona = e.target.checked; saveOpt(); route(); };
+    $('oSame').onchange = (e) => { o.sameZona = e.target.value; saveOpt(); route(); };
     const wks = [...new Set((R.ds ? R.ds.rows.map((r) => r.wk) : []).concat(R.moves.map((m) => m.wk)))].filter(Boolean).sort();
     if (wks.length > 1) UI.multi($('oWK'), { label: 'WK', options: wks.map((w) => ({ value: w, label: 'WK ' + w })), selected: o.wk, onChange: () => route() });
     ({ ringkas, daftar, bulan, bau })[o.tab](R, $('oBody'));
@@ -129,11 +129,11 @@
     const grOf = (m) => { const a = m.po && R.gr.get(m.po); if (!a) return null; const b = a.filter((x) => !m._bau || !m._bau.dest || x.plant === m._bau.dest); return (b.length ? b : a).sort((x, y) => x.date - y.date)[0]; };
     const nUnknown = all.filter((m) => m._bau && !m._bau.dest).length;
     el.innerHTML = `<div class="filters"><span id="oKind"></span><span id="oValid"></span><span id="oMon"></span></div>
-      ${nUnknown ? `<p class="tab-note"><b class="neg">${fmt(nUnknown, 0)} baris belum diketahui tujuannya.</b> Pilih "Belum sah / tujuan kosong", lalu isi kolom Ke.</p>` : ''}
-      <p class="tab-note">${grp === 'BAU' ? 'BAU = kirim barang ke plant lain lewat STO (Mvt 351), dikurangi pembatalannya (352). BAU sah kalau zona asal berbeda dengan zona tujuan (aturan workbook DS). Tujuan dibaca dari baris pasangan 351+ di Material Document yang sama, lalu dari kata kunci di header text, lalu isian manual.' : 'MTA = barang keluar ke KKKS lain (Mvt 963), dikurangi pembatalannya (964). Selalu sah.'} Nilai USD dari MB51 (IDR ÷ kurs ${fmt(kursDS(), 0)}). "Klaim DS" = bagian yang memakai kuota deadstock.</p>
+      ${nUnknown ? `<p class="tab-note"><b>${fmt(nUnknown, 0)} baris tujuannya tidak ada di MB51</b> (penerimaan di luar data), tetap dihitung BAU. Isi kolom Ke kalau tujuannya diketahui.</p>` : ''}
+      <p class="tab-note">${grp === 'BAU' ? 'BAU = kirim barang ke plant lain lewat STO (Mvt 351), dikurangi pembatalannya (352). BAU lintas zona selalu dihitung. BAU sesama zona mengikuti pilihan di atas. Tujuan dibaca dari isian manual, lalu baris pasangan di Material Document yang sama, lalu kata kunci di header text; kalau tidak ketemu, dianggap diterima di luar MB51 dan dihitung BAU.' : 'MTA = barang keluar ke KKKS lain (Mvt 963), dikurangi pembatalannya (964). Selalu sah.'} Nilai USD dari MB51 (IDR ÷ kurs ${fmt(kursDS(), 0)}). "Klaim DS" = bagian yang memakai kuota deadstock.</p>
       <h4 class="sub-h">Rekap per bulan</h4><div id="oSum"></div><h4 class="sub-h">Detail per material</h4><div id="oDet"></div>`;
     UI.seg($('oKind'), [['BAU', 'BAU'], ['MTA', 'MTA']], grp, (v) => { o.kind = v; o.months.clear(); route(); });
-    UI.seg($('oValid'), [['sah', 'Sah'], ['belum', 'Belum sah / tujuan kosong'], ['semua', 'Semua']], o.valid, (v) => { o.valid = v; route(); });
+    UI.seg($('oValid'), [['sah', 'Dihitung'], ['belum', 'Tidak dihitung'], ['semua', 'Semua']], o.valid, (v) => { o.valid = v; route(); });
     UI.multi($('oMon'), { label: 'Bulan', options: months.map((x) => ({ value: x, label: ymLabel(x) })), selected: o.months, onChange: () => route() });
     // rekap
     const g = new Map(); list.forEach((m) => { const b = m._bau || {}; const k = [ym(m.date), m.plant, b.dest || '', b.status || ''].join('|');
