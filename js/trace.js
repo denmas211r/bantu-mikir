@@ -35,7 +35,9 @@
   }
 
   // Kunci unik satu baris MB51 (untuk membuang baris dobel saat beberapa file MB51 digabung)
-  const mb51Key = (m) => [m.year, m.matDoc, m.material, m.plant, m.sloc, m.mt, m.qty, m.amount, m.po, m.poItem, m.time, m.batch].join('|');
+  // jam bisa terbaca sebagai pecahan hari (0.45) atau teks (10:48:56) tergantung berkas; samakan ke HH:MM:SS
+  const normTime = (t) => { const x = Number(t); if (t !== '' && isFinite(x) && x < 1) { const sec = Math.round(x * 86400); return [Math.floor(sec / 3600), Math.floor(sec / 60) % 60, sec % 60].map((v) => String(v).padStart(2, '0')).join(':'); } return String(t); };
+  const mb51Key = (m) => [m.year, m.matDoc, m.material, m.plant, m.sloc, m.mt, m.qty, m.amount, m.po, m.poItem, normTime(m.time), m.batch].join('|');
   // Gabung beberapa file MB51 (mis. upload bulanan). Baris yang sama di beberapa file dihitung sekali;
   // baris kembar yang sah di satu file (jumlahnya) tetap dipertahankan.
   function mergeMB51(list) {

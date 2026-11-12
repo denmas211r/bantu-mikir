@@ -1,7 +1,8 @@
 // ============ Optimasi Deadstock (DS): daftar DS akhir tahun (form MA-01) + alokasi pemakaian dari MB51 ============
 // Cara hitung meniru workbook "Deadstock PEP PHE Z1-4 – Internal Usage dan BAU":
 //  • Qty DS per Plant×Material = kuota. Gerakan sesudah tanggal DS diurutkan menurut tanggal (lalu urutan baris).
-//  • Qty efektif = −qty untuk grup yang dihitung: Internal Usage (Own Use dan pembatalannya), BAU yang SAH, MTA (963/964).
+//  • Qty efektif = −qty untuk grup yang dihitung: Internal Usage (Own Use dan pembatalannya) dan BAU (351/352 yang sah + 963/964).
+//    Tidak ada kolom MTA tersendiri: 963/964 masuk BAU (sama dengan workbook). MTA "in cash" diisi manual oleh Tim AWO.
 //  • Klaim = MIN(kuota, MAX(0, kumulatif + efektif)) − MIN(kuota, MAX(0, kumulatif)). Nilai = klaim × harga satuan USD di daftar DS.
 //  • BAU sah kalau zona plant asal ≠ zona plant tujuan. Plant tujuan: isian manual, lalu baris pasangan di Material Document
 //    yang sama (351+ untuk BAU; sisi tujuan 352− untuk pembatalan), lalu kata kunci di Document Header Text. MTA selalu sah.
@@ -54,8 +55,9 @@
     const targets = {};
     const sum = wb.Sheets.Summary || wb.Sheets[wb.SheetNames.find((x) => /summary|ringkas/i.test(x))];
     if (sum) {
-      const a = XLSX.utils.sheet_to_json(sum, { header: 1, raw: true, defval: null }); const rng = XLSX.utils.decode_range(sum['!ref']);
-      a.forEach((r, i) => { const z = s(r && r[1]); if (!/^Zona \d$/.test(z) || targets[z]) return; const cell = (cc) => sum[XLSX.utils.encode_cell({ r: i + rng.s.r, c: cc + rng.s.c })];
+      const rng = XLSX.utils.decode_range(sum['!ref']); // baca dari A1 supaya kolom/baris tetap sama walau sheet mulai di B2
+      const a = XLSX.utils.sheet_to_json(sum, { header: 1, raw: true, defval: null, range: { s: { r: 0, c: 0 }, e: rng.e } });
+      a.forEach((r, i) => { const z = s(r && r[1]); if (!/^Zona \d$/.test(z) || targets[z]) return; const cell = (cc) => sum[XLSX.utils.encode_cell({ r: i, c: cc })];
         const inp = (cc) => { const x = cell(cc); return x && !x.f && typeof x.v === 'number' ? x.v : 0; };
         targets[z] = { target: n(r[2]), mta: inp(4), fupp: inp(6) }; });
     }
@@ -90,7 +92,8 @@
     const cutoff = o.cutoff || (ds.asOf ? new Date(ds.asOf.getFullYear(), ds.asOf.getMonth(), ds.asOf.getDate() + 1) : null);
     const rows = ds.rows.map((r) => Object.assign({}, r, { iu: 0, bau: 0, mta: 0, k309: 0, ret: 0, iuUsd: 0, bauUsd: 0, mtaUsd: 0, k309Usd: 0, last: null }));
     const byKey = new Map(rows.map((r) => [r.key, r]));
-    const list = moves.map((m, i) => ({ m, i })).filter((x) => x.m.date && (!cutoff || x.m.date >= cutoff)).sort((a, b) => a.m.date - b.m.date || a.i - b.i);
+    const until = o.until || null; // batas akhir (eksklusif), mis. awal November untuk "sampai Oktober"
+    const list = moves.map((m, i) => ({ m, i })).filter((x) => x.m.date && (!cutoff || x.m.date >= cutoff) && (!until || x.m.date < until)).sort((a, b) => a.m.date - b.m.date || a.i - b.i);
     const cum = new Map(), claims = new Map();
     for (const { m } of list) {
       let g = m.grp;
@@ -102,7 +105,7 @@
       const eff = -m.qty, c0 = cum.get(r.key) || 0, Q = r.qty;
       const cl = Math.min(Q, Math.max(0, c0 + eff)) - Math.min(Q, Math.max(0, c0)); cum.set(r.key, c0 + eff);
       if (!cl) continue;
-      const f = g === 'OWN USE' ? 'iu' : g === 'BAU' ? 'bau' : g === 'MTA' ? 'mta' : 'k309';
+      const f = g === 'OWN USE' ? 'iu' : g === 'BAU' || g === 'MTA' ? 'bau' : 'k309';
       r[f] += cl; r[f + 'Usd'] += cl * r.unit; if (cl > 0 && (!r.last || m.date > r.last)) r.last = m.date;
       claims.set(m, { qty: cl, usd: cl * r.unit, ds: r });
     }
