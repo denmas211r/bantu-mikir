@@ -229,7 +229,7 @@
   function drawer(html, opt = {}) {
     closeDrawer();
     drawerEl = document.createElement('div'); drawerEl.className = 'drawer-wrap';
-    drawerEl.innerHTML = `<div class="drawer-back"></div><aside class="drawer" role="dialog" aria-modal="true" aria-label="${esc(opt.label || 'Detail')}">
+    drawerEl.innerHTML = `<div class="drawer-back"></div><aside class="drawer${opt.wide ? ' wide' : ''}" role="dialog" aria-modal="true" aria-label="${esc(opt.label || 'Detail')}">
       <button type="button" class="icon-btn drawer-x" aria-label="Tutup">${I.x}</button><div class="drawer-body">${html}</div></aside>`;
     document.body.appendChild(drawerEl); document.body.classList.add('noscroll');
     drawerEl.querySelector('.drawer-back').onclick = closeDrawer; drawerEl.querySelector('.drawer-x').onclick = closeDrawer;

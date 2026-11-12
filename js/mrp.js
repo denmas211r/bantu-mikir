@@ -215,7 +215,7 @@
       if (!r) rows.set(k, (r = { material: mat, plant, kimap: '', desc: desc || '', uom: uom || '', field: '', cat: '', usage36: new Array(36).fill(0), usageAll: new Array(labels.length).fill(0), stock: 0, ospo: 0, mb25: 0, excel: {} }));
       if (!r.desc && desc) r.desc = desc; if (!r.uom && uom) r.uom = uom; return r;
     };
-    items.forEach((i) => { const r = get(i.material, i.plant, i.desc, i.uom); r.stock += i.soh || 0; });
+    items.forEach((i) => { const r = get(i.material, i.plant, i.desc, i.uom); r.stock += (i.sohNormal != null ? i.sohNormal : i.soh) || 0; }); // stok ZNORMAL
     use.forEach((m) => { const r = get(m.material, m.plant, m.desc, m.uom); const i = li.get(ym(m.date)); if (i != null) r.usageAll[i] += -(m.qty || 0); });
     rows.forEach((r) => { r.usageAll = r.usageAll.map((v) => Math.max(0, v)); r.usage36 = new Array(Math.max(0, 36 - labels.length)).fill(0).concat(r.usageAll.slice(-36)); });
     const lt = new Map();

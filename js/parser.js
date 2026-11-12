@@ -15,6 +15,9 @@
   const colMap = (hdrRow) => { const m = {}; hdrRow.forEach((h, i) => { const k = norm(h); if (k && !(k in m)) m[k] = i; }); return m; };
 
   // ---------- MB52 ----------
+  // Kolom "Batch" di MB52 = valuation type (ZNORMAL, ZEX-TERMR, ZSURP-INT1, ZDAMAGE, ...).
+  // Stok untuk MRP = unrestricted ZNORMAL saja. Material tanpa split valuation (batch kosong) dianggap normal.
+  const isNormalVal = (v) => !v || v === 'ZNORMAL' || !/^Z/i.test(v);
   function parseMB52(XLSX, buf) {
     const wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
     const ws = wb.Sheets[wb.SheetNames[0]];
@@ -31,15 +34,18 @@
       const key = plant + '|' + mat;
       let it = map.get(key);
       if (!it) {
-        it = { plant, material: mat, desc: str(r[c['material description']]), uom: str(r[c['base unit of measure']]), soh: 0, value: 0, transit: 0, locs: [] };
+        it = { plant, material: mat, desc: str(r[c['material description']]), uom: str(r[c['base unit of measure']]), soh: 0, sohNormal: 0, value: 0, transit: 0, transitValue: 0, byVal: {}, locs: [] };
         map.set(key, it);
       }
-      const qty = num(r[c['unrestricted']]), val = num(r[c['value unrestricted']]);
-      it.soh += qty; it.value += val; it.transit += num(r[c['transit and transfer']]);
-      it.locs.push({ sloc: str(r[c['storage location']]), batch: str(r[c['batch']]), qty });
+      const qty = num(r[c['unrestricted']]), val = num(r[c['value unrestricted']]), vt = str(r[c['batch']]);
+      const tr = num(r[c['transit and transfer']]), trv = num(r[c['val. in trans./tfr']]);
+      it.soh += qty; it.value += val; it.transit += tr; it.transitValue += trv;
+      if (isNormalVal(vt)) it.sohNormal += qty;
+      const vk = vt || '(tanpa val. type)'; it.byVal[vk] = (it.byVal[vk] || 0) + qty;
+      it.locs.push({ sloc: str(r[c['storage location']]), batch: vt, qty, transit: tr });
     }
     const items = [...map.values()];
-    items.forEach((it) => { it.price = it.soh > 0 ? it.value / it.soh : 0; });
+    items.forEach((it) => { it.price = it.soh > 0 ? it.value / it.soh : 0; it.sohOther = it.soh - it.sohNormal; });
     return { items, skipped, plants: [...new Set(items.map((x) => x.plant))].sort() };
   }
 
@@ -74,9 +80,10 @@
     if (!mrpPlants.has(it.plant)) return { s: 'Tidak dipantau', cls: 'mute' };
     if (!mrp) return { s: 'Tanpa MRP', cls: 'mute' };
     if (!mrp.min && !mrp.max) return { s: 'Tanpa Min/Max', cls: 'mute' };
-    if (it.soh <= 0) return { s: 'Kosong', cls: 'low' };
-    if (it.soh < mrp.min) return { s: 'Di bawah Min', cls: 'low' };
-    if (mrp.max && it.soh > mrp.max) return { s: 'Surplus', cls: 'warn' };
+    const q = it.sohNormal != null ? it.sohNormal : it.soh; // hanya ZNORMAL
+    if (q <= 0) return { s: 'Kosong', cls: 'low' };
+    if (q < mrp.min) return { s: 'Di bawah Min', cls: 'low' };
+    if (mrp.max && q > mrp.max) return { s: 'Surplus', cls: 'warn' };
     return { s: 'Aman', cls: 'ok' };
   }
   function merge(items, mrpMap, mrpPlants) {

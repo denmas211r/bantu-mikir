@@ -231,9 +231,10 @@ body.noscroll { overflow: hidden; }
 .drawer-wrap { position: fixed; inset: 0; z-index: 40; }
 .drawer-back { position: absolute; inset: 0; background: rgba(20, 36, 59, .35); opacity: 0; transition: opacity .18s; }
 .drawer { position: absolute; top: 0; right: 0; height: 100%; width: min(820px, 94vw); background: var(--bg); box-shadow: -8px 0 32px rgba(20, 36, 59, .18); transform: translateX(100%); transition: transform .2s; display: flex; flex-direction: column; }
+.drawer.wide { width: min(1180px, 96vw); }
 .drawer-wrap.open .drawer-back { opacity: 1; } .drawer-wrap.open .drawer { transform: none; }
 .drawer-x { position: absolute; top: 14px; right: 14px; z-index: 2; background: var(--surface); }
-.drawer-body { overflow-y: auto; padding: 22px 24px 40px; display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
+.drawer-body { overflow-y: auto; padding: 22px 24px 40px; display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); grid-auto-rows: max-content; align-content: start; }
 .d-head h2 { font-size: 20px; font-weight: 700; padding-right: 40px; line-height: 1.3; } .d-head .meta { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--muted); margin-top: 4px; font-size: 14px; }
 .d-sec { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-panel); padding: 14px 16px; }
 .d-sec h3 { font-size: 15px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: baseline; gap: 8px; } .d-sec h3 small { font-weight: 400; color: var(--muted); font-size: 13px; }
@@ -369,3 +370,14 @@ dl.gloss { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px;
 .app.collapsed .side-user { flex-direction: column; align-items: flex-start; gap: 8px; padding: 0; width: 40px; }
 .app.collapsed .side-user .avatar { margin-left: 4px; }
 .app.collapsed .side-user .icon-btn { width: 40px; height: 36px; margin: 0; }
+
+/* Penjelasan hitungan MRP per material */
+.calc { margin-top: 12px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--brand-soft); }
+.calc h4 { font-size: 14px; margin-bottom: 8px; } .calc h4 small { color: var(--muted); font-weight: 400; margin-left: 6px; }
+.calc-steps { margin: 0; padding-left: 22px; display: grid; gap: 8px; }
+.calc-steps li { line-height: 1.45; } .calc-f { color: var(--ink-2); font-size: 13px; font-variant-numeric: tabular-nums; }
+.calc-r { font-size: 13px; font-variant-numeric: tabular-nums; }
+.calclink { color: inherit; text-decoration: underline dotted; text-underline-offset: 3px; } .calclink:hover { color: var(--brand); }
+.drawer .filters { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin: 4px 0 6px; }
+.drawer .filters select { height: 32px; border: 1px solid var(--line); border-radius: 8px; padding: 0 8px; background: #fff; }
+.drawer .seg { margin: 6px 0 2px; flex-wrap: wrap; justify-self: start; }

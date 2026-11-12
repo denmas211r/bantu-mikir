@@ -35,8 +35,10 @@
     const k = await deriveKey(password, unb64(entry.salt));
     const { role, dataKey } = await decryptJSON(k, entry); // gagal = password salah
     const key = await subtle.importKey('raw', unb64(dataKey), 'AES-GCM', false, ['decrypt']);
-    return { role, key };
+    return { role, key, raw: dataKey };
   }
-  root.Vault = { newDataKey, wrapForUser, encryptJSON, decryptJSON, login };
+  // Pulihkan kunci data dari sesi tab (sessionStorage), tanpa password
+  const importRaw = (raw) => subtle.importKey('raw', unb64(raw), 'AES-GCM', false, ['decrypt']);
+  root.Vault = { newDataKey, wrapForUser, encryptJSON, decryptJSON, login, importRaw };
   if (typeof module !== 'undefined') module.exports = root.Vault;
 })(typeof window !== 'undefined' ? window : globalThis);
