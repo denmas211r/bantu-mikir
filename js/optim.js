@@ -11,7 +11,9 @@
   const DEST_OPTS = () => [...new Set(Object.keys(DEFAULT_ZONA).concat(S.mb52 ? S.mb52.plants || [] : []))].sort().concat(['LUAR']);
 
   const untilDate = (k) => (k ? new Date(+k.slice(0, 4), +k.slice(5), 1) : null); // 'YYYY-MM' → awal bulan berikutnya
-  const O = () => S.opt || (S.opt = Object.assign({ tab: 'ringkas', kind: 'BAU', months: new Set(), wk: new Set(), valid: 'sah' }, { include309: false, sameZona: 'skip', until: '' }, store.get('optSet') || {}));
+  // bawaan BAU sesama zona = Internal Usage (sama dengan workbook Excel). Pengaturan lama (sebelum v2) diganti sekali ke bawaan baru.
+  const O = () => { if (S.opt) return S.opt; const st = store.get('optSet') || {}; if (!st.v2) delete st.sameZona;
+    return (S.opt = Object.assign({ tab: 'ringkas', kind: 'BAU', months: new Set(), wk: new Set(), valid: 'sah' }, { include309: false, sameZona: 'iu', until: '' }, st)); };
   let cache = { key: '', res: null };
   function compute() {
     const o = O(), manual = store.get('bauDest') || {}, moves = S.mb51 ? S.mb51.moves : [];
@@ -24,18 +26,19 @@
     cache = { key, res: { ds, moves, gr } }; return cache.res;
   }
   window.optimCompute = compute;
-  const saveOpt = () => { const o = O(); store.set('optSet', { include309: o.include309, sameZona: o.sameZona, until: o.until }); };
+  const saveOpt = () => { const o = O(); store.set('optSet', { include309: o.include309, sameZona: o.sameZona, until: o.until, v2: true }); };
 
   PAGES.optim = function () {
     if (!S.mb51) { $('view').innerHTML = needFile('file MB51', 'Optimasi DS dan laporan BAU dibaca dari MB51 (semua file digabung) dan daftar DS akhir tahun (file bernama "Deadstock …").'); return; }
     const o = O(), R = compute();
-    const TABS = [['ringkas', 'Ringkasan optimasi DS'], ['daftar', 'Daftar DS'], ['bulan', 'Optimasi per bulan'], ['pivot', 'Pivot bulan × material'], ['bau', 'Laporan BAU']];
+    const TABS = [['ringkas', 'Ringkasan optimasi DS'], ['daftar', 'Daftar DS'], ['pivot', 'Pivot bulan × material'], ['bau', 'Laporan BAU']];
+    if (o.tab === 'bulan') o.tab = 'pivot';
     if (!R.ds && o.tab !== 'bau') o.tab = 'bau';
     $('view').innerHTML = `
       ${R.ds ? '' : '<div class="banner warn"><span>File DS belum dimuat. Laporan BAU tetap bisa dipakai; ringkasan optimasi DS butuh file daftar DS akhir tahun (sheet "DS PEP"/"DS PHE", form MA-01) di folder data atau lewat <a href="#/data">Data SAP</a>.</span></div>'}
       <div class="filters"><span id="oWK"></span>
         <label class="chk" title="309 = ganti kode material. Di PHE dipakai memindah kode DS ke kode aktif sebelum dipakai."><input type="checkbox" id="o309"${o.include309 ? ' checked' : ''}> Hitung 309 (ganti kode DS ke kode aktif) sebagai pemakaian DS</label>
-        <label class="chk">BAU sesama zona <select id="oSame" aria-label="Perlakuan BAU sesama zona">${[['skip', 'tidak dihitung'], ['iu', 'dihitung sebagai Internal Usage'], ['bau', 'dihitung sebagai BAU']].map(([v, t]) => `<option value="${v}"${o.sameZona === v ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
+        <label class="chk">BAU sesama zona <select id="oSame" aria-label="Perlakuan BAU sesama zona">${[['iu', 'dihitung sebagai Internal Usage'], ['bau', 'dihitung sebagai BAU'], ['skip', 'tidak dihitung']].map(([v, t]) => `<option value="${v}"${o.sameZona === v ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
         <label class="chk">Sampai bulan <select id="oUntil" aria-label="Hitung sampai bulan"><option value="">Semua data</option>${[...new Set(R.moves.filter((m) => m.date).map((m) => ym(m.date)))].sort().map((k) => `<option value="${k}"${o.until === k ? ' selected' : ''}>${ymLabel(k)}</option>`).join('')}</select></label></div>
       <div class="tabs" role="tablist">${TABS.map(([k, t]) => `<button class="tab ${k === o.tab ? 'on' : ''}" data-t="${k}" ${!R.ds && k !== 'bau' ? 'disabled' : ''}>${t}</button>`).join('')}</div>
       <div id="oBody"></div>`;
@@ -45,7 +48,7 @@
     $('oUntil').onchange = (e) => { o.until = e.target.value; saveOpt(); route(); };
     const wks = [...new Set((R.ds ? R.ds.rows.map((r) => r.wk) : []).concat(R.moves.map((m) => m.wk)))].filter(Boolean).sort();
     if (wks.length > 1) UI.multi($('oWK'), { label: 'WK', options: wks.map((w) => ({ value: w, label: 'WK ' + w })), selected: o.wk, onChange: () => route() });
-    ({ ringkas, daftar, bulan, pivot, bau })[o.tab](R, $('oBody'));
+    ({ ringkas, daftar, pivot, bau })[o.tab](R, $('oBody'));
   };
   const inWK = (wk) => !O().wk.size || O().wk.has(wk);
 
@@ -99,22 +102,6 @@
       { label: 'Sisa DS', num: true, filter: false, get: (r) => r.sisaUsd, html: (r) => usd(r.sisaUsd) },
       { label: 'Status', get: (r) => r.status, html: (r) => `<span class="st ${r.status === 'Habis' ? 'ok' : r.status === 'Sebagian' ? 'warn' : 'mute'}">${esc(r.status)}</span>` },
       { label: 'Gerak terakhir', get: (r) => r.last, html: (r) => (r.last ? dstr(r.last) : ''), filter: false },
-    ] });
-  }
-
-  // ---------- Optimasi per bulan ----------
-  function bulan(R, el) {
-    const o = O(), m = new Map();
-    R.ds.claims.forEach((c, mv) => { if (!inWK(c.ds.wk)) return; const k = ym(mv.date) + '|' + zonaOf(c.ds.plant); const g = m.get(k) || m.set(k, { mo: ym(mv.date), zn: zonaOf(c.ds.plant), iu: 0, bau: 0, mta: 0, k309: 0, mats: new Set() }).get(k);
-      const f = mv.grp === 'OWN USE' ? 'iu' : mv.grp === 'BAU' || mv.grp === 'MTA' ? 'bau' : 'k309'; g[f] += c.usd; g.mats.add(c.ds.key); });
-    el.innerHTML = `<p class="tab-note">Nilai DS yang terpakai per bulan dan zona (USD, harga satuan DS). Angka ini yang dilaporkan sebagai capaian optimasi DS bulanan.</p><div id="oMo"></div>`;
-    UI.table($('oMo'), { id: 'opt-bulan' + (o.include309 ? '-309' : ''), rows: [...m.values()], name: 'Optimasi DS per bulan', sort: { i: 0, dir: 1 }, cols: [
-      { label: 'Bulan', get: (g) => g.mo, html: (g) => ymLabel(g.mo) }, { label: 'Zona', get: (g) => g.zn },
-      { label: 'Material DS', num: true, filter: false, get: (g) => g.mats.size, html: (g) => fmt(g.mats.size, 0) },
-      { label: 'Internal Usage', num: true, filter: false, get: (g) => g.iu, html: (g) => usd(g.iu) },
-      { label: 'BAU', num: true, filter: false, get: (g) => g.bau, html: (g) => usd(g.bau) },
-      ...(o.include309 ? [{ label: 'Ganti kode 309', num: true, filter: false, get: (g) => g.k309, html: (g) => usd(g.k309) }] : []),
-      { label: 'Total', num: true, filter: false, get: (g) => g.iu + g.bau + g.k309, html: (g) => `<b>${usd(g.iu + g.bau + g.k309)}</b>` },
     ] });
   }
 
