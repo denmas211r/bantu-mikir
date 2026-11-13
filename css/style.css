@@ -407,3 +407,6 @@ dl.gloss { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px;
 .gd-kv { margin-bottom: 16px; background: #fff; }
 @media (max-width: 760px) { .zb-row { grid-template-columns: 104px minmax(0, 1fr) 16px; } .zb-wh { grid-template-columns: 90px minmax(0, 1fr) 16px; } }
 @media (prefers-reduced-motion: reduce) { .zb-f, .zb-list, .zb-chev { transition: none !important; } }
+.tip-u { border-bottom: 1px dotted var(--muted); cursor: help; }
+.o-kv { margin-bottom: 14px; background: #fff; } .o-kv small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+#pageActions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }

@@ -71,7 +71,7 @@ async function startSession(user, role, key, raw) {
   await Cache.init(raw);
   const data = await Vault.decryptJSON(key, await (await fetch('data/data.enc.json', { cache: 'no-store' })).json());
   S = { role, data, user, mb52: null, mrpWB: null, rkmFiles: [], mrpRes: null, rkmMatched: [], mrp: null,
-    mrpPlants: new Set(store.get('mrpPlants') || DEFAULT_MRP_PLANTS), set: Object.assign({ basis: 'hist', lliLT: 6, method: 'tko', tko: {}, kurs: 18150, zona: {}, wkCur: { PEP: 'IDR', PHE: 'USD' }, pheLT: 3 }, store.get('settings') || {}), mrpWK: store.get('mrpWK') || 'PEP', rkmTab: 'vs', src: {}, raw: {}, dash: { cur: 'IDR', wh: new Set(), zona: new Set(), wk: new Set(), open: new Set() }, gd: { cur: 'IDR', wh: new Set(), zona: new Set(), wk: new Set() }, cariView: store.get('cariView') || 'matriks', cariWK: store.get('cariWK') || 'all', kView: store.get('kView') || 'kartu' };
+    mrpPlants: new Set(store.get('mrpPlants') || DEFAULT_MRP_PLANTS), set: Object.assign({ basis: 'hist', lliLT: 6, method: 'tko', tko: {}, kurs: 18150, zona: {}, wkCur: { PEP: 'IDR', PHE: 'USD' }, pheLT: 3 }, store.get('settings') || {}), mrpWK: store.get('mrpWK') || 'PEP', rkmTab: 'mrp', src: {}, raw: {}, dash: { cur: 'IDR', wh: new Set(), zona: new Set(), wk: new Set(), open: new Set() }, gd: { cur: 'IDR', wh: new Set(), zona: new Set(), wk: new Set() }, cariView: store.get('cariView') || 'matriks', cariWK: store.get('cariWK') || 'all', kView: store.get('kView') || 'kartu' };
   $('login').hidden = true; $('app').hidden = false;
   $('whoName').textContent = S.user; $('whoRole').textContent = role; $('avatar').textContent = S.user[0].toUpperCase();
   buildNav(); route(); initFolder();
@@ -165,6 +165,38 @@ function mrpSwitch() {
   $('pageActions').insertAdjacentHTML('afterbegin', '<span id="mrpWK"></span>');
   UI.seg($('mrpWK'), ws.map((w) => [w, `WK ${w} (${w === 'PEP' ? '100' : '180'})`]), S.mrpWK, (v) => { S.mrpWK = v; store.set('mrpWK', v); route(); });
 }
+// Stok lain = in transit + valuation type selain ZNORMAL (tidak mengurangi To Order); rinciannya di tooltip
+const stokLainN = (r) => (r.transit || 0) + (r.stockOther || 0);
+const stokLain = (r) => { const n = stokLainN(r); if (!n) return ''; const t = [r.transit ? 'In transit ' + fmt(r.transit) : '', r.stockOther ? r.otherVal || 'Val. type lain ' + fmt(r.stockOther) : ''].filter(Boolean).join(' · ');
+  return `<span class="tip-u" title="${esc(t)}">${fmt(n)}</span>`; };
+const STOK_LAIN_COL = ['Stok lain', stokLain, 'num', stokLainN];
+// Tombol di atas halaman MRP: metode (TKO / Excel / Bandingkan) dan kebutuhan (Histori / Histori + RKM sebagai pembanding)
+function mrpView() {
+  const V = { cmp: !!store.get('mrpCmp'), rkm: !!store.get('mrpRkm') };
+  $('pageActions').insertAdjacentHTML('beforeend', '<span id="mMeth" title="Metode hitung Min/Max. Bandingkan = TKO dan Excel berdampingan"></span><span id="mRkm" title="Histori tetap dasar hitungan; RKM ditampilkan sebagai pembanding"></span>');
+  UI.seg($('mMeth'), [['tko', 'TKO'], ['excel', 'Excel'], ['cmp', 'Bandingkan']], V.cmp ? 'cmp' : S.set.method, (v) => {
+    store.set('mrpCmp', v === 'cmp');
+    if (v !== 'cmp' && S.set.method !== v) { S.set.method = v; store.set('settings', S.set); recompute(); }
+    route(); });
+  UI.seg($('mRkm'), [['h', 'Histori'], ['r', 'Histori + RKM']], V.rkm ? 'r' : 'h', (v) => { store.set('mrpRkm', v === 'r'); route(); });
+  return V;
+}
+// Long Lead Item dari RKM: bulan pesan paling lambat = bulan butuh − lead time
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+const mLabel = (idx) => MON[((idx % 12) + 12) % 12] + ' ' + Math.floor(idx / 12);
+function lliRows() {
+  const today = new Date(), nowIdx = today.getFullYear() * 12 + today.getMonth();
+  const lt = (x) => (x.key && S.mrpRes.get(x.key) ? S.mrpRes.get(x.key).lt : x.master ? x.master.lt : null);
+  const needMonth = (x) => { const i = x.months.findIndex((v) => v > 0); return i < 0 ? { i: 0, known: false } : { i, known: true }; };
+  return (S.rkmMatched || []).map((x) => ({ x, lt: lt(x), r: x.key ? S.mrpRes.get(x.key) : null })).filter((o) => o.lt != null && o.lt >= S.set.lliLT).map((o) => {
+    const nm = needMonth(o.x); const need = 2027 * 12 + nm.i; const due = need - Math.ceil(o.lt);
+    const cover = o.r ? o.r.stock + o.r.ospo : 0; const ok = cover >= o.x.total;
+    const st = ok ? ['Tercukupi stok/PO', 'ok'] : due < nowIdx ? ['Terlambat pesan', 'low'] : due - nowIdx <= 1 ? ['Pesan bulan ini', 'warn'] : ['Terjadwal', 'info'];
+    return Object.assign(o, { nm, due, cover, st });
+  }).sort((a, b) => a.due - b.due);
+}
+// Sumber kebutuhan order: Program/On Demand dihitung dari RKM + reservasi, sisanya dari Min/Max histori
+const orderSrc = (r) => (/^(Program|On Demand)/.test(r.cls || '') ? 'RKM + reservasi' : 'Min/Max histori');
 const mrpRows = () => (S.mrpRes ? [...S.mrpRes.values()].filter((r) => r.wk === S.mrpWK && S.mrpPlants.has(r.plant)) : []);
 const mrpNote = () => { if (S.mrpWK !== 'PHE' || !S.mrpWB_PHE) return ''; const w = S.mrpWB_PHE;
   return `<div class="banner warn"><span>MRP WK PHE sementara dihitung dari MB52 + MB51 client 180 (histori ${esc(w.window[0])} s.d. ${esc(w.window[1])}, ${fmt(w.monthsSpan, 1)} bulan). ${w.histShort ? 'Histori masih pendek, jadi AMU dan aging belum bisa diandalkan. ' : ''}Lead time dari master MRP PEP kalau kode materialnya sama, selain itu ${fmt(S.set.pheLT || 3, 1)} bulan (atur di <a href="#/pengaturan">Pengaturan</a>).</span></div>`; };
@@ -286,7 +318,7 @@ const agingPill = (a) => pill(a || '-', a === 'FS' ? 'ok' : a === 'MD' ? 'info' 
 // cols lama: [judul, fn(row)->html, kelas ('num'), fn(row)->nilai mentah, filter?]
 const HIDE = {};
 Object.assign(HIDE, {
-  'rkmTab:vs': ['Basis', 'Cocok via', 'OS PO/RO'], 'rkmTab:noMrp': ['Remarks', 'Unit'], 'rkmTab:order': ['MB25', 'RKM 2027', 'Kelas'], 'rkmTab:cmp': ['Kelas TKO', 'Catatan'],
+  'rkmTab:rkm': ['Cocok via', 'Remarks', 'Di master LeadTime?'], 'rkmTab:mrp': ['Catatan TKO'],
   'kTab:list': ['Terpakai', 'Item', 'PIC'], 'kTab:renew': ['Terpakai', 'Item', 'Target'], 'kTab:open': ['Jenis'], 'kTab:late': ['Jenis'],
   'oTab:ro': ['Mata uang', 'PIC', 'Sisa hari', 'UoM', 'Harga kontrak'], 'oTab:pr': ['Mata uang', 'Kelas', 'Sumber harga'], 'oTab:kandidat': ['Sumber harga'], 'eTab:resv': ['Mvt'],
 });
@@ -392,65 +424,63 @@ const PAGES = {
     if (S.mrpWK === 'PHE') return rkmPHE(res);
     const M = S.rkmMatched, rkmPlants = new Set(S.rkmFiles.map((f) => f.plant).filter(Boolean));
     const rkmKeys = new Set(M.filter((x) => x.key).map((x) => x.key));
-    const today = new Date(); const nowIdx = today.getFullYear() * 12 + today.getMonth();
-    const lt = (x) => (x.key && S.mrpRes.get(x.key) ? S.mrpRes.get(x.key).lt : x.master ? x.master.lt : null);
-    const needMonth = (x) => { const i = x.months.findIndex((v) => v > 0); return i < 0 ? { i: 0, known: false } : { i, known: true }; };
     const vs = M.filter((x) => x.key).map((x) => ({ x, r: S.mrpRes.get(x.key) }));
     const noMrp = M.filter((x) => !x.key).map((x) => {
       const m = x.master; const sug = m && m.lt != null ? MRP.calc({ usage36: [], amuSum: 0, lt: m.lt, hasContract: m.hasContract, rkmYear: x.total, agingOverride: 'DS' }, { basis: 'rkm-new' }) : null;
       return { x, sug };
     });
     const noRkm = res.filter((r) => rkmPlants.has(r.plant) && !rkmKeys.has(r.key) && (r.aging === 'FS' || r.aging === 'MD'));
-    const lli = M.map((x) => ({ x, lt: lt(x), r: x.key ? S.mrpRes.get(x.key) : null })).filter((o) => o.lt != null && o.lt >= S.set.lliLT).map((o) => {
-      const nm = needMonth(o.x); const need = 2027 * 12 + nm.i; const due = need - Math.ceil(o.lt);
-      const cover = o.r ? o.r.stock + o.r.ospo : 0; const ok = cover >= o.x.total;
-      const st = ok ? ['Tercukupi stok/PO', 'ok'] : due < nowIdx ? ['Terlambat pesan', 'low'] : due - nowIdx <= 1 ? ['Pesan bulan ini', 'warn'] : ['Terjadwal', 'info'];
-      return Object.assign(o, { nm, due, cover, st });
-    }).sort((a, b) => a.due - b.due);
-    const orders = res.filter((r) => r.toOrder > 0).sort((a, b) => b.toOrder - a.toOrder);
     const sehat = res.filter((r) => r.berlebih || (r.method === 'tko' ? r.aging === 'DS' && r.stock > 0 : false) || (r.surplus > 0 && r.stock > 0)).sort((a, b) => (b.surplus || 0) - (a.surplus || 0));
-    const diffKey = (r) => { const a = r.alt.excel, b = r.alt.tko; return a.aging !== b.aging || (a.min2 || 0) !== (b.min2 || 0) || (a.max2 || 0) !== (b.max2 || 0) || a.toOrder !== b.toOrder; };
-    const cmp = res.filter(diffKey);
-    const mLabel = (idx) => ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'][((idx % 12) + 12) % 12] + ' ' + Math.floor(idx / 12);
     const amu12 = (r) => r.amuHist * 12;
+    const V = mrpView();
+    // RKM per Material|Plant: total + rincian bulan (untuk tooltip)
+    const rkmBy = new Map(); M.filter((x) => x.key).forEach((x) => { const o = rkmBy.get(x.key) || rkmBy.set(x.key, { total: 0, months: new Array(12).fill(0), fungsi: new Set() }).get(x.key); o.total += x.total; x.months.forEach((v, k) => (o.months[k] += v || 0)); if (x.fungsi) o.fungsi.add(x.fungsi); });
+    const MN = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    const rkmTip = (o) => (o ? `RKM 2027: ${o.months.map((v, k) => (v ? MN[k] + ' ' + fmt(v) : '')).filter(Boolean).join(', ') || 'bulan tidak diisi'}${o.fungsi.size ? ' · ' + [...o.fungsi].join(', ') : ''}` : '');
+    const selisih = (d) => (d == null ? '' : `<span class="${d > 0 ? 'warn' : ''}">${d > 0 ? '+' : ''}${fmt(d)}</span>`);
+    const matA = (r) => `<a class="mono mlink" href="#" data-mat="${esc(r.material)}">${esc(r.material)}</a>`;
+    const oaCol = ['Kontrak (OA)', (r) => (r.oa ? `<a href="#" class="mono oalink" data-oa="${esc(r.oa)}">${esc(r.oa)}</a>` : pill('PR + OE', 'mute')), '', (r) => r.oa || 'PR + OE'];
+    const rkmCols = V.rkm ? [['RKM 2027', (r) => { const o = rkmBy.get(r.key); return o ? `<span class="tip-u" title="${esc(rkmTip(o))}">${fmt(o.total)}</span>` : ''; }, 'num', (r) => (rkmBy.get(r.key) || {}).total || ''],
+      ['Selisih', (r) => { const o = rkmBy.get(r.key); return o ? selisih(o.total - amu12(r)) : ''; }, 'num', (r) => { const o = rkmBy.get(r.key); return o ? o.total - amu12(r) : ''; }]] : [];
+    const one = [['Min', (r) => fmt(r.min2), 'num', (r) => r.min2], ['Max', (r) => fmt(r.max2), 'num', (r) => r.max2], ['To Order', (r) => calcA(r, r.toOrder ? pill(fmt(r.toOrder), 'warn') : '0'), 'num', (r) => r.toOrder]];
+    const E = (r) => r.alt.excel, K = (r) => r.alt.tko;
+    const beda = (r) => E(r).aging !== K(r).aging || (E(r).min2 || 0) !== (K(r).min2 || 0) || (E(r).max2 || 0) !== (K(r).max2 || 0) || E(r).toOrder !== K(r).toOrder;
+    const two = [['Aging Excel → TKO', (r) => (E(r).aging === K(r).aging ? esc(K(r).aging) : `${esc(E(r).aging)} → <b>${esc(K(r).aging)}</b>`), '', (r) => E(r).aging + '→' + K(r).aging],
+      ['Min Excel', (r) => fmt(E(r).min2), 'num', (r) => E(r).min2], ['Min TKO', (r) => `<b>${fmt(K(r).min2)}</b>`, 'num', (r) => K(r).min2],
+      ['Max Excel', (r) => fmt(E(r).max2), 'num', (r) => E(r).max2], ['Max TKO', (r) => `<b>${fmt(K(r).max2)}</b>`, 'num', (r) => K(r).max2],
+      ['Order Excel', (r) => fmt(E(r).toOrder), 'num', (r) => E(r).toOrder], ['Order TKO', (r) => `<b>${fmt(K(r).toOrder)}</b>`, 'num', (r) => K(r).toOrder],
+      ['Beda?', (r) => (beda(r) ? pill('Beda', 'warn') : ''), '', (r) => (beda(r) ? 'Beda' : 'Sama')], ['Catatan TKO', (r) => esc(K(r).note || ''), '', (r) => K(r).note || '']];
+    const mrpCols = [['Plant', (r) => esc(r.plant)], ['Material', matA, '', (r) => r.material], ['Deskripsi', (r) => esc(r.desc)], ['Aging', (r) => agingPill(r.aging), '', (r) => r.aging],
+      ['Pakai/thn', (r) => fmt(amu12(r)), 'num', amu12], ...rkmCols,
+      ['Stok ZNORMAL', (r) => fmt(r.stock), 'num', (r) => r.stock], STOK_LAIN_COL, ['OS PO/RO', (r) => fmt(r.ospo), 'num', (r) => r.ospo],
+      ...(V.cmp ? two : one), ...(V.cmp ? [] : [oaCol])];
+
+    // RKM: satu tabel, status Cocok / RKM tanpa MRP / MRP tanpa RKM
+    const rkmRows = vs.map((o) => ({ st: 'Cocok', x: o.x, r: o.r })).concat(noMrp.map((o) => ({ st: 'RKM tanpa MRP', x: o.x, sug: o.sug })), noRkm.map((r) => ({ st: 'MRP tanpa RKM', r })));
+    const stPill = { Cocok: 'ok', 'RKM tanpa MRP': 'warn', 'MRP tanpa RKM': 'mute' };
+    const rk = [['Status', (o) => pill(o.st, stPill[o.st]), '', (o) => o.st], ['Fungsi', (o) => esc(o.x ? o.x.fungsi : '')], ['Plant', (o) => esc(o.r ? o.r.plant : o.x.plant || '')],
+      ['KIMAP', (o) => (o.r ? `<a class="mono mlink" href="#" data-mat="${esc(o.r.material)}">${esc((o.x && o.x.kimap) || o.r.material)}</a>` : o.x.kimap ? `<span class="mono">${esc(o.x.kimap)}</span>` : pill('tanpa KIMAP', 'low')), '', (o) => (o.x && o.x.kimap) || (o.r && o.r.material) || ''],
+      ['Deskripsi', (o) => esc(o.x ? o.x.desc : o.r.desc)],
+      ['RKM 2027', (o) => (o.x ? fmt(o.x.total) : ''), 'num', (o) => (o.x ? o.x.total : '')], ['Pakai/thn', (o) => (o.r ? fmt(amu12(o.r)) : ''), 'num', (o) => (o.r ? amu12(o.r) : '')],
+      ['Selisih', (o) => (o.x && o.r ? selisih(o.x.total - amu12(o.r)) : ''), 'num', (o) => (o.x && o.r ? o.x.total - amu12(o.r) : '')],
+      ['Aging', (o) => (o.r ? agingPill(o.r.aging) : ''), '', (o) => (o.r ? o.r.aging : '')], ['Stok ZNORMAL', (o) => (o.r ? fmt(o.r.stock) : ''), 'num', (o) => (o.r ? o.r.stock : '')],
+      ['Min', (o) => (o.r ? fmt(o.r.min2) : o.sug ? `<span class="muted" title="Usulan dari RKM (belum ada di MRP)">${fmt(o.sug.min2)}</span>` : ''), 'num', (o) => (o.r ? o.r.min2 : o.sug ? o.sug.min2 : '')],
+      ['Max', (o) => (o.r ? fmt(o.r.max2) : o.sug ? `<span class="muted" title="Usulan dari RKM (belum ada di MRP)">${fmt(o.sug.max2)}</span>` : ''), 'num', (o) => (o.r ? o.r.max2 : o.sug ? o.sug.max2 : '')],
+      ['To Order', (o) => (o.r ? calcA(o.r, o.r.toOrder ? pill(fmt(o.r.toOrder), 'warn') : '0') : ''), 'num', (o) => (o.r ? o.r.toOrder : '')],
+      ['Di master LeadTime?', (o) => (o.st === 'RKM tanpa MRP' ? (o.x.master ? 'Ada' : 'Tidak') : ''), '', (o) => (o.st === 'RKM tanpa MRP' ? (o.x.master ? 'Ada' : 'Tidak') : '')],
+      ['Cocok via', (o) => esc(o.x ? o.x.how || '' : '')], ['Remarks', (o) => esc(o.x ? o.x.remarks || '' : '')]];
 
     const TABS = {
-      vs: ['RKM vs MRP', vs, [['Fungsi', (o) => esc(o.x.fungsi)], ['KIMAP', (o) => `<a class="mono mlink" href="#" data-mat="${esc(o.r.material)}">${esc(o.x.kimap || o.r.material)}</a>`], ['Deskripsi', (o) => esc(o.x.desc)],
-        ['RKM 2027', (o) => fmt(o.x.total), 'num', (o) => o.x.total], ['Histori/thn', (o) => fmt(amu12(o.r)), 'num', (o) => amu12(o.r)],
-        ['Selisih', (o) => { const d = o.x.total - amu12(o.r); return `<span class="${d > 0 ? 'warn' : ''}">${d > 0 ? '+' : ''}${fmt(d)}</span>`; }, 'num', (o) => o.x.total - amu12(o.r)],
-        ['Aging', (o) => agingPill(o.r.aging), '', (o) => o.r.aging], ['Stok ZNORMAL', (o) => fmt(o.r.stock), 'num', (o) => o.r.stock], ['In transit', (o) => (o.r.transit ? fmt(o.r.transit) : ''), 'num', (o) => o.r.transit || 0], ['Val. type lain', (o) => (o.r.stockOther ? `<span title="${esc(o.r.otherVal)}">${fmt(o.r.stockOther)}</span>` : ''), 'num', (o) => o.r.stockOther || 0], ['OS PO/RO', (o) => fmt(o.r.ospo), 'num', (o) => o.r.ospo],
-        ['Min', (o) => fmt(o.r.min2), 'num', (o) => o.r.min2], ['Max', (o) => fmt(o.r.max2), 'num', (o) => o.r.max2], ['To Order', (o) => calcA(o.r, o.r.toOrder ? pill(fmt(o.r.toOrder), 'warn') : '0'), 'num', (o) => o.r.toOrder],
-        ['Basis', (o) => esc(o.r.basis)], ['Cocok via', (o) => esc(o.x.how)]], (o) => o.x.kimap + ' ' + o.x.desc + ' ' + o.x.fungsi],
-      noMrp: ['RKM tanpa MRP', noMrp, [['Fungsi', (o) => esc(o.x.fungsi)], ['KIMAP', (o) => (o.x.kimap ? `<span class="mono">${esc(o.x.kimap)}</span>` : pill('tanpa KIMAP', 'low')), '', (o) => o.x.kimap],
-        ['Deskripsi', (o) => esc(o.x.desc)], ['Unit', (o) => esc(o.x.unit)], ['RKM 2027', (o) => fmt(o.x.total), 'num', (o) => o.x.total],
-        ['Di master LeadTime?', (o) => (o.x.master ? pill('Ada', 'ok') : pill('Tidak', 'mute')), '', (o) => (o.x.master ? 'Ada' : 'Tidak')], ['LT (bln)', (o) => (o.x.master ? fmt(o.x.master.lt) : '-'), 'num', (o) => (o.x.master ? o.x.master.lt : '')],
-        ['Usulan Min', (o) => (o.sug ? fmt(o.sug.min2) : '-'), 'num', (o) => (o.sug ? o.sug.min2 : '')], ['Usulan Max', (o) => (o.sug ? fmt(o.sug.max2) : '-'), 'num', (o) => (o.sug ? o.sug.max2 : '')],
-        ['Remarks', (o) => esc(o.x.remarks)]], (o) => o.x.kimap + ' ' + o.x.desc + ' ' + o.x.fungsi],
-      noRkm: ['MRP tanpa RKM', noRkm, [['Plant', (r) => esc(r.plant)], ['Material', (r) => `<a class="mono mlink" href="#" data-mat="${esc(r.material)}">${esc(r.material)}</a>`], ['Deskripsi', (r) => esc(r.desc)], ['Aging', (r) => agingPill(r.aging), '', (r) => r.aging],
-        ['Histori/thn', (r) => fmt(amu12(r)), 'num', amu12], ['Stok', (r) => fmt(r.stock), 'num', (r) => r.stock], ['Min', (r) => fmt(r.min2), 'num', (r) => r.min2], ['Max', (r) => fmt(r.max2), 'num', (r) => r.max2],
-        ['To Order', (r) => calcA(r, fmt(r.toOrder)), 'num', (r) => r.toOrder]], (r) => r.material + ' ' + r.desc],
-      lli: [`Long Lead Item (LT ≥ ${S.set.lliLT} bln)`, lli, [['Fungsi', (o) => esc(o.x.fungsi)], ['KIMAP', (o) => `<span class="mono">${esc(o.x.kimap)}</span>`], ['Deskripsi', (o) => esc(o.x.desc)],
-        ['LT (bln)', (o) => fmt(o.lt), 'num', (o) => o.lt], ['RKM 2027', (o) => fmt(o.x.total), 'num', (o) => o.x.total],
-        ['Butuh mulai', (o) => mLabel(2027 * 12 + o.nm.i) + (o.nm.known ? '' : ' *'), '', (o) => mLabel(2027 * 12 + o.nm.i)], ['Pesan paling lambat', (o) => `<b>${mLabel(o.due)}</b>`, '', (o) => mLabel(o.due)],
-        ['Stok + PO', (o) => (o.r ? fmt(o.cover) : '-'), 'num', (o) => o.cover], ['Status', (o) => pill(o.st[0], o.st[1]), '', (o) => o.st[0]]], (o) => o.x.kimap + ' ' + o.x.desc],
-      order: ['Perlu order (To Order)', orders, [['Plant', (r) => esc(r.plant)], ['Material', (r) => `<a class="mono mlink" href="#" data-mat="${esc(r.material)}">${esc(r.material)}</a>`], ['Deskripsi', (r) => esc(r.desc)], ['Aging', (r) => agingPill(r.aging), '', (r) => r.aging],
-        ['Stok ZNORMAL', (r) => fmt(r.stock), 'num', (r) => r.stock], ['In transit', (r) => (r.transit ? fmt(r.transit) : ''), 'num', (r) => r.transit || 0], ['Val. type lain', (r) => (r.stockOther ? `<span title="${esc(r.otherVal)}">${fmt(r.stockOther)}</span>` : ''), 'num', (r) => r.stockOther || 0], ['OS PO/RO', (r) => fmt(r.ospo), 'num', (r) => r.ospo], ['MB25', (r) => fmt(r.mb25), 'num', (r) => r.mb25], ['Min', (r) => fmt(r.min2), 'num', (r) => r.min2], ['Max', (r) => fmt(r.max2), 'num', (r) => r.max2],
-        ['To Order', (r) => calcA(r, pill(fmt(r.toOrder), 'warn')), 'num', (r) => r.toOrder], ['RKM 2027', (r) => fmt(r.rkm), 'num', (r) => r.rkm], ['Kelas', (r) => esc(r.cls || r.aging), '', (r) => r.cls || r.aging],
-        ['Kontrak (OA)', (r) => (r.oa ? `<span class="mono">${esc(r.oa)}</span>` : pill('PR + OE', 'mute')), '', (r) => r.oa || 'PR + OE']], (r) => r.material + ' ' + r.desc + ' ' + r.oa],
-      sehat: ['Penyehatan stok', sehat, [['Plant', (r) => esc(r.plant)], ['Material', (r) => `<a class="mono mlink" href="#" data-mat="${esc(r.material)}">${esc(r.material)}</a>`], ['Deskripsi', (r) => esc(r.desc)], ['Aging', (r) => agingPill(r.aging), '', (r) => r.aging],
+      mrp: ['MRP', res, mrpCols, (r) => r.material + ' ' + r.desc + ' ' + (r.oa || ''), '', null, V.cmp ? 1750 : V.rkm ? 1350 : 0],
+      // (lebar minimum: tabel geser ke samping kalau kolom banyak)
+      rkm: ['RKM', rkmRows, rk, (o) => [o.x && o.x.kimap, o.x && o.x.desc, o.x && o.x.fungsi, o.r && o.r.material, o.r && o.r.desc].filter(Boolean).join(' '), '', null, 1300],
+      sehat: ['Penyehatan stok', sehat, [['Plant', (r) => esc(r.plant)], ['Material', matA, '', (r) => r.material], ['Deskripsi', (r) => esc(r.desc)], ['Aging', (r) => agingPill(r.aging), '', (r) => r.aging],
         ['Stok', (r) => fmt(r.stock), 'num', (r) => r.stock], ['Max', (r) => fmt(r.max2), 'num', (r) => r.max2], ['Surplus', (r) => fmt(r.surplus), 'num', (r) => r.surplus],
         ['Cakupan (bln)', (r) => (r.cover == null ? '-' : isFinite(r.cover) ? fmt(r.cover, 1) : '∞'), 'num', (r) => (isFinite(r.cover) ? r.cover : '')],
         ['Kategori', (r) => (r.aging === 'DS' && r.stock > 0 ? pill('Kandidat dead stock', 'low') : r.berlebih ? pill('Berlebih', 'warn') : pill('Di atas Max', 'mute')), '', (r) => (r.aging === 'DS' && r.stock > 0 ? 'Kandidat dead stock' : r.berlebih ? 'Berlebih' : 'Di atas Max')]], (r) => r.material + ' ' + r.desc],
-      cmp: ['Banding Excel vs TKO', cmp, [['Plant', (r) => esc(r.plant)], ['Material', (r) => `<a class="mono mlink" href="#" data-mat="${esc(r.material)}">${esc(r.material)}</a>`], ['Deskripsi', (r) => esc(r.desc)],
-        ['Aging Excel→TKO', (r) => `${esc(r.alt.excel.aging)} → <b>${esc(r.alt.tko.aging)}</b>`, '', (r) => r.alt.excel.aging + '→' + r.alt.tko.aging],
-        ['Min Excel', (r) => fmt(r.alt.excel.min2), 'num', (r) => r.alt.excel.min2], ['Min TKO', (r) => `<b>${fmt(r.alt.tko.min2)}</b>`, 'num', (r) => r.alt.tko.min2],
-        ['Max Excel', (r) => fmt(r.alt.excel.max2), 'num', (r) => r.alt.excel.max2], ['Max TKO', (r) => `<b>${fmt(r.alt.tko.max2)}</b>`, 'num', (r) => r.alt.tko.max2],
-        ['Order Excel', (r) => fmt(r.alt.excel.toOrder), 'num', (r) => r.alt.excel.toOrder], ['Order TKO', (r) => `<b>${fmt(r.alt.tko.toOrder)}</b>`, 'num', (r) => r.alt.tko.toOrder],
-        ['Kelas TKO', (r) => esc(r.alt.tko.cls), '', (r) => r.alt.tko.cls], ['Catatan', (r) => esc(r.alt.tko.note), '', (r) => r.alt.tko.note]], (r) => r.material + ' ' + r.desc],
     };
-    TABS.lli[4] = 'Bulan kebutuhan bertanda * tidak diisi di RKM, sehingga dianggap mulai Januari 2027.';
-    const top = (!S.rkmFiles.length ? `<div class="banner warn">Belum ada file RKM. Tab "Perlu order" tetap dihitung dari histori pemakaian.</div>` : '') +
-      `<p class="source">WK PEP. Metode ${esc(S.set.method === 'tko' ? 'TKO/Pedoman' : 'Excel lama')}, histori s.d. ${esc(S.mrpWB.window[1])}, basis kebutuhan ${esc(BASIS[S.set.basis].toLowerCase())}. <a href="#/pengaturan">Ubah</a></p>`;
+    if (S.rkmTab === 'vs' || S.rkmTab === 'noMrp' || S.rkmTab === 'noRkm') S.rkmTab = 'rkm';
+    const top = !S.rkmFiles.length && V.rkm ? `<div class="banner warn">Belum ada file RKM. Taruh file RKM di folder data atau upload di Data SAP.</div>` : '';
     tabbed('rkmTab', TABS, top);
   },
 
@@ -544,16 +574,13 @@ const PAGES = {
 
 // RKM x MRP untuk WK PHE: belum ada RKM dan file MRP, jadi hanya hasil mesin MRP dari MB52 + MB51
 function rkmPHE(res) {
-  const orders = res.filter((r) => r.toOrder > 0).sort((a, b) => b.toOrder - a.toOrder);
   const pakai = res.filter((r) => r.amu > 0).sort((a, b) => b.amu - a.amu);
   const sehat = res.filter((r) => r.berlebih && r.stock > 0).sort((a, b) => (b.surplus || 0) - (a.surplus || 0));
   const mat = (r) => `<a class="mono mlink" href="#" data-mat="${esc(r.material)}">${esc(r.material)}</a>`;
   const base = [['Plant', (r) => esc(plantLabel(r.plant)), '', (r) => plantLabel(r.plant)], ['Material', mat, '', (r) => r.material], ['Deskripsi', (r) => esc(r.desc)], ['Aging', (r) => agingPill(r.aging), '', (r) => r.aging],
-    ['AMU', (r) => fmt(r.amu, 2), 'num', (r) => r.amu], ['LT', (r) => fmt(r.lt, 1) + (r.ltDefault ? ' *' : ''), 'num', (r) => r.lt], ['Stok ZNORMAL', (r) => fmt(r.stock), 'num', (r) => r.stock], ['In transit', (r) => (r.transit ? fmt(r.transit) : ''), 'num', (r) => r.transit || 0], ['Val. type lain', (r) => (r.stockOther ? `<span title="${esc(r.otherVal)}">${fmt(r.stockOther)}</span>` : ''), 'num', (r) => r.stockOther || 0], ['OS PO/RO', (r) => fmt(r.ospo), 'num', (r) => r.ospo],
+    ['AMU', (r) => fmt(r.amu, 2), 'num', (r) => r.amu], ['LT', (r) => fmt(r.lt, 1) + (r.ltDefault ? ' *' : ''), 'num', (r) => r.lt], ['Stok ZNORMAL', (r) => fmt(r.stock), 'num', (r) => r.stock], STOK_LAIN_COL, ['OS PO/RO', (r) => fmt(r.ospo), 'num', (r) => r.ospo],
     ['MB25', (r) => fmt(r.mb25), 'num', (r) => r.mb25], ['Min', (r) => fmt(r.min2), 'num', (r) => r.min2], ['Max', (r) => fmt(r.max2), 'num', (r) => r.max2]];
   const TABS = {
-    order: ['Perlu order (To Order)', orders, base.concat([['To Order', (r) => calcA(r, pill(fmt(r.toOrder), 'warn')), 'num', (r) => r.toOrder], ['Kelas', (r) => esc(r.cls || r.aging), '', (r) => r.cls || r.aging],
-      ['Kontrak (OA)', (r) => (r.oa ? `<span class="mono">${esc(r.oa)}</span>` : pill('PR + OE', 'mute')), '', (r) => r.oa || 'PR + OE']]), (r) => r.material + ' ' + r.desc, 'LT bertanda * memakai lead time default.'],
     pakai: ['Material dipakai', pakai, base.concat([['Kelas', (r) => esc(r.cls || r.aging), '', (r) => r.cls || r.aging], ['To Order', (r) => calcA(r, fmt(r.toOrder)), 'num', (r) => r.toOrder]]), (r) => r.material + ' ' + r.desc,
       'Material dengan pemakaian (Mvt Own Use + Return, tanpa network/proyek) di MB51 WK PHE.'],
     sehat: ['Penyehatan stok', sehat, base.concat([['Surplus', (r) => fmt(r.surplus), 'num', (r) => r.surplus], ['Cakupan (bln)', (r) => (isFinite(r.cover) ? fmt(r.cover, 1) : '∞'), 'num', (r) => (isFinite(r.cover) ? r.cover : '')]]), (r) => r.material + ' ' + r.desc],
@@ -768,10 +795,10 @@ function drawABC(pool, idrOf, cmoney, selTxt) {
 // ---------- Tab generik (dipakai halaman Kontrak & Order) ----------
 function tabbed(state, TABS, extraTop = '') {
   if (!TABS[S[state]]) S[state] = Object.keys(TABS)[0];
-  const key = S[state], [title, rows, cols, text, note, onRender] = TABS[key];
+  const key = S[state], [title, rows, cols, text, note, onRender, minWidth] = TABS[key];
   $('view').innerHTML = `${extraTop}<div class="tabs" role="tablist">${Object.entries(TABS).map(([k, t]) => `<button class="tab ${k === key ? 'on' : ''}" role="tab" aria-selected="${k === key}" data-t="${k}">${esc(t[0])}<span class="n">${fmt(t[1].length, 0)}</span></button>`).join('')}</div>
     ${note ? `<p class="tab-note">${note}</p>` : ''}<div id="res"></div>`;
-  UI.table($('res'), { id: state + ':' + key, rows, cols: convCols(cols, HIDE[state + ':' + key] || []), name: title, match: text ? (r, q) => hit(text(r), expand(q)) : undefined, onRender });
+  UI.table($('res'), { id: state + ':' + key, rows, cols: convCols(cols, HIDE[state + ':' + key] || []), name: title, match: text ? (r, q) => hit(text(r), expand(q)) : undefined, onRender, minWidth });
   document.querySelectorAll('.tab').forEach((b) => (b.onclick = () => { S[state] = b.dataset.t; route(); }));
 }
 const dstr = (d) => (d ? d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '-');
@@ -964,6 +991,7 @@ PAGES.order = function () {
   });
   const kandidat = [...kand.values()].sort((a, b) => b.value - a.value);
   const ven = Contract.vendors(S.me3n, S.me2n);
+  const lli = S.mrpWK === 'PEP' ? lliRows() : [];
   const roText = (doc) => { const its = ro.filter((o) => o.r.contract.doc === doc); const k = its[0].r.contract;
     return `Yth. ${k.vendor},\n\nBerikut rencana Release Order atas kontrak ${doc}:\n\n` + its.map((o, i) => `${i + 1}. ${o.r.material} - ${o.r.desc} : ${fmt(o.r.toOrder)} ${o.r.contract.uom || o.r.uom} (plant ${o.r.plant})`).join('\n') + `\n\nMohon konfirmasi ketersediaan dan jadwal pengiriman.\n\nTerima kasih.`; };
   const TABS = {
@@ -973,17 +1001,23 @@ PAGES.order = function () {
       ['Nilai', (o) => money(o.value, o.r.contract.currency), 'num', (o) => o.value], ['Mata uang', (o) => esc(o.r.contract.currency)],
       ['Sisa kontrak cukup?', (o) => (roByDoc.get(o.r.contract.doc) <= o.r.contract.sisa ? pill('Cukup', 'ok') : pill('Kurang', 'low')), '', (o) => (roByDoc.get(o.r.contract.doc) <= o.r.contract.sisa ? 'Cukup' : 'Kurang')],
       ['Sisa hari', (o) => fmt(o.r.contract.sisaHari, 0), 'num', (o) => o.r.contract.sisaHari],
+      ['Sumber', (o) => esc(orderSrc(o.r)), '', (o) => orderSrc(o.r)],
       ['Kontak', (o) => `<button class="btn ghost mail" data-doc="${esc(o.r.contract.doc)}" data-v="${esc(o.r.contract.vendorCode || o.r.contract.vendor)}">Email vendor</button>`, '', () => '', false]],
       (o) => o.r.contract.doc + ' ' + o.r.contract.vendor + ' ' + o.r.material + ' ' + o.r.desc, 'Item To Order yang tercover kontrak aktif → terbitkan RO. Kontrak dipilih dengan prioritas X07 → X02 → X10 → X03.'],
     pr: ['Draft PR + OE (tanpa kontrak)', pr, [['Kelompok', (o) => esc(o.grp), '', (o) => o.grp], ['Plant', (o) => esc(o.r.plant)], ['Material', (o) => `<a class="mono mlink" href="#" data-mat="${esc(o.r.material)}">${esc(o.r.material)}</a>`, '', (o) => o.r.material],
       ['Deskripsi', (o) => esc(o.r.desc)], ['Qty', (o) => `<a href="#" class="calclink" data-mat="${esc(o.r.material)}" data-p="${esc(o.r.plant)}" title="Lihat rumus Min/Max dan To Order">${fmt(o.r.toOrder)}</a>`, 'num', (o) => o.r.toOrder], ['UoM', (o) => esc(o.r.uom)],
       ['Harga OE', (o) => (o.p.price ? money(o.p.price, o.p.currency) : pill('Belum ada', 'warn')), 'num', (o) => o.p.price], ['Sumber harga', (o) => esc(o.p.src)],
-      ['Nilai OE', (o) => money(o.value, o.p.currency), 'num', (o) => o.value], ['Mata uang', (o) => esc(o.p.currency)], ['Kelas', (o) => esc(o.r.cls || o.r.aging)]],
+      ['Nilai OE', (o) => money(o.value, o.p.currency), 'num', (o) => o.value], ['Mata uang', (o) => esc(o.p.currency)], ['Kelas', (o) => esc(o.r.cls || o.r.aging)], ['Sumber', (o) => esc(orderSrc(o.r)), '', (o) => orderSrc(o.r)]],
       (o) => o.grp + ' ' + o.r.material + ' ' + o.r.desc, 'Item To Order tanpa kontrak → PR + Owner Estimate. Dikelompokkan per Material Group untuk kode material baru (12 karakter), dan per 4 digit awal KIMAP untuk kode lama. Harga OE dari PO terakhir (ME2N), atau harga rata-rata stok.'],
     kandidat: ['Kandidat kontrak', kandidat, [['Kelompok', (k) => esc(k.grp), '', (k) => k.grp], ['Material', (k) => `<a class="mono mlink" href="#" data-mat="${esc(k.material)}">${esc(k.material)}</a>`, '', (k) => k.material], ['Deskripsi', (k) => esc(k.desc)],
       ['Plant', (k) => esc(k.plants.join(', '))], ['Kebutuhan/thn', (k) => fmt(k.qty) + ' ' + esc(k.uom), 'num', (k) => k.qty], ['Est. nilai/thn', (k) => money(k.value, 'IDR'), 'num', (k) => k.value],
       ['To Order sekarang', (k) => fmt(k.order), 'num', (k) => k.order], ['Sumber harga', (k) => esc(k.priceSrc)]], (k) => k.grp + ' ' + k.material + ' ' + k.desc,
       'Material rutin (FS) yang belum punya kontrak aktif. Sesuai Pedoman, item rutin/bottleneck sebaiknya dibuatkan kontrak jangka panjang (OA/COO) agar lead time turun dan stok bisa lebih tipis.'],
+    lli: [`Long Lead Item (LT ≥ ${S.set.lliLT} bln)`, lli, [['Fungsi', (o) => esc(o.x.fungsi)], ['KIMAP', (o) => `<span class="mono">${esc(o.x.kimap)}</span>`], ['Deskripsi', (o) => esc(o.x.desc)],
+      ['LT (bln)', (o) => fmt(o.lt), 'num', (o) => o.lt], ['RKM 2027', (o) => fmt(o.x.total), 'num', (o) => o.x.total],
+      ['Butuh mulai', (o) => mLabel(2027 * 12 + o.nm.i) + (o.nm.known ? '' : ' *'), '', (o) => mLabel(2027 * 12 + o.nm.i)], ['Pesan paling lambat', (o) => `<b>${mLabel(o.due)}</b>`, '', (o) => mLabel(o.due)],
+      ['Stok + PO', (o) => (o.r ? fmt(o.cover) : '-'), 'num', (o) => o.cover], ['Status', (o) => pill(o.st[0], o.st[1]), '', (o) => o.st[0]]], (o) => o.x.kimap + ' ' + o.x.desc,
+      S.rkmFiles.length ? 'Bulan bertanda * tidak diisi di RKM, dianggap mulai Januari 2027.' : 'Butuh file RKM.'],
     vendor: ['Vendor', ven, [['Kode', (v) => esc(v.code)], ['Vendor', (v) => esc(v.name)], ['Kontrak', (v) => fmt(v.kontrak, 0), 'num', (v) => v.kontrak], ['Dok. PO/RO', (v) => fmt(v.po, 0), 'num', (v) => v.po],
       ['Nilai sisa kirim', (v) => money(v.openValue, 'IDR'), 'num', (v) => v.openValue],
       ['Email', (v) => `<input class="vc" data-k="${esc(v.code || v.name)}" data-f="email" value="${esc(vc.get(v.code || v.name).email || '')}" placeholder="email">`, '', (v) => vc.get(v.code || v.name).email || ''],
@@ -991,7 +1025,16 @@ PAGES.order = function () {
       ['Nama kontak', (v) => `<input class="vc" data-k="${esc(v.code || v.name)}" data-f="pic" value="${esc(vc.get(v.code || v.name).pic || '')}" placeholder="nama">`, '', (v) => vc.get(v.code || v.name).pic || '']],
       (v) => v.code + ' ' + v.name, 'Kontak vendor hanya tersimpan di browser ini, tidak ke GitHub. Dipakai untuk tombol Email vendor di Draft RO.'],
   };
-  tabbed('oTab', TABS, mrpNote() + (S.me3n ? '' : '<div class="banner warn">Status kontrak masih dari file MRP. Tambahkan ME3N dan ME2N supaya kontrak, harga, dan OS PO terbaru.</div>'));
+  // ringkasan: berapa yang dipesan, lewat RO/PR, dan dari mana kebutuhannya (Min/Max histori atau RKM + reservasi)
+  const sumV = (xs) => xs.reduce((a, o) => a + toIDRv(o.value || 0, o.r.contract ? o.r.contract.currency : o.p && o.p.currency), 0);
+  const all = ro.concat(pr), fromRkm = all.filter((o) => orderSrc(o.r) === 'RKM + reservasi');
+  const late = lli.filter((o) => o.st[0] === 'Terlambat pesan' || o.st[0] === 'Pesan bulan ini').length;
+  const summary = `<div class="kv o-kv"><div><span>Perlu dipesan</span><b>${fmt(all.length, 0)}</b><small>material × plant</small></div><div><span>Lewat RO</span><b>${fmt(ro.length, 0)}</b><small>${money(sumV(ro), 'IDR')}</small></div>
+    <div><span>Lewat PR + OE</span><b>${fmt(pr.length, 0)}</b><small>${money(sumV(pr), 'IDR')}</small></div>
+    <div title="Item Program/On Demand: kebutuhan = RKM + reservasi − (stok + PO). Sisanya dari Min/Max histori."><span>Dari RKM + reservasi</span><b>${fmt(fromRkm.length, 0)}</b><small>${fmt(all.length - fromRkm.length, 0)} dari Min/Max histori</small></div>
+    ${S.mrpWK === 'PEP' ? `<div><span>LLI pesan bulan ini / telat</span><b class="${late ? 'neg' : ''}">${fmt(late, 0)}</b><small>dari ${fmt(lli.length, 0)} LLI</small></div>` : ''}</div>`;
+  if (S.mrpWK !== 'PEP') delete TABS.lli;
+  tabbed('oTab', TABS, mrpNote() + (S.me3n ? '' : '<div class="banner warn">Status kontrak masih dari file MRP. Tambahkan ME3N dan ME2N supaya kontrak, harga, dan OS PO terbaru.</div>') + summary);
   // event: kontak vendor & email
   const bindRes = () => {
     document.querySelectorAll('.vc').forEach((i) => (i.onchange = () => { const c = vc.get(i.dataset.k); c[i.dataset.f] = i.value.trim(); vc.set(i.dataset.k, c); }));
