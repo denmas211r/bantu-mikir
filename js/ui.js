@@ -86,6 +86,7 @@
         <label class="dt-size">Baris <select>${[25, 50, 100, 250].map((n) => `<option ${n === st.size ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
         <button type="button" class="icon-btn" data-a="prev" aria-label="Sebelumnya">${I.left}</button><button type="button" class="icon-btn" data-a="next" aria-label="Berikutnya">${I.right}</button></div></div></div>`;
     const $q = el.querySelector('.dt-search input'), thead = el.querySelector('thead'), tbody = el.querySelector('tbody');
+    if (o.minWidth) { el.querySelector('table').style.minWidth = o.minWidth + 'px'; el.querySelector('.dt-scroll').style.overflowX = 'auto'; } // tabel lebar (banyak kolom): geser ke samping, jangan dipadatkan
     let filtered = [];
     const passFilters = (r, skip) => Object.entries(st.f).every(([i, set]) => +i === skip || !set.size || set.has(keyOf(cols[i].get(r))));
     const visCols = () => cols.filter((c) => !st.hide.has(c.label));
@@ -113,7 +114,7 @@
     }
     function head() {
       // lebar kolom proporsional → tabel selalu muat selebar layar, teks panjang turun baris
-      const vc = visCols(), avail = Math.max(40, (el.clientWidth || 1000) / 8.3);
+      const vc = visCols(), avail = Math.max(40, Math.max(el.clientWidth || 1000, o.minWidth || 0) / 8.3);
       let need = vc.reduce((a, c) => a + est(c), 0);
       const shrink = new Map();
       if (need > avail) { // kecilkan kolom lebar (deskripsi) dulu, jangan kode/angka

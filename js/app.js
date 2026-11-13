@@ -1069,6 +1069,7 @@ PAGES.regulasi = function () {
         <li>KIMAP RKM = Material di MRP (plant sama)</li><li>KIMAP RKM = KIMAP Final di MRP</li>
         <li>KIMAP RKM ditemukan di master LeadTime → Material → MRP</li><li>Kalau tanpa KIMAP: deskripsi persis sama dan unik di plant itu</li></ol>
         <p class="muted small">Yang tidak cocok masuk tab "RKM tanpa MRP". Kalau ada di master LeadTime, web memberi usulan Min/Max dari RKM.</p></div>`],
+    mvt: ['Aturan Movement Type', `<p class="muted small" style="margin-bottom:10px">Cara web mengelompokkan setiap baris MB51. Kunci = Movement Type + tanda qty; penerimaan 101–106 dibedakan dari 2 digit awal No. PO (42 = STO/BAU, 94 = MTA, 92 = khusus).</p><div id="regMvt"></div>`],
     pedoman: ['Pedoman / TKO', S.regulasi ? `<div class="panel md"><p class="muted small">Dibaca dari file lokal <b>${esc(S.regulasi.name)}</b>. Tidak tersimpan di web/GitHub.</p>${md(S.regulasi.text)}</div>`
       : `<div class="panel empty"><h3>Ringkasan Pedoman belum dimuat</h3>
         <p>Isi Pedoman/TKO bersifat internal, jadi tidak disimpan di web. Taruh file ringkasan (.md) yang namanya memuat kata "regulasi" di folder data, atau pilih filenya di sini.</p>
@@ -1077,6 +1078,7 @@ PAGES.regulasi = function () {
   if (!T[S.regTab]) S.regTab = 'mrp';
   $('view').innerHTML = `<div class="tabs">${Object.entries(T).map(([k, t]) => `<button class="tab ${k === S.regTab ? 'on' : ''}" data-t="${k}">${esc(t[0])}</button>`).join('')}</div>${T[S.regTab][1]}`;
   document.querySelectorAll('.tab').forEach((b) => (b.onclick = () => { S.regTab = b.dataset.t; PAGES.regulasi(); }));
+  if ($('regMvt')) window.mvtRulesTable($('regMvt'));
   if ($('regf')) $('regf').onchange = async (e) => { const f = e.target.files[0]; if (f) { S.regulasi = { name: f.name, text: await f.text() }; PAGES.regulasi(); } };
   if ($('sim')) {
     const v = (k) => { const el = document.querySelector(`#sim [data-k="${k}"]`); return el.tagName === 'SELECT' ? el.value : parseFloat(el.value) || 0; };

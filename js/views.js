@@ -492,7 +492,7 @@
     ['FUPP Iss', 'Keluar untuk scrap/FUPP'], ['Batal FUPP', 'Pembatalan FUPP'], ['GI Adj', 'Penyesuaian stok'], ['Selisih Opname', 'Selisih stock opname'],
     ['Not Included', 'Tidak dihitung: blocked stock, dalam perjalanan, sisi lawan, atau pindah SLoc'], ['', 'Belum terklasifikasi (kunci Mvt belum ada di tabel)'],
   ];
-  const CAT_I = new Map(CAT.map(([c], i) => [c, i])), CAT_D = new Map(CAT);
+  // (urutan kategori tidak dipakai lagi sejak halaman jadi pembaca MB51)
   const catName = (c) => c || 'Belum terklasifikasi';
   const PARTY = { 'MTA Iss': 'MTA (KKKS lain)', 'Batal MTA Iss': 'MTA (KKKS lain)', 'MTA Rec': 'MTA (KKKS lain)', 'Batal MTA Rec': 'MTA (KKKS lain)', 'Maxter Rec': 'Maxter (stok khusus)', 'Batal Maxter Rec': 'Maxter (stok khusus)',
     'FUPP Iss': 'FUPP/scrap', 'Batal FUPP': 'FUPP/scrap', 'Own Use': 'Pemakai (Own Use)', 'Batal Own Use': 'Pemakai (Own Use)', 'Return': 'Pemakai (retur)', 'Batal Return': 'Pemakai (retur)',
@@ -516,10 +516,11 @@
     cache.set(S.mb51, { v: S.me2n ? S.me2n.lines.length : 0, d }); return d;
   }
 
+  // Keluar-Masuk Barang = pembaca MB51: satu tabel semua baris, setiap kolom bisa difilter, diurutkan, dan dicari
   PAGES.gerak = function () {
     if (!S.mb51) { $('view').innerHTML = needFile('file MB51', 'Pergerakan material dibaca dari MB51. Taruh semua file MB51 (misalnya per bulan) di folder data: web menggabungkannya dan membuang baris yang dobel.'); return; }
     const D = prep();
-    const G = S.gf || (S.gf = { from: '', to: '', wk: new Set(), plant: new Set(), cat: new Set(), q: '', ni: false, tab: 'ringkas', flow: '', dim: 'cat', meas: 'idr' });
+    const G = S.gf || (S.gf = { from: '', to: '', wk: new Set(), plant: new Set(), ni: false });
     if (!D.months.includes(G.to)) G.to = D.months[D.months.length - 1] || '';
     if (!D.months.includes(G.from)) G.from = D.months[Math.max(0, D.months.indexOf(G.to) - 11)] || ''; // bawaan: 12 bulan terakhir
     const plants = [...new Set(D.moves.map((x) => x.m.plant))].sort();
@@ -529,107 +530,62 @@
       ${unk.size ? `<div class="banner warn"><span>Ada ${fmt([...unk.values()].reduce((a, b) => a + b, 0), 0)} gerakan dengan kunci Mvt yang belum ada di tabel referensi: ${esc([...unk].sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k, n]) => `${k} (${n})`).join(', '))}. Kirim kategorinya supaya bisa ditambahkan.</span></div>` : ''}
       <div class="filters"><label class="select"><span>Dari</span><select class="bare" id="gFrom">${D.months.map((m) => opt(m, G.from)).join('')}</select></label>
         <label class="select"><span>Sampai</span><select class="bare" id="gTo">${D.months.map((m) => opt(m, G.to)).join('')}</select></label>
-        <span id="gWK"></span><span id="gPl"></span><span id="gCat"></span>
+        <span id="gWK"></span><span id="gPl"></span>
         <label class="chk"><input type="checkbox" id="gNI"${G.ni ? ' checked' : ''}> Tampilkan juga gerakan yang tidak dihitung</label></div>
-      <div class="tabs" role="tablist" id="gTabs"></div><p class="tab-note" id="gNote"></p><div id="gBody"></div>`;
-    const redraw = () => draw(D);
-    $('gFrom').onchange = (e) => { G.from = e.target.value; if (G.to < G.from) G.to = G.from; route(); };
-    $('gTo').onchange = (e) => { G.to = e.target.value; if (G.from > G.to) G.from = G.to; route(); };
+      <div id="gBody"></div>`;
+    const redraw = () => reader(D);
+    $('gFrom').onchange = (e) => { G.from = e.target.value; if (G.to < G.from) G.to = G.from; redraw(); };
+    $('gTo').onchange = (e) => { G.to = e.target.value; if (G.from > G.to) G.from = G.to; redraw(); };
     $('gNI').onchange = (e) => { G.ni = e.target.checked; redraw(); };
     const wks = [...new Set(D.moves.map((x) => x.m.wk))].sort();
     if (wks.length > 1) UI.multi($('gWK'), { label: 'WK', options: wks.map((w) => ({ value: w, label: 'WK ' + w })), selected: G.wk, onChange: redraw });
     UI.multi($('gPl'), { label: 'Plant', options: plants.map((p) => ({ value: p, label: plantLabel(p) })), selected: G.plant, onChange: redraw });
-    UI.multi($('gCat'), { label: 'Kategori', options: CAT.map(([c]) => ({ value: c, label: catName(c) })), selected: G.cat, onChange: redraw });
     redraw();
   };
 
-  function draw(D) {
+  function reader(D) {
     const G = S.gf;
-    const base = D.moves.filter((x) => x.month >= G.from && x.month <= G.to && (!G.wk.size || G.wk.has(x.m.wk)) && (!G.plant.size || G.plant.has(x.m.plant))
-      && (!G.cat.size || G.cat.has(x.cat)) && (G.ni || x.cat !== 'Not Included' || G.cat.has('Not Included')));
-    const TABS = [['ringkas', 'Ringkasan per kategori'], ['alur', 'Alur dari → ke'], ['rekap', 'Rekap bulanan'], ['detail', 'Detail gerakan'], ['aturan', 'Aturan MvT']];
-    $('gTabs').innerHTML = TABS.map(([k, t]) => `<button class="tab ${k === G.tab ? 'on' : ''}" data-t="${k}">${t}</button>`).join('');
-    $('gTabs').querySelectorAll('.tab').forEach((b) => (b.onclick = () => { G.tab = b.dataset.t; draw(D); }));
-    const body = $('gBody'), note = $('gNote');
-    const nMat = (xs) => new Set(xs.map((x) => x.m.material)).size;
-    const idr = (v) => money(v, 'IDR');
-
-    if (G.tab === 'ringkas') {
-      note.innerHTML = `${fmt(base.length, 0)} gerakan, ${ymLabel(G.from)} s.d. ${ymLabel(G.to)}. Nilai = Amount in LC (USD dikonversi ke IDR). Klik baris untuk melihat detailnya.`;
-      const g = new Map(); base.forEach((x) => { const o = g.get(x.cat) || g.set(x.cat, { cat: x.cat, xs: [], keys: new Set(), inQ: 0, outQ: 0 }).get(x.cat); o.xs.push(x); o.keys.add(x.m.mkey); x.m.qty > 0 ? o.inQ++ : o.outQ++; });
-      const rows = [...g.values()].sort((a, b) => (CAT_I.get(a.cat) ?? 99) - (CAT_I.get(b.cat) ?? 99));
-      UI.table(body, { id: 'gerak-ringkas2', rows, name: 'Ringkasan pergerakan', rowKey: (o) => o.cat || '-', onRow: (k) => { G.cat = new Set([k === '-' ? '' : k]); G.tab = 'detail'; route(); }, cols: [
-        { label: 'Kategori', get: (o) => catName(o.cat), html: (o) => `<b>${esc(catName(o.cat))}</b>` },
-        { label: 'Keterangan', wide: true, get: (o) => CAT_D.get(o.cat) || '' },
-        { label: 'Arah', get: (o) => (o.inQ && o.outQ ? 'Masuk & keluar' : o.inQ ? 'Masuk' : 'Keluar') },
-        { label: 'Gerakan', num: true, filter: false, get: (o) => o.xs.length, html: (o) => fmt(o.xs.length, 0) },
-        { label: 'Material', num: true, filter: false, get: (o) => nMat(o.xs), html: (o) => fmt(nMat(o.xs), 0) },
-        { label: 'Plant', num: true, filter: false, get: (o) => new Set(o.xs.map((x) => x.m.plant)).size, html: (o) => fmt(new Set(o.xs.map((x) => x.m.plant)).size, 0) },
-        { label: 'Nilai', num: true, filter: false, get: (o) => o.xs.reduce((a, x) => a + x.idr, 0), html: (o) => idr(o.xs.reduce((a, x) => a + x.idr, 0)) },
-        { label: 'Kunci Mvt', hide: true, get: (o) => [...o.keys].sort().join(', '), html: (o) => `<span class="muted small">${esc([...o.keys].sort().join(', '))}</span>` },
-      ] });
-    } else if (G.tab === 'alur') {
-      note.innerHTML = 'Asal dan tujuan disimpulkan dari MB51: transfer antar plant dipasangkan lewat Material Document yang sama (baris minus = plant asal, plus = plant tujuan); vendor diambil dari ME2N lewat nomor PO; MTA, BAU, dan Own Use dari kategori Mvt. Klik baris untuk melihat gerakannya.';
-      const g = new Map(); base.forEach((x) => { const k = x.from + '→' + x.to + '→' + x.cat; const o = g.get(k) || g.set(k, { k, from: x.from, to: x.to, cat: x.cat, xs: [], last: null }).get(k); o.xs.push(x); if (x.m.date && (!o.last || x.m.date > o.last)) o.last = x.m.date; });
-      const rows = [...g.values()];
-      UI.table(body, { id: 'gerak-alur', rows, name: 'Alur pergerakan', sort: { i: 5, dir: -1 }, rowKey: (o) => o.k, onRow: (k) => { G.flow = k; G.tab = 'detail'; draw(D); },
-        match: (o, q) => hit(o.from + ' ' + o.to + ' ' + o.cat, expand(q)), placeholder: 'Cari plant, vendor, atau kategori…', cols: [
-        { label: 'Dari', get: (o) => o.from }, { label: 'Ke', get: (o) => o.to }, { label: 'Kategori', get: (o) => catName(o.cat) },
-        { label: 'Gerakan', num: true, filter: false, get: (o) => o.xs.length, html: (o) => fmt(o.xs.length, 0) },
-        { label: 'Material', num: true, filter: false, get: (o) => nMat(o.xs), html: (o) => fmt(nMat(o.xs), 0) },
-        { label: 'Nilai', num: true, filter: false, get: (o) => o.xs.reduce((a, x) => a + x.idr, 0), html: (o) => idr(o.xs.reduce((a, x) => a + x.idr, 0)) },
-        { label: 'Terakhir', get: (o) => o.last, html: (o) => dstr(o.last), filter: false },
-      ] });
-    } else if (G.tab === 'rekap') {
-      note.innerHTML = '<span class="rk-bar"><span id="gDim"></span><span id="gMeas"></span><span class="muted">Nilai dalam IDR (rb = ribu, jt = juta, M = miliar).</span></span>';
-      const months = D.months.filter((m) => m >= G.from && m <= G.to);
-      const DIM = { cat: (x) => catName(x.cat), plant: (x) => plantLabel(x.m.plant), pc: (x) => plantLabel(x.m.plant) + '|' + catName(x.cat), mat: (x) => x.m.material + '|' + x.m.desc + '|' + x.m.uom };
-      const val = G.meas === 'n' ? () => 1 : G.meas === 'qty' ? (x) => x.m.qty : (x) => x.idr;
-      const g = new Map(); base.forEach((x) => { const k = DIM[G.dim](x); const o = g.get(k) || g.set(k, { k, by: {}, t: 0 }).get(k); const v = val(x); o.by[x.month] = (o.by[x.month] || 0) + v; o.t += v; });
-      const short = (v) => { const a = Math.abs(v); return a >= 1e12 ? fmt(v / 1e12, 1) + ' T' : a >= 1e9 ? fmt(v / 1e9, 1) + ' M' : a >= 1e6 ? fmt(v / 1e6, 1) + ' jt' : a >= 1e3 ? fmt(v / 1e3, 0) + ' rb' : fmt(v, 0); };
-      const show = (v) => (!v ? '' : G.meas === 'idr' ? short(v) : fmt(v, G.meas === 'n' ? 0 : 2));
-      const keyCols = G.dim === 'pc' ? [{ label: 'Plant', w: 1.5, get: (o) => o.k.split('|')[0] }, { label: 'Kategori', w: 1.2, get: (o) => o.k.split('|')[1] }]
-        : G.dim === 'mat' ? [{ label: 'Material', nowrap: true, get: (o) => o.k.split('|')[0], html: (o) => `<a class="mono mlink" href="#" data-mat="${esc(o.k.split('|')[0])}">${esc(o.k.split('|')[0])}</a>` }, { label: 'Deskripsi', wide: true, get: (o) => o.k.split('|')[1] }, { label: 'UoM', get: (o) => o.k.split('|')[2] }]
-        : [{ label: G.dim === 'cat' ? 'Kategori' : 'Plant', w: 1.6, get: (o) => o.k }];
-      UI.table(body, { id: 'gerak-rekap-' + G.dim + '-' + months.length, rows: [...g.values()], name: 'Rekap pergerakan bulanan', sort: { i: keyCols.length + months.length, dir: -1 }, cols: keyCols.concat(
-        months.map((mo) => ({ label: ymLabel(mo), num: true, filter: false, get: (o) => o.by[mo] || 0, html: (o) => show(o.by[mo]) })),
-        [{ label: 'Total', num: true, filter: false, get: (o) => o.t, html: (o) => `<b>${show(o.t)}</b>` }]) });
-      UI.seg($('gDim'), [['cat', 'Per kategori'], ['plant', 'Per plant'], ['pc', 'Plant × kategori'], ['mat', 'Per material']], G.dim, (v) => { G.dim = v; draw(D); });
-      UI.seg($('gMeas'), [['idr', 'Nilai'], ['n', 'Jumlah gerakan']].concat(G.dim === 'mat' ? [['qty', 'Qty']] : []), G.meas === 'qty' && G.dim !== 'mat' ? 'idr' : G.meas, (v) => { G.meas = v; draw(D); });
-    } else if (G.tab === 'aturan') {
-      note.innerHTML = 'Cara web mengklasifikasikan setiap baris MB51. Kunci = Movement Type + tanda qty; khusus penerimaan (101–106) dibedakan menurut 2 digit awal No. PO: 42 = STO (BAU), 94 = MTA, 92 = jenis khusus. Kolom "Optimasi DS" menunjukkan Mvt yang dihitung di laporan optimasi DS. Tabel dikoreksi mengikuti arti Movement Type di SAP; kolom terakhir menjelaskan bedanya dengan tabel lama.';
-      const used = new Map(); D.moves.forEach((x) => used.set(x.m.mkey, (used.get(x.m.mkey) || 0) + 1));
-      UI.table(body, { id: 'gerak-aturan', rows: Master.MVT_TABLE, name: 'Aturan MvT', placeholder: 'Cari Mvt, kategori, atau penjelasan…', match: (r, q) => hit(r.join(' '), expand(q)), cols: [
-        { label: 'Kunci', nowrap: true, get: (r) => r[0], html: (r) => `<b class="mono">${esc(r[0])}</b>` },
-        { label: 'Mvt', get: (r) => r[0].slice(0, 3) },
-        { label: 'Arah', get: (r) => (r[0].endsWith('+') ? 'Masuk (+)' : 'Keluar (−)') },
-        { label: 'Teks SAP', get: (r) => r[2] },
-        { label: 'Kategori', get: (r) => r[1], html: (r) => `<b>${esc(r[1])}</b>` },
-        { label: 'Arti di SAP', wide: true, w: 3, get: (r) => r[3] },
-        { label: 'Optimasi DS', get: (r) => r[4] === 'OWN USE' ? 'Internal Usage' : r[4] === 'BAU' ? 'BAU' : r[4] === 'MTA' ? 'MTA' : r[4] === '309' ? 'Opsional (309)' : 'Tidak dihitung' },
-        { label: 'Baris di data', num: true, filter: false, get: (r) => used.get(r[0]) || 0, html: (r) => fmt(used.get(r[0]) || 0, 0) },
-        { label: 'Koreksi dari tabel lama', wide: true, w: 2.2, get: (r) => r[5], html: (r) => (r[5] ? `<span class="muted">${esc(r[5])}</span>` : '') },
-      ] });
-    } else {
-      const fl = G.flow && base.filter((x) => x.from + '→' + x.to + '→' + x.cat === G.flow);
-      const rows = (fl || base).slice().sort((a, b) => (b.m.date || 0) - (a.m.date || 0));
-      note.innerHTML = G.flow ? `Alur <b>${esc(G.flow.split('→').slice(0, 2).join(' → '))}</b> (${esc(catName(G.flow.split('→')[2]))}). <a href="#" id="gClr">Tampilkan semua</a>` : `${fmt(rows.length, 0)} gerakan. Klik baris untuk analisis material.`;
-      if ($('gClr')) $('gClr').onclick = (e) => { e.preventDefault(); G.flow = ''; draw(D); };
-      UI.table(body, { id: 'gerak-detail', rows, name: 'Detail pergerakan material', rowKey: (x) => x.m.material, onRow: (k) => openMaterial(k),
-        match: (x, q) => hit([x.m.material, x.m.desc, x.m.matDoc, x.m.po, x.m.header, x.m.resv, x.from, x.to].join(' '), expand(q)), placeholder: 'Cari material, dokumen, PO, keterangan…', cols: [
-        { label: 'Tanggal', get: (x) => x.m.date, html: (x) => dstr(x.m.date), filter: false },
-        { label: 'Plant', get: (x) => x.m.plant },
-        { label: 'Kategori', get: (x) => catName(x.cat) },
-        { label: 'Mvt', get: (x) => x.m.mt + ' ' + x.m.mtText },
-        { label: 'Kunci Mvt', get: (x) => x.m.mkey, hide: true },
-        { label: 'Material', nowrap: true, get: (x) => x.m.material, html: (x) => `<span class="mono">${esc(x.m.material)}</span>` },
-        { label: 'Deskripsi', wide: true, get: (x) => x.m.desc },
-        { label: 'Qty', num: true, filter: false, get: (x) => x.m.qty, html: (x) => fmt(x.m.qty) + ' ' + esc(x.m.uom) },
-        { label: 'Nilai', num: true, filter: false, get: (x) => x.idr, html: (x) => money(x.m.amount, x.cur) },
-        { label: 'Dari', get: (x) => x.from }, { label: 'Ke', get: (x) => x.to },
-        { label: 'Mat. Doc', nowrap: true, get: (x) => x.m.matDoc, hide: true }, { label: 'PO/RO', nowrap: true, get: (x) => x.m.po, hide: true },
-        { label: 'Reservasi', get: (x) => x.m.resv, hide: true }, { label: 'Keterangan', get: (x) => x.m.header }, { label: 'User', get: (x) => x.m.user, hide: true },
-      ] });
-    }
+    const rows = D.moves.filter((x) => x.month >= G.from && x.month <= G.to && (!G.wk.size || G.wk.has(x.m.wk)) && (!G.plant.size || G.plant.has(x.m.plant))
+      && (G.ni || x.cat !== 'Not Included')).sort((a, b) => (b.m.date || 0) - (a.m.date || 0));
+    UI.table($('gBody'), { id: 'mb51-reader', minWidth: 1500, rows, name: 'MB51 ' + G.from + ' sd ' + G.to, rowKey: (x) => x.m.material, onRow: (k) => openMaterial(k),
+      match: (x, q) => hit([x.m.material, x.m.desc, x.m.matDoc, x.m.po, x.m.header, x.m.resv, x.m.mt, x.m.mtText, x.from, x.to].join(' '), expand(q)), placeholder: 'Cari material, deskripsi, dokumen, PO, Mvt, keterangan…', cols: [
+      { label: 'Tanggal', nowrap: true, w: 1.1, get: (x) => x.m.date, html: (x) => dstr(x.m.date) },
+      { label: 'Plant', get: (x) => x.m.plant, title: '' },
+      { label: 'SLoc', get: (x) => x.m.sloc },
+      { label: 'Mvt', get: (x) => x.m.mt, html: (x) => `<span title="${esc(x.m.mtText)}">${esc(x.m.mt)}</span>` },
+      { label: 'Teks Mvt', get: (x) => x.m.mtText, hide: true },
+      { label: 'Kategori', get: (x) => catName(x.cat) },
+      { label: 'Material', nowrap: true, w: 1.4, get: (x) => x.m.material, html: (x) => `<span class="mono">${esc(x.m.material)}</span>` },
+      { label: 'Deskripsi', wide: true, get: (x) => x.m.desc },
+      { label: 'Qty', num: true, get: (x) => x.m.qty, html: (x) => fmt(x.m.qty) },
+      { label: 'UoM', get: (x) => x.m.uom },
+      { label: 'Nilai', num: true, get: (x) => x.m.amount, html: (x) => money(x.m.amount, x.cur) },
+      { label: 'Mata uang', get: (x) => x.cur, hide: true },
+      { label: 'PO/RO', nowrap: true, get: (x) => x.m.po },
+      { label: 'Item', get: (x) => x.m.poItem, hide: true },
+      { label: 'Dari', get: (x) => x.from }, { label: 'Ke', get: (x) => x.to },
+      { label: 'Header text', get: (x) => x.m.header },
+      { label: 'Mat. Doc', nowrap: true, get: (x) => x.m.matDoc, hide: true },
+      { label: 'Val. type', get: (x) => x.m.batch, hide: true },
+      { label: 'Reservasi', get: (x) => x.m.resv, hide: true },
+      { label: 'User', get: (x) => x.m.user, hide: true },
+      { label: 'Reference', get: (x) => x.m.ref, hide: true },
+    ] });
   }
+
+  // Tabel aturan Movement Type → kategori (ditampilkan di Panduan & Aturan)
+  window.mvtRulesTable = function (el) {
+    const used = new Map(); (S.mb51 ? S.mb51.moves : []).forEach((m) => used.set(m.mkey, (used.get(m.mkey) || 0) + 1));
+    UI.table(el, { id: 'gerak-aturan', rows: Master.MVT_TABLE, name: 'Aturan MvT', placeholder: 'Cari Mvt, kategori, atau penjelasan…', match: (r, q) => hit(r.join(' '), expand(q)), cols: [
+      { label: 'Kunci', nowrap: true, get: (r) => r[0], html: (r) => `<b class="mono">${esc(r[0])}</b>` },
+      { label: 'Mvt', get: (r) => r[0].slice(0, 3) },
+      { label: 'Arah', get: (r) => (r[0].endsWith('+') ? 'Masuk (+)' : 'Keluar (−)') },
+      { label: 'Teks SAP', get: (r) => r[2] },
+      { label: 'Kategori', get: (r) => r[1], html: (r) => `<b>${esc(r[1])}</b>` },
+      { label: 'Arti di SAP', wide: true, w: 3, get: (r) => r[3] },
+      { label: 'Optimasi DS', get: (r) => r[4] === 'OWN USE' ? 'Internal Usage' : r[4] === 'BAU' ? 'BAU' : r[4] === 'MTA' ? 'MTA' : r[4] === '309' ? 'Opsional (309)' : 'Tidak dihitung' },
+      { label: 'Baris di data', num: true, filter: false, get: (r) => used.get(r[0]) || 0, html: (r) => fmt(used.get(r[0]) || 0, 0) },
+      { label: 'Koreksi dari tabel lama', wide: true, w: 2.2, get: (r) => r[5], html: (r) => (r[5] ? `<span class="muted">${esc(r[5])}</span>` : '') },
+    ] });
+  };
 })();
