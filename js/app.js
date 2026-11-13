@@ -4,6 +4,7 @@ const ICON = {
   recycle: '<path d="M7 19H4l2.5-3.5M17 5h3l-2.5 3.5M4.5 15.5A8 8 0 0 0 18 17M19.5 8.5A8 8 0 0 0 6 7"/>',
   flow: '<path d="M4 8h14M14 4l4 4-4 4M20 16H6M10 12l-4 4 4 4"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  list: '<path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6h.01M4 12h.01M4 18h.01" stroke-width="3"/>',
   chart: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
   doc: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/>',
   cart: '<circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/><path d="M2 3h3l2.5 12h12L22 7H6"/>',
@@ -27,6 +28,7 @@ const MENU = [
     ['gerak', 'Keluar-Masuk Barang', 'flow', 'Barang apa yang masuk dan keluar gudang, dari mana dan ke mana'],
   ]],
   ['2. Rencana', [
+    ['rkm27', 'RKM 2027', 'list', 'Rekap RKM semua lapangan dan fungsi tanpa dobel, dan kapan harus dipesan'],
     ['rkm', 'Kebutuhan & MRP', 'chart', 'Hitung stok minimum dan maksimum, dan kapan harus pesan'],
     ['order', 'Perlu Dipesan', 'cart', 'Barang yang harus dipesan: lewat kontrak (RO) atau permintaan pembelian baru (PR)'],
   ]],
@@ -127,10 +129,12 @@ function recompute() {
   const pickOf = (wk) => (S.me3n ? (S.me3n.pickWK && S.me3n.pickWK[wk]) || new Map() : null);
   const common = { stockMap, tko: S.set.tko, ospoMap: S.me2n ? S.me2n.ospo : null, mb25Map: S.mb25 ? S.mb25.open : null, chemFn: Master.isChemMG };
   const res = new Map(); S.rkmMatched = []; S.mrpWB_PHE = null;
+  // RKM: rekap semua file dulu (yang dobel tidak dihitung), baru dicocokkan ke MRP
+  S.rkmCons = RKM.consolidate(S.rkmFiles, new Set(store.get('rkmKeep') || []));
   if (S.mrpWB) {
     const o = Object.assign({}, common, { method: S.set.method, contractPick: pickOf('PEP') });
     const base = MRP.run(S.mrpWB, o);
-    S.rkmMatched = RKM.match(S.rkmFiles, base, S.mrpWB);
+    S.rkmMatched = RKM.match(S.rkmCons.kept, base, S.mrpWB);
     MRP.run(S.mrpWB, Object.assign({}, o, { rkmMap: RKM.totals(S.rkmMatched), basis: S.set.basis })).forEach((v, k) => res.set(k, v));
   }
   const pheStock = S.raw.mb52 && S.raw.mb52.PHE;
@@ -269,7 +273,7 @@ async function loadDS(file) { S.ds = await parseFile('ds', file, (b) => DS.parse
 async function loadMRP(file) { S.mrpWB = await parseFile('mrp', file, (b) => MRP.parseWorkbook(XLSX, b)); S.mrpName = file.name; srcMark('mrp', file, 'PEP'); }
 function srcMark(k, file, wk = '') { S.src[k] = S.src[k] || {}; const key = k === 'rkm' ? file.name : k === 'mb51' ? wk + '|' + file.name : wk || '-'; if (k === 'rkm') wk = file.name; S.src[k][key] = { name: file.name, at: new Date(), wk }; }
 async function loadRKM(file, name) {
-  const f = await parseFile('rkm', file, (b) => RKM.parseFile(XLSX, b, name || file.name));
+  const f = Object.assign({}, await parseFile('rkm', file, (b) => RKM.parseFile(XLSX, b, name || file.name)), { mtime: file.lastModified || 0 });
   const saved = (store.get('rkmPlant') || {})[f.fileName]; if (saved) f.plant = saved;
   S.rkmFiles = S.rkmFiles.filter((x) => x.fileName !== f.fileName).concat(f); srcMark('rkm', file);
 }
@@ -300,7 +304,8 @@ async function loadFolder(h) {
     if (c.mrp) { await tick(); await loadMRP(c.mrp.file); log.push(c.mrp.name); }
     if (c.ds) { await tick(); try { await loadDS(c.ds.file); log.push(c.ds.name); } catch (e) { log.push('Gagal: ' + c.ds.name + ' (' + e.message + ')'); } }
     if (c.regulasi) { S.regulasi = { name: c.regulasi.name, text: await c.regulasi.file.text() }; log.push(c.regulasi.name); }
-    for (const r of c.rkm) { try { await loadRKM(r.file, r.name); log.push(r.name); } catch (e) { log.push('Gagal: ' + r.name + ' (' + e.message + ')'); } }
+    S.rkmFiles = []; S.rkmFail = []; S.rkmSkip = (c.rkmSkip || []).map((f) => f.name);
+    for (const r of c.rkm) { await tick(); try { await loadRKM(r.file, r.name); log.push(r.name); } catch (e) { S.rkmFail.push({ name: r.name, why: e.message }); log.push('Gagal: ' + r.name + ' (' + e.message + ')'); } }
     recompute(); route();
     S.folderLoadedAt = new Date(); Cache.prune();
     const how = loadStat.read ? `${loadStat.read} dibaca ulang, ${loadStat.hit} dari cache` : 'semua dari cache';
@@ -328,7 +333,7 @@ Object.assign(HIDE, {
   'oTab:ro': ['Mata uang', 'PIC', 'Sisa hari', 'UoM', 'Harga kontrak'], 'oTab:pr': ['Mata uang', 'Kelas', 'Sumber harga'], 'oTab:kandidat': ['Sumber harga'], 'eTab:resv': ['Mvt'],
 });
 function convCols(cols, hide = []) {
-  return cols.map((c) => ({ label: c[0], html: c[1], num: c[2] === 'num', get: c[3] || ((r) => UI.strip(c[1](r))), filter: c[2] !== 'num' && c[4] !== false, hide: hide.includes(c[0]), wide: /^(Deskripsi|Keterangan|Remarks|Catatan)$/.test(c[0]), w: /^(Catatan)$/.test(c[0]) ? 2 : /^(Vendor|GR gudang|Status manual|Kategori|Kelas TKO|Lapangan|Penerima)/.test(c[0]) ? 1.6 : undefined }));
+  return cols.map((c) => ({ label: c[0], html: c[1], num: c[2] === 'num', get: c[3] || ((r) => UI.strip(c[1](r))), filter: c[2] !== 'num' && c[4] !== false, hide: hide.includes(c[0]), wide: /^(Deskripsi|Keterangan|Remarks|Catatan)$/.test(c[0]), w: /^Timeline/.test(c[0]) ? 2.9 : /^(Catatan)$/.test(c[0]) ? 2 : /^(Vendor|GR gudang|Status manual|Kategori|Kelas TKO|Lapangan|Penerima)/.test(c[0]) ? 1.6 : undefined }));
 }
 const DTQ = [];
 function table(rows, cols, opt = {}) { DTQ.push({ rows, cols, opt }); return `<div class="dt-mount" data-dt="${DTQ.length - 1}"></div>`; }
