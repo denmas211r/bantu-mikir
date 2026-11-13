@@ -139,6 +139,10 @@ function recompute() {
     if (!store.get('mrpPlantsPHE')) { pheStock.items.forEach((i) => S.mrpPlants.add(i.plant)); store.set('mrpPlants', [...S.mrpPlants]); store.set('mrpPlantsPHE', true); }
   }
   if (!res.size) { S.mrpRes = null; S.mrp = null; return; }
+  // info stok lain (tidak dihitung MRP, tetap ditampilkan): in transit dan valuation type selain ZNORMAL
+  if (S.mb52) { const im = new Map(S.mb52.items.map((i) => [i.material + '|' + i.plant, i]));
+    res.forEach((r, k) => { const i = im.get(k); r.transit = i ? i.transit || 0 : 0; r.stockOther = i ? i.sohOther || 0 : 0;
+      r.otherVal = i ? Object.entries(i.byVal || {}).filter(([v, q]) => q && v !== 'ZNORMAL' && v !== '(tanpa val. type)').map(([v, q]) => v + ' ' + fmt(q)).join(', ') : ''; }); }
   S.mrpRes = res;
   const map = new Map();
   for (const r of S.mrpRes.values()) map.set(r.plant + '|' + r.material, { min: r.min2 || 0, max: r.max2 || 0, aging: r.aging, toOrder: r.toOrder });
@@ -442,7 +446,7 @@ const PAGES = {
       vs: ['RKM vs MRP', vs, [['Fungsi', (o) => esc(o.x.fungsi)], ['KIMAP', (o) => `<a class="mono mlink" href="#" data-mat="${esc(o.r.material)}">${esc(o.x.kimap || o.r.material)}</a>`], ['Deskripsi', (o) => esc(o.x.desc)],
         ['RKM 2027', (o) => fmt(o.x.total), 'num', (o) => o.x.total], ['Histori/thn', (o) => fmt(amu12(o.r)), 'num', (o) => amu12(o.r)],
         ['Selisih', (o) => { const d = o.x.total - amu12(o.r); return `<span class="${d > 0 ? 'warn' : ''}">${d > 0 ? '+' : ''}${fmt(d)}</span>`; }, 'num', (o) => o.x.total - amu12(o.r)],
-        ['Aging', (o) => agingPill(o.r.aging), '', (o) => o.r.aging], ['Stok', (o) => fmt(o.r.stock), 'num', (o) => o.r.stock], ['OS PO/RO', (o) => fmt(o.r.ospo), 'num', (o) => o.r.ospo],
+        ['Aging', (o) => agingPill(o.r.aging), '', (o) => o.r.aging], ['Stok ZNORMAL', (o) => fmt(o.r.stock), 'num', (o) => o.r.stock], ['In transit', (o) => (o.r.transit ? fmt(o.r.transit) : ''), 'num', (o) => o.r.transit || 0], ['Val. type lain', (o) => (o.r.stockOther ? `<span title="${esc(o.r.otherVal)}">${fmt(o.r.stockOther)}</span>` : ''), 'num', (o) => o.r.stockOther || 0], ['OS PO/RO', (o) => fmt(o.r.ospo), 'num', (o) => o.r.ospo],
         ['Min', (o) => fmt(o.r.min2), 'num', (o) => o.r.min2], ['Max', (o) => fmt(o.r.max2), 'num', (o) => o.r.max2], ['To Order', (o) => calcA(o.r, o.r.toOrder ? pill(fmt(o.r.toOrder), 'warn') : '0'), 'num', (o) => o.r.toOrder],
         ['Basis', (o) => esc(o.r.basis)], ['Cocok via', (o) => esc(o.x.how)]], (o) => o.x.kimap + ' ' + o.x.desc + ' ' + o.x.fungsi],
       noMrp: ['RKM tanpa MRP', noMrp, [['Fungsi', (o) => esc(o.x.fungsi)], ['KIMAP', (o) => (o.x.kimap ? `<span class="mono">${esc(o.x.kimap)}</span>` : pill('tanpa KIMAP', 'low')), '', (o) => o.x.kimap],
@@ -458,7 +462,7 @@ const PAGES = {
         ['Butuh mulai', (o) => mLabel(2027 * 12 + o.nm.i) + (o.nm.known ? '' : ' *'), '', (o) => mLabel(2027 * 12 + o.nm.i)], ['Pesan paling lambat', (o) => `<b>${mLabel(o.due)}</b>`, '', (o) => mLabel(o.due)],
         ['Stok + PO', (o) => (o.r ? fmt(o.cover) : '-'), 'num', (o) => o.cover], ['Status', (o) => pill(o.st[0], o.st[1]), '', (o) => o.st[0]]], (o) => o.x.kimap + ' ' + o.x.desc],
       order: ['Perlu order (To Order)', orders, [['Plant', (r) => esc(r.plant)], ['Material', (r) => `<a class="mono mlink" href="#" data-mat="${esc(r.material)}">${esc(r.material)}</a>`], ['Deskripsi', (r) => esc(r.desc)], ['Aging', (r) => agingPill(r.aging), '', (r) => r.aging],
-        ['Stok', (r) => fmt(r.stock), 'num', (r) => r.stock], ['OS PO/RO', (r) => fmt(r.ospo), 'num', (r) => r.ospo], ['MB25', (r) => fmt(r.mb25), 'num', (r) => r.mb25], ['Min', (r) => fmt(r.min2), 'num', (r) => r.min2], ['Max', (r) => fmt(r.max2), 'num', (r) => r.max2],
+        ['Stok ZNORMAL', (r) => fmt(r.stock), 'num', (r) => r.stock], ['In transit', (r) => (r.transit ? fmt(r.transit) : ''), 'num', (r) => r.transit || 0], ['Val. type lain', (r) => (r.stockOther ? `<span title="${esc(r.otherVal)}">${fmt(r.stockOther)}</span>` : ''), 'num', (r) => r.stockOther || 0], ['OS PO/RO', (r) => fmt(r.ospo), 'num', (r) => r.ospo], ['MB25', (r) => fmt(r.mb25), 'num', (r) => r.mb25], ['Min', (r) => fmt(r.min2), 'num', (r) => r.min2], ['Max', (r) => fmt(r.max2), 'num', (r) => r.max2],
         ['To Order', (r) => calcA(r, pill(fmt(r.toOrder), 'warn')), 'num', (r) => r.toOrder], ['RKM 2027', (r) => fmt(r.rkm), 'num', (r) => r.rkm], ['Kelas', (r) => esc(r.cls || r.aging), '', (r) => r.cls || r.aging],
         ['Kontrak (OA)', (r) => (r.oa ? `<span class="mono">${esc(r.oa)}</span>` : pill('PR + OE', 'mute')), '', (r) => r.oa || 'PR + OE']], (r) => r.material + ' ' + r.desc + ' ' + r.oa],
       sehat: ['Penyehatan stok', sehat, [['Plant', (r) => esc(r.plant)], ['Material', (r) => `<a class="mono mlink" href="#" data-mat="${esc(r.material)}">${esc(r.material)}</a>`], ['Deskripsi', (r) => esc(r.desc)], ['Aging', (r) => agingPill(r.aging), '', (r) => r.aging],
@@ -570,7 +574,7 @@ function rkmPHE(res) {
   const sehat = res.filter((r) => r.berlebih && r.stock > 0).sort((a, b) => (b.surplus || 0) - (a.surplus || 0));
   const mat = (r) => `<a class="mono mlink" href="#" data-mat="${esc(r.material)}">${esc(r.material)}</a>`;
   const base = [['Plant', (r) => esc(plantLabel(r.plant)), '', (r) => plantLabel(r.plant)], ['Material', mat, '', (r) => r.material], ['Deskripsi', (r) => esc(r.desc)], ['Aging', (r) => agingPill(r.aging), '', (r) => r.aging],
-    ['AMU', (r) => fmt(r.amu, 2), 'num', (r) => r.amu], ['LT', (r) => fmt(r.lt, 1) + (r.ltDefault ? ' *' : ''), 'num', (r) => r.lt], ['Stok', (r) => fmt(r.stock), 'num', (r) => r.stock], ['OS PO/RO', (r) => fmt(r.ospo), 'num', (r) => r.ospo],
+    ['AMU', (r) => fmt(r.amu, 2), 'num', (r) => r.amu], ['LT', (r) => fmt(r.lt, 1) + (r.ltDefault ? ' *' : ''), 'num', (r) => r.lt], ['Stok ZNORMAL', (r) => fmt(r.stock), 'num', (r) => r.stock], ['In transit', (r) => (r.transit ? fmt(r.transit) : ''), 'num', (r) => r.transit || 0], ['Val. type lain', (r) => (r.stockOther ? `<span title="${esc(r.otherVal)}">${fmt(r.stockOther)}</span>` : ''), 'num', (r) => r.stockOther || 0], ['OS PO/RO', (r) => fmt(r.ospo), 'num', (r) => r.ospo],
     ['MB25', (r) => fmt(r.mb25), 'num', (r) => r.mb25], ['Min', (r) => fmt(r.min2), 'num', (r) => r.min2], ['Max', (r) => fmt(r.max2), 'num', (r) => r.max2]];
   const TABS = {
     order: ['Perlu order (To Order)', orders, base.concat([['To Order', (r) => calcA(r, pill(fmt(r.toOrder), 'warn')), 'num', (r) => r.toOrder], ['Kelas', (r) => esc(r.cls || r.aging), '', (r) => r.cls || r.aging],

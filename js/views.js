@@ -166,7 +166,8 @@
         ['Unrestricted', (i) => fmt(nrm(i)) + ' ' + esc(i.uom), 'num'], ['Val. type lain', (i) => (i.soh - nrm(i) ? fmt(i.soh - nrm(i)) : ''), 'num'], ['In transit', (i) => (i.transit ? fmt(i.transit) : ''), 'num'], ['Lokasi', (i) => esc(i.locs.map((l) => l.sloc).filter((x, k, a) => a.indexOf(x) === k).join(', '))], ['Nilai', (i) => money(i.value, stockCur(i.plant)), 'num']]) : '<p class="muted">Tidak ada stok di plant terpilih.</p>'}</section>
       ${mrpRows.length ? `<section class="d-sec"><h3>MRP <small>metode ${esc(S.set.method === 'tko' ? 'TKO/Pedoman' : 'Excel lama')} · klik "Cara hitung" untuk melihat rumusnya</small></h3>${plainTable(mrpRows, [['Plant', (r) => esc(r.plant) + (S.mrpPlants.has(r.plant) ? '' : ' <span class="muted small">tidak dipantau</span>')], ['Aging', (r) => agingPill(r.aging)],
         ['Kelas', (r) => esc(r.cls || '')], ['AMU', (r) => fmt(r.amu, 2), 'num'], ['LT', (r) => (r.tEff != null ? fmt(r.tEff, 1) : fmt(r.lt, 1)), 'num'], ['SS', (r) => fmt(r.ss), 'num'], ['Min', (r) => fmt(r.min2), 'num'], ['Max', (r) => fmt(r.max2), 'num'],
-        ['Stok', (r) => fmt(r.stock), 'num'], ['OS PO', (r) => fmt(r.ospo), 'num'], ['Reservasi', (r) => fmt(r.mb25), 'num'], ['To Order', (r) => (r.toOrder ? `<b>${fmt(r.toOrder)}</b>` : '0'), 'num'],
+        ['Stok ZNORMAL', (r) => fmt(r.stock), 'num'], ['In transit', (r) => (r.transit ? fmt(r.transit) : ''), 'num'], ['Val. type lain', (r) => (r.stockOther ? `<span title="${esc(r.otherVal)}">${fmt(r.stockOther)}</span>` : ''), 'num'],
+        ['OS PO', (r) => fmt(r.ospo), 'num'], ['Reservasi', (r) => fmt(r.mb25), 'num'], ['To Order', (r) => (r.toOrder ? `<b>${fmt(r.toOrder)}</b>` : '0'), 'num'],
         ['', (r) => `<a href="#" class="calcLink" data-p="${esc(r.plant)}">${calcPlant === r.plant ? 'Tutup' : 'Cara hitung'}</a>`]])}
         ${calcR ? `<div class="calc" id="mrpCalc">${explainMRP(calcR)}</div>` : ''}</section>` : ''}
       ${Object.keys(useWK).map((w) => `<section class="d-sec"><h3>Pemakaian bulanan WK ${w} <small>${F.months ? F.months + ' bulan terakhir' : 'semua histori'}, ${w === 'PEP' ? 'dari file MRP' : 'dari MB51 (Own Use + Return)'}</small></h3><div class="dUse" data-w="${w}"></div></section>`).join('')}
@@ -193,6 +194,7 @@
   }
 
   // ---------- Penjelasan hitungan MRP per material+plant (langkah demi langkah, dengan angka) ----------
+  const otherStock = (r) => (r.transit || r.stockOther ? `<p class="small"><b>Stok lain (tidak dihitung di atas):</b> in transit ${fmt(r.transit || 0)}${r.stockOther ? `, valuation type lain ${fmt(r.stockOther)} (${esc(r.otherVal)})` : ''}. Pertimbangkan sebelum memesan: barang transit akan masuk, ex-terminasi/surplus mungkin bisa dipakai.</p>` : '');
   function explainMRP(r) {
     const f1 = (v) => fmt(v, 2);
     const step = (title, rumus, hasil, note) => `<li><b>${title}</b><div class="calc-f">${rumus}</div><div class="calc-r">= <b>${hasil}</b>${note ? ` <span class="muted small">${note}</span>` : ''}</div></li>`;
@@ -215,7 +217,7 @@
         L.push(step('Stok bersih', `Stok − Reservasi = ${fmt(stock)} − ${fmt(res)}`, fmt(net), stokNote));
         L.push(step('To Order', net <= r.min2 ? `Stok bersih ${fmt(net)} ≤ Min ${fmt(r.min2)} → Max − OS PO − stok bersih = ${fmt(r.max2)} − ${fmt(ospo)} − ${fmt(net)}` : `Stok bersih ${fmt(net)} > Min ${fmt(r.min2)} → belum perlu pesan`, fmt(r.toOrder)));
       }
-      return head + `<ol class="calc-steps">${L.join('')}</ol>`;
+      return head + `<ol class="calc-steps">${L.join('')}</ol>${otherStock(r)}`;
     }
     const P = Object.assign({}, MRP.TKO_DEFAULT, S.set.tko || {});
     const u = (r.usageAll || []).map((v) => Math.abs(v || 0)), n = r.wk === 'PHE' ? u.length : Math.min(P.amuMonths, u.length), win = u.slice(-n), sum = win.reduce((a, b) => a + b, 0);
@@ -226,7 +228,7 @@
     L.push(step('Kelas', 'Project → Program · FS → rutin (chemical / maintenance) · MD → rutin slow · SP/DS → on demand', esc(r.cls)));
     if (r.cls === 'Program' || r.cls === 'On Demand') {
       L.push(step('To Order', `maks(0, RKM + Reservasi − Stok − OS PO) = maks(0, ${fmt(r.rkm || 0)} + ${fmt(res)} − ${fmt(stock)} − ${fmt(ospo)})`, fmt(r.toOrder), stokNote));
-      return head + `<ol class="calc-steps">${L.join('')}</ol>`;
+      return head + `<ol class="calc-steps">${L.join('')}</ol>${otherStock(r)}`;
     }
     if (r.tEff == null) return head + `<ol class="calc-steps">${L.join('')}</ol><p class="muted">Lead time tidak ada, jadi Min/Max tidak dihitung.</p>`;
     const yes = r.hasContract === 'Yes', T = r.tEff, z = r.critical ? P.zCrit : P.z;
@@ -250,7 +252,7 @@
     L.push(step('Stok tersedia', `Stok + OS PO − Reservasi = ${fmt(stock)} + ${fmt(ospo)} − ${fmt(res)}`, fmt(avail), stokNote));
     L.push(step('To Order', avail < r.min2 ? `Tersedia ${fmt(avail)} < Min ${fmt(r.min2)} → Max − tersedia = ${fmt(r.max2)} − ${fmt(avail)}` : `Tersedia ${fmt(avail)} ≥ Min ${fmt(r.min2)} → belum perlu pesan`, fmt(r.toOrder)));
     if (r.cover != null && isFinite(r.cover)) L.push(step('Cakupan stok', `Stok ÷ AMU = ${fmt(stock)} ÷ ${f1(r.amu)}`, fmt(r.cover, 1) + ' bln', r.berlebih ? `berlebih (batas ${r.cls === 'Rutin chemical' ? P.excessChem : P.excessGeneral} bln)` : ''));
-    return head + `<ol class="calc-steps">${L.join('')}</ol>${r.note ? `<p class="muted small">${esc(r.note)}</p>` : ''}`;
+    return head + `<ol class="calc-steps">${L.join('')}</ol>${otherStock(r)}${r.note ? `<p class="muted small">${esc(r.note)}</p>` : ''}`;
   }
 
   // ---------- Kontrak: kartu ----------
@@ -357,9 +359,74 @@
     const roVal = lines.reduce((a, l) => a + l.value, 0);
     const T = { tab: items.length ? 'item' : 'ro' };
     const body = UI.drawer('', { label: 'Kontrak ' + doc, wide: true });
+    // ---------- Simulasi Call RO: qty RO per material × field, dengan stok dan estimasi sesudah RO ----------
+    const SIMK = 'simRO', simAll = store.get(SIMK) || {}, SIM = (simAll[doc] = simAll[doc] || { q: {}, zona: '', need: true });
+    const saveSim = () => { simAll[doc] = SIM; store.set(SIMK, simAll); };
+    const mb52Of = new Map(S.mb52 ? S.mb52.items.map((i) => [i.material + '|' + i.plant, i]) : []);
+    const simRows = () => {
+      const out = [];
+      items.forEach((it) => {
+        const m = it.material, plants = new Set();
+        if (S.mrpRes) S.mrpRes.forEach((r) => { if (r.material === m && S.mrpPlants.has(r.plant)) plants.add(r.plant); });
+        lines.forEach((l) => { if (l.material === m) plants.add(l.plant); });
+        plants.forEach((p) => {
+          const r = S.mrpRes ? S.mrpRes.get(m + '|' + p) : null, i = mb52Of.get(m + '|' + p), k = it.item + '|' + p;
+          const stock = r ? r.stock : i ? (i.sohNormal != null ? i.sohNormal : i.soh) : 0;
+          const row = { k, it, m, desc: it.desc, uom: it.uom || (r && r.uom) || '', plant: p, zona: zonaOf(p), r, stock, transit: i ? i.transit || 0 : 0, other: i ? i.sohOther || 0 : 0,
+            ospo: r ? r.ospo || 0 : 0, res: r ? r.mb25 || 0 : 0, amu: r ? r.amu || 0 : 0, min: r ? r.min2 : null, max: r ? r.max2 : null, mrp: r ? r.toOrder || 0 : 0, price: it.price || 0 };
+          row.qty = SIM.q[k] != null ? SIM.q[k] : row.mrp;
+          row.value = row.qty * row.price; row.after = row.stock + row.ospo - row.res + row.qty; row.cover = row.amu > 0 ? row.after / row.amu : null;
+          out.push(row);
+        });
+      });
+      return out.sort((a, b) => b.mrp - a.mrp || a.m.localeCompare(b.m) || a.plant.localeCompare(b.plant));
+    };
+    function simHTML() {
+      const all = simRows(), zonas = [...new Set(all.map((x) => x.zona))].sort();
+      const rows = all.filter((x) => (!SIM.zona || x.zona === SIM.zona) && (!SIM.need || x.mrp > 0 || x.qty > 0));
+      const chosen = all.filter((x) => x.qty > 0), tq = chosen.reduce((a, x) => a + x.value, 0);
+      // cek batas kontrak: nilai (sisa kontrak) dan qty per item (kalau kontrak qty)
+      const perItem = new Map(); chosen.forEach((x) => perItem.set(x.it, (perItem.get(x.it) || 0) + x.qty));
+      const warn = [];
+      if (d && tq > d.sisa) warn.push(`Total simulasi ${money(tq, cur)} melebihi sisa nilai kontrak ${money(d.sisa, cur)}.`);
+      perItem.forEach((q, it) => { if (it.targetQty && q > it.openQty) warn.push(`${esc(it.material)}: qty simulasi ${fmt(q)} melebihi sisa qty kontrak ${fmt(it.openQty)}.`); });
+      if (d && d.sisaHari != null && d.sisaHari < 60) warn.push(`Kontrak berakhir ${fmt(d.sisaHari, 0)} hari lagi. Pastikan jadwal kirim masih di dalam masa kontrak.`);
+      const flag = (x) => (!x.r ? '<span class="muted small">tidak ada di MRP</span>' : x.qty > 0 && x.max != null && x.after > x.max ? pill('Di atas Max', 'warn') : x.min != null && x.after < x.min ? pill('Masih di bawah Min', 'low') : x.qty > 0 ? pill('Aman', 'ok') : '');
+      const sel = `<label class="chk">Zona <select id="simZ" aria-label="Zona">${[['', 'Semua zona'], ...zonas.map((z) => [z, z])].map(([v, t]) => `<option value="${esc(v)}"${SIM.zona === v ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></label>`;
+      return `<p class="tab-note">Isi qty RO per material dan field. Qty awal = To Order dari MRP; ubah sesuai rencana. Sesudah RO = Stok ZNORMAL + OS PO − Reservasi + qty RO. Stok in transit dan valuation type lain ditampilkan sebagai pertimbangan, tidak ikut dihitung. Isian tersimpan di browser ini.</p>
+        <div class="filters">${sel}<label class="chk"><input type="checkbox" id="simNeed"${SIM.need ? ' checked' : ''}> Hanya yang perlu order / sudah diisi</label>
+          <button class="btn" id="simMRP" type="button">Isi sesuai MRP</button><button class="btn" id="simClr" type="button">Kosongkan</button><button class="btn" id="simXls" type="button">Unduh Excel</button></div>
+        <div class="kv"><div><span>Baris diisi</span><b>${fmt(chosen.length, 0)}</b></div><div><span>Field</span><b>${fmt(new Set(chosen.map((x) => x.plant)).size, 0)}</b></div><div><span>Estimasi nilai RO</span><b>${money(tq, cur)}</b></div>
+          ${d ? `<div><span>Sisa kontrak</span><b>${money(d.sisa, cur)}</b></div><div><span>Sisa sesudah simulasi</span><b class="${d.sisa - tq < 0 ? 'neg' : ''}">${money(d.sisa - tq, cur)}</b></div>` : ''}</div>
+        ${warn.length ? `<ul class="reco">${warn.map((w) => `<li class="bad"><span>${w}</span></li>`).join('')}</ul>` : ''}
+        ${rows.length ? plainTable(rows, [['Material', (x) => `<a href="#" class="mlink" data-mat="${esc(x.m)}">${esc(x.m)}</a><div class="muted small sim-desc">${esc(x.desc)}</div>`], ['Field', (x) => `${esc(x.plant)}<div class="muted small">${esc(x.zona)}</div>`],
+          ['Stok', (x) => fmt(x.stock) + (x.transit || x.other ? `<div class="muted small">${x.transit ? 'transit ' + fmt(x.transit) : ''}${x.transit && x.other ? ' · ' : ''}${x.other ? 'val. lain ' + fmt(x.other) : ''}</div>` : ''), 'num'],
+          ['OS PO / Res.', (x) => fmt(x.ospo) + ' / ' + fmt(x.res), 'num'], ['AMU', (x) => fmt(x.amu, 1), 'num'], ['Min / Max', (x) => (x.r ? fmt(x.min) + ' / ' + fmt(x.max) : '-'), 'num'],
+          ['MRP', (x) => (x.r ? `<a href="#" class="simcalc" data-m="${esc(x.m)}" data-p="${esc(x.plant)}" title="Lihat cara hitung">${fmt(x.mrp)}</a>` : '-'), 'num'],
+          ['Qty RO', (x) => `<input class="simq" type="number" min="0" step="any" data-k="${esc(x.k)}" value="${x.qty || ''}" aria-label="Qty RO ${esc(x.m)} ${esc(x.plant)}">`, 'num'],
+          ['Estimasi', (x) => (x.qty ? money(x.value, cur) : ''), 'num'], ['Sesudah RO', (x) => fmt(x.after) + `<div class="muted small">${x.cover == null ? '' : fmt(x.cover, 1) + ' bln'}</div>`, 'num'], ['Status', flag]])
+          : '<p class="muted">Tidak ada material kontrak yang perlu order di zona ini. Matikan filter "Hanya yang perlu order" untuk melihat semua field.</p>'}`;
+    }
+    function bindSim() {
+      const q = (s) => body.querySelector(s); if (!q('#simZ')) return;
+      const keep = () => { const y = body.scrollTop; saveSim(); render(); body.scrollTop = y; };
+      q('#simZ').onchange = (e) => { SIM.zona = e.target.value; keep(); };
+      q('#simNeed').onchange = (e) => { SIM.need = e.target.checked; keep(); };
+      q('#simMRP').onclick = () => { SIM.q = {}; keep(); };
+      q('#simClr').onclick = () => { SIM.q = {}; simRows().forEach((x) => (SIM.q[x.k] = 0)); keep(); };
+      body.querySelectorAll('.simq').forEach((inp) => (inp.onchange = () => { const v = parseFloat(inp.value); SIM.q[inp.dataset.k] = isFinite(v) && v > 0 ? v : 0; keep(); }));
+      body.querySelectorAll('.simcalc').forEach((a) => (a.onclick = (e) => { e.preventDefault(); openMaterial(a.dataset.m, { calc: a.dataset.p }); }));
+      q('#simXls').onclick = () => {
+        const rows = simRows().filter((x) => x.qty > 0);
+        const ws = XLSX.utils.json_to_sheet(rows.map((x) => ({ OA: doc, Vendor: d ? d.vendor : '', Item: x.it.item, Material: x.m, Deskripsi: x.desc, UoM: x.uom, Plant: x.plant, Zona: x.zona,
+          'Stok ZNORMAL': x.stock, 'In transit': x.transit, 'Val. type lain': x.other, 'OS PO': x.ospo, Reservasi: x.res, AMU: x.amu, Min: x.min, Max: x.max, 'To Order MRP': x.mrp,
+          'Qty RO': x.qty, 'Harga satuan': x.price, 'Estimasi nilai': x.value, Mata_uang: cur, 'Sesudah RO': x.after, 'Cakupan (bln)': x.cover == null ? '' : +x.cover.toFixed(1) })));
+        const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Simulasi RO'); XLSX.writeFile(wb, `Simulasi Call RO ${doc}.xlsx`);
+      };
+    }
     const status = (l) => (l.openQty <= 0 ? pill('Selesai', 'ok') : l.lateDays ? pill('Telat ' + l.lateDays + ' hr', 'low') : pill('Belum tiba', 'info'));
     const render = () => {
-      const tabs = [['item', `Item kontrak (${items.length})`], ['ro', `History RO (${lines.length})`], ['pakai', 'Dipakai ke mana'], ...(plan.length ? [['plan', `Rencana RO (${plan.length})`]] : [])];
+      const tabs = [['item', `Item kontrak (${items.length})`], ['ro', `History RO (${lines.length})`], ['pakai', 'Dipakai ke mana'], ...(items.length ? [['sim', `Simulasi Call RO${plan.length ? ' (' + plan.length + ' perlu order)' : ''}`]] : [])];
       let sec = '';
       if (T.tab === 'item') sec = items.length ? `${plainTable(items.slice().sort((a, b) => b.released - a.released), [['Item', (i) => esc(i.item)], ['Material', (i) => `<a href="#" class="mlink" data-mat="${esc(i.material)}">${esc(i.material)}</a>`], ['Deskripsi', (i) => esc(i.desc)],
         ['Harga', (i) => money(i.price, cur), 'num'], ['Target qty', (i) => (i.targetQty ? fmt(i.targetQty) + ' ' + esc(i.uom) : '<span class="muted small">kontrak nilai</span>'), 'num'], ['Terpakai qty', (i) => fmt(i.releasedQty) + ' ' + esc(i.uom), 'num'],
@@ -374,8 +441,7 @@
           ${rows.length ? '<div id="kTab"></div>' : `<p class="muted">${S.mb51 ? 'Belum ada pemakaian yang bisa dihubungkan ke RO kontrak ini.' : 'Muat file MB51 untuk melihat penerimaan dan pemakaian.'}</p>`}`;
         T.useRows = rows;
       }
-      if (T.tab === 'plan') sec = plainTable(plan, [['Plant', (r) => esc(r.plant)], ['Material', (r) => `<a href="#" class="mlink" data-mat="${esc(r.material)}">${esc(r.material)}</a>`], ['Deskripsi', (r) => esc(r.desc)], ['To Order', (r) => fmt(r.toOrder), 'num'],
-        ['Estimasi', (r) => money(r.toOrder * (r.contract.price || 0), cur), 'num']]);
+      if (T.tab === 'sim') sec = simHTML();
       body.innerHTML = `<div class="d-head"><h2>${esc(d ? d.vendor : (lines[0] && lines[0].vendor) || 'OA ' + doc)}</h2><div class="meta"><span>OA ${esc(doc)}</span>${d ? `<span>WK ${esc(d.wk || '')}</span><span>${esc((d.kels || [d.kel]).filter(Boolean).join(', '))}</span><span>PG ${esc(d.pg)} ${esc(d.pic)}</span><span>${dstr(d.start)} s.d. ${dstr(d.end)}</span>` : '<span>tidak ada di ME3N</span>'}</div></div>
         ${d ? `<div class="kv"><div><span>Nilai kontrak</span><b>${money(d.target, cur)}</b></div><div><span>Terpakai</span><b>${money(d.released, cur)}</b></div><div><span>Sisa</span><b>${money(d.sisa, cur)}</b></div><div><span>Terpakai %</span><b>${fmt(used, 1)}%</b></div><div><span>Sisa hari</span><b>${fmt(d.sisaHari, 0)}</b></div><div><span>RO di ME2N</span><b>${fmt(lines.length, 0)}</b></div></div>
         <div class="progress" title="Terpakai ${fmt(used, 0)}%"><i style="width:${used.toFixed(1)}%"></i></div>` : ''}
@@ -392,6 +458,7 @@
         { label: 'RO', get: (r) => r.t.l.doc }, { label: 'Plant', get: (r) => r.t.l.plant }, { label: 'Material', nowrap: true, get: (r) => r.t.l.material, html: (r) => mat(r.t.l.material) },
         { label: 'Tanggal pakai', nowrap: true, get: (r) => r.u.x.date, html: (r) => dstr(r.u.x.date) }, { label: 'Jenis', get: (r) => r.u.x.cat }, { label: 'Qty', num: true, filter: false, get: (r) => r.u.q, html: (r) => fmt(r.u.q) + ' ' + esc(r.u.x.uom || '') },
         { label: 'Reservasi', get: (r) => r.u.x.resv }, { label: 'Untuk', wide: true, get: (r) => r.u.x.header || (r.u.x.toPlant ? 'ke ' + plantLabel(r.u.x.toPlant) : '') }, { label: 'Mat. Doc', hide: true, get: (r) => r.u.x.matDoc }] });
+      if (T.tab === 'sim') bindSim();
       body.querySelectorAll('.seg button').forEach((b) => (b.onclick = () => { T.tab = b.dataset.t; render(); }));
       body.querySelectorAll('.mlink').forEach((a) => (a.onclick = (e) => { e.preventDefault(); openMaterial(a.dataset.mat); }));
     };

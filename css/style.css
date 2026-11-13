@@ -381,3 +381,7 @@ dl.gloss { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px;
 .drawer .filters { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin: 4px 0 6px; }
 .drawer .filters select { height: 32px; border: 1px solid var(--line); border-radius: 8px; padding: 0 8px; background: #fff; }
 .drawer .seg { margin: 6px 0 2px; flex-wrap: wrap; justify-self: start; }
+.simq { width: 88px; height: 30px; border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; text-align: right; font: inherit; font-variant-numeric: tabular-nums; background: #fff; }
+.simq:focus { outline: 2px solid var(--brand); outline-offset: 1px; }
+.sim-desc { max-width: 260px; }
+.drawer .plain-wrap { overflow-x: auto; }
