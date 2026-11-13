@@ -88,7 +88,7 @@
       { label: 'Status', nowrap: true, w: 1.35, get: (o) => st.get(o), html: (o) => `<span class="st ${statusCls(st.get(o))}">${esc(st.get(o))}</span>` },
       { label: 'WK', get: (o) => [...o.wk].join(', '), hide: true },
     ];
-    $('view').innerHTML = srcLine('mb52', 'mrp') + `<p class="legend-line"><span>Angka = stok per plant (MB52)</span><span class="q-low">Merah = di bawah Min</span><span>Klik baris untuk analisis material</span></p><div id="mx"></div>`;
+    $('view').innerHTML = `<p class="legend-line"><span>Angka = stok per plant (MB52)</span><span class="q-low">Merah = di bawah Min</span><span>Klik baris untuk analisis material</span></p><div id="mx"></div>`;
     UI.table($('mx'), { id: 'cari-mx3-' + S.cariWK, rows, cols, name: 'Cari Material', match: (o, q) => hit(o.material + ' ' + o.desc, expand(q)), sort: { i: cols.findIndex((c) => c.label === 'Pakai'), dir: -1 },
       placeholder: 'Cari deskripsi atau kode material… (mis. packer 7, laker)', rowKey: (o) => o.material, onRow: openMaterial });
   };
@@ -266,7 +266,7 @@
     const usedBy = new Map(); if (S.mrpRes) for (const r of S.mrpRes.values()) if (r.contract) usedBy.set(r.contract.doc, (usedBy.get(r.contract.doc) || 0) + 1);
     const stOf = (d) => { const a = []; if (d.sisaHari != null && d.sisaHari < 0) a.push('Berakhir'); else if (d.sisaHari != null && d.sisaHari <= 90) a.push('Habis ≤ 90 hari'); else if (d.sisaHari != null && d.sisaHari <= 180) a.push('Habis ≤ 180 hari'); if (d.pctSisa < 0.2) a.push('Sisa nilai < 20%'); return a.length ? a : ['Aman']; };
     const all = [...S.me3n.docs.values()];
-    $('view').innerHTML = srcLine('me3n', 'me2n') + `<div class="filters"><label class="dt-search">${UI.I.search}<input type="search" id="kq" placeholder="Cari No. OA, vendor, atau material…" value="${esc(F.q)}"></label>
+    $('view').innerHTML = `<div class="filters"><label class="dt-search">${UI.I.search}<input type="search" id="kq" placeholder="Cari No. OA, vendor, atau material…" value="${esc(F.q)}"></label>
         <span id="kKelF"></span><span id="kSt"></span><span id="kPg"></span><span id="kWk"></span>
         <label class="select"><span class="select-k">Urut</span><select id="kSort" class="bare">${[['hari', 'Sisa hari'], ['nilai', 'Sisa nilai (%)'], ['pakai', 'Dipakai MRP'], ['oa', 'No. OA']].map(([v, l]) => `<option value="${v}" ${F.sort === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
       <section class="panel"><div class="panel-h"><h2>Ringkasan kelompok barang</h2><span class="sub">Kelompok dibaca dari deskripsi item ME3N. Klik baris untuk menyaring kartu.</span></div><div id="kKel"></div></section>
@@ -525,7 +525,7 @@
     const plants = [...new Set(D.moves.map((x) => x.m.plant))].sort();
     const unk = new Map(); D.moves.forEach((x) => { if (!x.cat) unk.set(x.m.mkey, (unk.get(x.m.mkey) || 0) + 1); });
     const opt = (v, sel) => `<option value="${v}"${v === sel ? ' selected' : ''}>${ymLabel(v)}</option>`;
-    $('view').innerHTML = `${srcLine('mb51', 'me2n')}
+    $('view').innerHTML = `
       ${unk.size ? `<div class="banner warn"><span>Ada ${fmt([...unk.values()].reduce((a, b) => a + b, 0), 0)} gerakan dengan kunci Mvt yang belum ada di tabel referensi: ${esc([...unk].sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k, n]) => `${k} (${n})`).join(', '))}. Kirim kategorinya supaya bisa ditambahkan.</span></div>` : ''}
       <div class="filters"><label class="select"><span>Dari</span><select class="bare" id="gFrom">${D.months.map((m) => opt(m, G.from)).join('')}</select></label>
         <label class="select"><span>Sampai</span><select class="bare" id="gTo">${D.months.map((m) => opt(m, G.to)).join('')}</select></label>

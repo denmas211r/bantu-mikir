@@ -66,7 +66,8 @@ const tick = () => new Promise((r) => setTimeout(r, 30));
 // ---------- Login ----------
 // Sesi disimpan per tab (sessionStorage): refresh tidak perlu login lagi, tutup tab = keluar.
 const SESS = 'mimSession';
-async function startSession(user, role, key) {
+async function startSession(user, role, key, raw) {
+  await Cache.init(raw);
   const data = await Vault.decryptJSON(key, await (await fetch('data/data.enc.json', { cache: 'no-store' })).json());
   S = { role, data, user, mb52: null, mrpWB: null, rkmFiles: [], mrpRes: null, rkmMatched: [], mrp: null,
     mrpPlants: new Set(store.get('mrpPlants') || DEFAULT_MRP_PLANTS), set: Object.assign({ basis: 'hist', lliLT: 6, method: 'tko', tko: {}, kurs: 18150, zona: {}, wkCur: { PEP: 'IDR', PHE: 'USD' }, pheLT: 3 }, store.get('settings') || {}), mrpWK: store.get('mrpWK') || 'PEP', rkmTab: 'vs', src: {}, raw: {}, dash: { cur: 'IDR', wh: new Set(), zona: new Set(), wk: new Set() }, cariView: store.get('cariView') || 'matriks', cariWK: store.get('cariWK') || 'all', kView: store.get('kView') || 'kartu' };
@@ -81,7 +82,7 @@ $('lf').onsubmit = async (e) => {
     const user = $('u').value.trim(), entry = keys[user.toLowerCase()];
     if (!entry) throw 0;
     const { role, key, raw } = await Vault.login(entry, $('p').value);
-    await startSession(user, role, key);
+    await startSession(user, role, key, raw);
     try { sessionStorage.setItem(SESS, JSON.stringify({ user, role, raw })); } catch {}
     $('p').value = '';
   } catch { $('err').textContent = 'Username atau password salah.'; }
@@ -90,7 +91,7 @@ $('lf').onsubmit = async (e) => {
 window.addEventListener('load', async () => { // pulihkan sesi saat halaman di-refresh (setelah semua script siap)
   let s; try { s = JSON.parse(sessionStorage.getItem(SESS)); } catch {}
   if (!s || !s.raw) return;
-  try { await startSession(s.user, s.role, await Vault.importRaw(s.raw)); } catch { sessionStorage.removeItem(SESS); }
+  try { await startSession(s.user, s.role, await Vault.importRaw(s.raw), s.raw); } catch { sessionStorage.removeItem(SESS); }
 });
 $('out').onclick = () => { sessionStorage.removeItem(SESS); location.reload(); };
 $('menuBtn').onclick = () => $('sidebar').classList.toggle('open');
@@ -214,23 +215,26 @@ const MERGE = {
   },
 };
 const PARSE = { mb52: (b) => Parser.parseMB52(XLSX, b), me3n: (b) => Contract.parseME3N(XLSX, b), me2n: (b) => Contract.parseME2N(XLSX, b), mb51: (b) => Trace.parseMB51(XLSX, b), mb25: (b) => Trace.parseMB25(XLSX, b) };
+// baca Excel lewat cache terenkripsi (file yang sama tidak dibaca ulang)
+const loadStat = { hit: 0, read: 0 };
+async function parseFile(kind, file, fn) { const r = await Cache.parse(kind, file, fn); loadStat[r.hit ? 'hit' : 'read']++; return r.value; }
 async function loadSAP(k, file) {
   const wk = wkOfFile(file.name);
   S.raw[k] = S.raw[k] || {};
   if (k === 'mb51') { // MB51 boleh banyak file per client (upload berkala): digabung, baris dobel dibuang
-    const F = (S.mb51Files = S.mb51Files || {}); F[wk] = F[wk] || new Map(); F[wk].set(file.name, PARSE.mb51(await file.arrayBuffer()).moves);
+    const F = (S.mb51Files = S.mb51Files || {}); F[wk] = F[wk] || new Map(); F[wk].set(file.name, (await parseFile('mb51', file, PARSE.mb51)).moves);
     S.raw.mb51[wk] = Trace.mergeMB51([...F[wk].values()]);
-  } else S.raw[k][wk] = PARSE[k](await file.arrayBuffer());
+  } else S.raw[k][wk] = await parseFile(k, file, PARSE[k]);
   S[k] = MERGE[k](byWK(S.raw[k]));
   srcMark(k, file, wk);
   if (k === 'mb52') { S.plantWK = new Map(); S.mb52.items.forEach((i) => S.plantWK.set(i.plant, i.wk)); }
 }
 const loadMB52 = (f) => loadSAP('mb52', f), loadME3N = (f) => loadSAP('me3n', f), loadME2N = (f) => loadSAP('me2n', f), loadMB51 = (f) => loadSAP('mb51', f), loadMB25 = (f) => loadSAP('mb25', f);
-async function loadDS(file) { S.ds = DS.parseDS(XLSX, await file.arrayBuffer()); S.ver = (S.ver || 0) + 1; srcMark('ds', file); }
-async function loadMRP(file) { S.mrpWB = MRP.parseWorkbook(XLSX, await file.arrayBuffer()); S.mrpName = file.name; srcMark('mrp', file, 'PEP'); }
+async function loadDS(file) { S.ds = await parseFile('ds', file, (b) => DS.parseDS(XLSX, b)); S.ver = (S.ver || 0) + 1; srcMark('ds', file); }
+async function loadMRP(file) { S.mrpWB = await parseFile('mrp', file, (b) => MRP.parseWorkbook(XLSX, b)); S.mrpName = file.name; srcMark('mrp', file, 'PEP'); }
 function srcMark(k, file, wk = '') { S.src[k] = S.src[k] || {}; const key = k === 'rkm' ? file.name : k === 'mb51' ? wk + '|' + file.name : wk || '-'; if (k === 'rkm') wk = file.name; S.src[k][key] = { name: file.name, at: new Date(), wk }; }
 async function loadRKM(file, name) {
-  const f = RKM.parseFile(XLSX, await file.arrayBuffer(), name || file.name);
+  const f = await parseFile('rkm', file, (b) => RKM.parseFile(XLSX, b, name || file.name));
   const saved = (store.get('rkmPlant') || {})[f.fileName]; if (saved) f.plant = saved;
   S.rkmFiles = S.rkmFiles.filter((x) => x.fileName !== f.fileName).concat(f); srcMark('rkm', file);
 }
@@ -253,7 +257,7 @@ async function refreshData() {
 }
 async function loadFolder(h) {
   banner(`Membaca folder <b>${esc(h.name)}</b>…`); await tick(); S.folderName = h.name;
-  const log = [];
+  const log = []; loadStat.hit = loadStat.read = 0; Cache.resetUsed(); const t0 = performance.now();
   try {
     const c = Folder.classify(await Folder.listExcel(h));
     S.raw = {}; S.src = {}; S.mb51Files = {}; S.ds = null; ['mb52', 'me3n', 'me2n', 'mb51', 'mb25'].forEach((k) => (S[k] = null));
@@ -263,8 +267,9 @@ async function loadFolder(h) {
     if (c.regulasi) { S.regulasi = { name: c.regulasi.name, text: await c.regulasi.file.text() }; log.push(c.regulasi.name); }
     for (const r of c.rkm) { try { await loadRKM(r.file, r.name); log.push(r.name); } catch (e) { log.push('Gagal: ' + r.name + ' (' + e.message + ')'); } }
     recompute(); route();
-    S.folderLoadedAt = new Date();
-    banner(log.length ? `Data dimuat dari folder <b>${esc(h.name)}</b> (${log.length} file). <a href="#/data">Lihat detail</a> <button class="icon-btn" id="bx" aria-label="Tutup">${UI.I.x}</button>` : `Folder <b>${esc(h.name)}</b> tidak berisi file yang dikenali. Nama file harus memuat MB52, MRP, ME3N, ME2N, MB51, MB25, atau RKM. <button class="icon-btn" id="bx" aria-label="Tutup">${UI.I.x}</button>`, log.length ? 'ok' : 'warn');
+    S.folderLoadedAt = new Date(); Cache.prune();
+    const how = loadStat.read ? `${loadStat.read} dibaca ulang, ${loadStat.hit} dari cache` : 'semua dari cache';
+    banner(log.length ? `Data dimuat dari folder <b>${esc(h.name)}</b>: ${log.length} file (${how}, ${fmt((performance.now() - t0) / 1000, 1)} detik). <a href="#/data">Lihat detail</a> <button class="icon-btn" id="bx" aria-label="Tutup">${UI.I.x}</button>` : `Folder <b>${esc(h.name)}</b> tidak berisi file yang dikenali. Nama file harus memuat MB52, MRP, ME3N, ME2N, MB51, MB25, atau RKM. <button class="icon-btn" id="bx" aria-label="Tutup">${UI.I.x}</button>`, log.length ? 'ok' : 'warn');
   } catch (e) { banner('Gagal membaca folder: ' + esc(e.message) + ` <button class="icon-btn" id="bx" aria-label="Tutup">${UI.I.x}</button>`, 'bad'); }
   const bx = $('bx'); if (bx) bx.onclick = () => banner('');
 }
@@ -275,7 +280,6 @@ const hit = (text, groups) => groups.every((g) => g.some((t) => text.toLowerCase
 let timer; const debounce = (fn) => { clearTimeout(timer); timer = setTimeout(fn, 200); };
 const SRC_LABEL = { ds: 'DS', mb52: 'MB52', mrp: 'MRP', me3n: 'ME3N', me2n: 'ME2N', mb51: 'MB51', mb25: 'MB25', rkm: 'RKM' };
 const srcFiles = (k) => (S.src[k] ? Object.values(S.src[k]) : []);
-const srcLine = (...keys) => { const t = keys.flatMap((k) => srcFiles(k).map((f) => `${SRC_LABEL[k]}${f.wk && k !== 'rkm' ? ' ' + f.wk : ''} ${f.name}`)); return t.length ? `<p class="source">Sumber: ${esc(t.join('; '))}</p>` : ''; };
 const pill = (t, cls) => `<span class="pill ${cls}">${esc(t)}</span>`;
 const agingPill = (a) => pill(a || '-', a === 'FS' ? 'ok' : a === 'MD' ? 'info' : a === 'SP' ? 'warn' : 'mute');
 // cols lama: [judul, fn(row)->html, kelas ('num'), fn(row)->nilai mentah, filter?]
@@ -409,7 +413,7 @@ const PAGES = {
       ['Nilai', (m) => money(m.value, stockCur(m.plant)), 'num', (m) => m.value], ['WK', (m) => esc(m.wk || ''), '', (m) => m.wk || ''], ['Aging', (m) => (m.mrp && m.mrp.aging ? agingPill(m.mrp.aging) : ''), '', (m) => (m.mrp && m.mrp.aging) || ''],
       ['Min', (m) => (m.mrp ? fmt(m.mrp.min) : ''), 'num', (m) => (m.mrp ? m.mrp.min : null)], ['Max', (m) => (m.mrp ? fmt(m.mrp.max) : ''), 'num', (m) => (m.mrp ? m.mrp.max : null)],
       ['Status', (m) => pill(m.status, m.cls), '', (m) => m.status], ['Lokasi', (m) => esc(m.locs.map((l) => l.sloc + (l.batch ? '/' + l.batch : '') + ': ' + fmt(l.qty) + (l.transit ? ' (transit ' + fmt(l.transit) + ')' : '')).join('; ')), '', (m) => m.locs.map((l) => l.sloc).join(', ')]];
-    $('view').innerHTML = srcLine('mb52', 'mrp') + table(items, cols, { id: 'cari', name: 'Cari Material', text: (m) => m.material + ' ' + m.desc + ' ' + m.plant, hide: ['Harga/unit', 'Zona', 'Lokasi', 'WK'], rowKey: (m) => m.material, onRow: (k) => openMaterial(k),
+    $('view').innerHTML = table(items, cols, { id: 'cari', name: 'Cari Material', text: (m) => m.material + ' ' + m.desc + ' ' + m.plant, hide: ['Harga/unit', 'Zona', 'Lokasi', 'WK'], rowKey: (m) => m.material, onRow: (k) => openMaterial(k),
       onRender: (el) => el.querySelectorAll('a[data-q]').forEach((a) => (a.onclick = () => sessionStorage.setItem('lacakQ', a.dataset.q))) });
   },
 
@@ -502,7 +506,8 @@ const PAGES = {
     $('view').innerHTML = `<section class="panel"><div class="panel-h"><h2>Folder data</h2>
         <span class="right">${fs ? `<button class="btn" id="fp1">Pilih folder</button><button class="btn ghost" id="fp2">Lupakan folder</button>` : ''}</span></div>
         <p class="muted">${fs ? `Web membaca file terbaru di folder ini setiap login, untuk setiap client SAP: _100_ = WK PEP, _180_ = WK PHE. Khusus MB51, semua file dibaca dan digabung (cocok untuk upload berkala), baris yang sama di beberapa file dihitung sekali. Nama file harus memuat MB52, MRP, ME3N, ME2N, MB51, MB25, atau RKM. File hanya dibaca di browser ini dan tidak dikirim ke mana pun.` : 'Browser ini tidak mendukung akses folder. Pakai Chrome atau Edge di laptop, atau upload file satu per satu di tabel bawah.'}</p>
-        ${S.folderName ? `<p class="source" style="margin-top:8px">Folder <b>${esc(S.folderName)}</b>, terakhir dimuat ${esc(t(S.folderLoadedAt))}</p>` : ''}</section>
+        ${S.folderName ? `<p class="source" style="margin-top:8px">Folder <b>${esc(S.folderName)}</b>, terakhir dimuat ${esc(t(S.folderLoadedAt))}</p>` : ''}
+        <p class="source" style="margin-top:4px"><span id="cacheInfo">Cache browser: menghitung…</span> <button class="btn ghost" id="cacheClr" title="Hapus hasil baca yang tersimpan di browser ini. Login berikutnya membaca ulang semua Excel.">Hapus cache</button></p></section>
       <section class="panel"><div class="panel-h"><h2>Sumber data</h2><span class="sub">Semua angka di web berasal dari file ini</span></div>
         ${plainTable(SRC, [['Data', (r) => `<b>${r[1]}</b>`], ['Isi', (r) => esc(r[2])], ['File', (r) => srcFiles(r[0]).map((f) => (f.wk && r[0] !== 'rkm' && r[0] !== 'mrp' ? `<b>WK ${esc(f.wk)}</b> ` : '') + esc(f.name)).join('<br>') || '<span class="muted">Belum dimuat</span>', 'wide'],
           ['Jumlah', (r) => esc(r[3] || ''), 'num'], ['Keterangan', (r) => esc(r[4] || '')], ['Dimuat', (r) => esc(srcFiles(r[0]).length ? t(srcFiles(r[0]).map((f) => f.at).sort((a, b) => b - a)[0]) : '')],
@@ -517,6 +522,8 @@ const PAGES = {
       $('fp1').onclick = async () => { try { const h = await Folder.pick(); await loadFolder(h); } catch (e) { if (e.name !== 'AbortError') banner('Gagal: ' + esc(e.message), 'bad'); } };
       $('fp2').onclick = async () => { await Folder.forget(); S.folderName = null; banner('Folder dilupakan. Data yang sudah dimuat tetap ada sampai halaman ditutup.', 'warn'); route(); };
     }
+    Cache.info().then((c) => { if ($('cacheInfo')) $('cacheInfo').textContent = c.files ? `Cache browser: ${c.files} file, ${fmt(c.bytes / 1048576, 1)} MB, terenkripsi. File yang tidak berubah tidak dibaca ulang saat login.` : 'Cache browser: kosong.'; });
+    $('cacheClr').onclick = async () => { await Cache.clear(); route(); };
     const LOAD = { mb52: loadMB52, mrp: loadMRP, me3n: loadME3N, me2n: loadME2N, mb51: loadMB51, mb25: loadMB25, rkm: (f) => loadRKM(f), ds: loadDS };
     document.querySelectorAll('.up').forEach((inp) => (inp.onchange = async (e) => {
       const files = [...e.target.files]; if (!files.length) return; $('upMsg').textContent = 'Memproses ' + files.map((f) => f.name).join(', ') + '…'; await tick();
@@ -583,7 +590,7 @@ function rkmPHE(res) {
       'Material dengan pemakaian (Mvt Own Use + Return, tanpa network/proyek) di MB51 WK PHE.'],
     sehat: ['Penyehatan stok', sehat, base.concat([['Surplus', (r) => fmt(r.surplus), 'num', (r) => r.surplus], ['Cakupan (bln)', (r) => (isFinite(r.cover) ? fmt(r.cover, 1) : '∞'), 'num', (r) => (isFinite(r.cover) ? r.cover : '')]]), (r) => r.material + ' ' + r.desc],
   };
-  tabbed('rkmPheTab', TABS, mrpNote() + srcLine('mb52', 'mb51', 'me3n', 'me2n'));
+  tabbed('rkmPheTab', TABS, mrpNote());
 }
 
 // Beranda: alur kerja end-to-end, satu angka kunci per langkah
@@ -801,7 +808,7 @@ PAGES.kontrak = function () {
     TABS.late = ['Pengiriman terlambat', late, lCols([['Terlambat', (l) => pill(l.lateDays + ' hari', l.lateDays > 30 ? 'low' : 'warn'), 'num', (l) => l.lateDays]]), (l) => l.doc + ' ' + l.material + ' ' + l.desc + ' ' + l.vendor + ' ' + l.plant,
       'Baris PO/RO yang tanggal kirimnya sudah lewat tetapi barang belum diterima penuh. Tindak lanjut ke vendor / PIC kontrak.'];
   }
-  tabbed('kTab', TABS, srcLine('me3n', 'me2n') + (S.me2n ? '' : '<div class="banner">Tambahkan ME2N untuk melihat PO/RO berjalan dan pengiriman terlambat.</div>'));
+  tabbed('kTab', TABS, (S.me2n ? '' : '<div class="banner">Tambahkan ME2N untuk melihat PO/RO berjalan dan pengiriman terlambat.</div>'));
 };
 
 
@@ -852,7 +859,7 @@ PAGES.expediting = function () {
     done: ['Selesai GR', done, cols, text, note], semua: ['Semua', rows, cols, text, note],
   };
   if (S.mb25) TABS.resv = ['Reservasi belum diambil', resv, rCols, (l) => l.resv + ' ' + l.material + ' ' + l.desc + ' ' + l.recipient, 'Reservasi MB25 yang tanggal butuhnya sudah lewat tetapi belum diambil penuh. Status "stok ada, belum GI" perlu ditindaklanjuti ke gudang.'];
-  const filt = `<div class="filters"><span id="exPl"></span><label class="radio"><input type="checkbox" id="exStock" ${stockOnly ? 'checked' : ''}> Hanya material stock</label></div>${srcLine('me2n', 'mb51', 'mb25')}`;
+  const filt = `<div class="filters"><span id="exPl"></span><label class="radio"><input type="checkbox" id="exStock" ${stockOnly ? 'checked' : ''}> Hanya material stock</label></div>`;
   tabbed('eTab', TABS, filt);
   UI.multi($('exPl'), { label: 'Plant', options: allPlants.map((p) => ({ value: p, label: plantLabel(p) })), selected: sel, onChange: (x) => { store.set('expPlants', [...x]); clearTimeout(window._exT); window._exT = setTimeout(route, 500); } });
   $('exStock').onchange = (e) => { store.set('expStockOnly', e.target.checked); route(); };
@@ -973,7 +980,7 @@ PAGES.order = function () {
       ['Nama kontak', (v) => `<input class="vc" data-k="${esc(v.code || v.name)}" data-f="pic" value="${esc(vc.get(v.code || v.name).pic || '')}" placeholder="nama">`, '', (v) => vc.get(v.code || v.name).pic || '']],
       (v) => v.code + ' ' + v.name, 'Kontak vendor hanya tersimpan di browser ini, tidak ke GitHub. Dipakai untuk tombol Email vendor di Draft RO.'],
   };
-  tabbed('oTab', TABS, mrpNote() + srcLine('mrp', 'me3n', 'me2n', 'mb51') + (S.me3n ? '' : '<div class="banner warn">Status kontrak masih dari file MRP. Tambahkan ME3N dan ME2N supaya kontrak, harga, dan OS PO terbaru.</div>'));
+  tabbed('oTab', TABS, mrpNote() + (S.me3n ? '' : '<div class="banner warn">Status kontrak masih dari file MRP. Tambahkan ME3N dan ME2N supaya kontrak, harga, dan OS PO terbaru.</div>'));
   // event: kontak vendor & email
   const bindRes = () => {
     document.querySelectorAll('.vc').forEach((i) => (i.onchange = () => { const c = vc.get(i.dataset.k); c[i.dataset.f] = i.value.trim(); vc.set(i.dataset.k, c); }));

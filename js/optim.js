@@ -31,7 +31,7 @@
     const o = O(), R = compute();
     const TABS = [['ringkas', 'Ringkasan optimasi DS'], ['daftar', 'Daftar DS'], ['bulan', 'Optimasi per bulan'], ['pivot', 'Pivot bulan × material'], ['bau', 'Laporan BAU']];
     if (!R.ds && o.tab !== 'bau') o.tab = 'bau';
-    $('view').innerHTML = `${srcLine('ds', 'mb51')}
+    $('view').innerHTML = `
       ${R.ds ? '' : '<div class="banner warn"><span>File DS belum dimuat. Laporan BAU tetap bisa dipakai; ringkasan optimasi DS butuh file daftar DS akhir tahun (sheet "DS PEP"/"DS PHE", form MA-01) di folder data atau lewat <a href="#/data">Data SAP</a>.</span></div>'}
       <div class="filters"><span id="oWK"></span>
         <label class="chk" title="309 = ganti kode material. Di PHE dipakai memindah kode DS ke kode aktif sebelum dipakai."><input type="checkbox" id="o309"${o.include309 ? ' checked' : ''}> Hitung 309 (ganti kode DS ke kode aktif) sebagai pemakaian DS</label>
