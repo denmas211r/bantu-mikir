@@ -413,3 +413,7 @@ dl.gloss { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px;
 .oa-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 2px; }
 .oa-sim { font-size: 12.5px; font-weight: 600; color: var(--brand); padding: 3px 8px; border: 1px solid var(--brand-soft); border-radius: 6px; background: var(--brand-soft); }
 .oa-sim:hover { border-color: var(--brand); }
+.exp-form { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 10px; } .exp-form .wide { grid-column: 1 / -1; }
+.exp-form textarea { width: 100%; border: 1px solid var(--line); border-radius: var(--r-ctl); padding: 8px 10px; font: inherit; resize: vertical; }
+.exp-form .wide { flex-direction: column; align-items: stretch; gap: 6px; } .exp-form .wide > span { width: 100%; } .exp-form input[type=date] { width: auto; text-align: left; }
+.kv b .pill { display: inline-block; width: auto; }
