@@ -385,3 +385,25 @@ dl.gloss { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px;
 .simq:focus { outline: 2px solid var(--brand); outline-offset: 1px; }
 .sim-desc { max-width: 260px; }
 .drawer .plain-wrap { overflow-x: auto; }
+
+/* Beranda: nilai stok per zona → warehouse (klik zona untuk membuka) */
+.zb { display: grid; gap: 4px; }
+.zb-row { width: 100%; display: grid; grid-template-columns: 150px minmax(0, 1fr) 18px; align-items: center; gap: 12px; border: 0; background: transparent; padding: 7px 6px; border-radius: var(--r-ctl); cursor: pointer; text-align: left; color: inherit; font: inherit; }
+.zb-row:hover { background: var(--surface-2); }
+.zb-l { display: flex; flex-direction: column; line-height: 1.3; min-width: 0; }
+.zb-l b { font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 6px; } .zb-l small { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.zb-t { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.zb-f { height: 22px; width: 0; border-radius: 0 4px 4px 0; transition: width .45s cubic-bezier(.2, .7, .2, 1); flex: none; }
+.zb-v { font-size: 12.5px; color: var(--ink-2); white-space: nowrap; } .zb-v b { color: var(--ink); font-weight: 600; font-size: 13.5px; }
+.zb-chev { width: 16px; height: 16px; fill: none; stroke: var(--muted); stroke-width: 2; transition: transform .25s; }
+.zb-z.open .zb-chev { transform: rotate(90deg); }
+.zb-list { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .3s ease; }
+.zb-list > div { overflow: hidden; min-height: 0; }
+.zb-z.open .zb-list { grid-template-rows: 1fr; }
+.zb-wh { grid-template-columns: 132px minmax(0, 1fr) 18px; padding: 4px 6px 4px 24px; }
+.zb-wh .zb-l b { font-weight: 500; font-size: 13px; } .zb-wh .zb-f { height: 14px; opacity: .85; }
+.zb-wh.dim .zb-f { opacity: .25; } .zb-wh.dim .zb-l { color: var(--muted); }
+.zb-wh[aria-pressed=true] { background: var(--brand-soft); }
+.gd-kv { margin-bottom: 16px; background: #fff; }
+@media (max-width: 760px) { .zb-row { grid-template-columns: 104px minmax(0, 1fr) 16px; } .zb-wh { grid-template-columns: 90px minmax(0, 1fr) 16px; } }
+@media (prefers-reduced-motion: reduce) { .zb-f, .zb-list, .zb-chev { transition: none !important; } }
