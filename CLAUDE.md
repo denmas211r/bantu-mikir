@@ -9,7 +9,7 @@ Ide dan logika meniru https://github.com/StackGeefer/Warehouse-SCM. Kode ditulis
 - Data disimpan sebagai file terenkripsi AES-256 di folder `data/`, didekripsi di browser setelah login.
 - Publish data lewat GitHub API memakai token yang disimpan Owner di browser (jangan pernah commit token).
 - Library di `vendor/`: SheetJS (baca Excel), ExcelJS (tulis Excel), PDF.js.
-- Struktur folder: `index.html`, `css/style.css`, `js/` (app, vault, parser, search, synonyms, model, export), `data/`, `tools/init-data.js`, `vendor/`, `.nojekyll`.
+- Struktur folder: `index.html`, `css/style.css`, `js/` (app = inti: login, routing, muat data, fungsi bersama; `js/pages/` = satu file per menu; views/optim = matriks, pop-up, deadstock; cache = hasil baca Excel terenkripsi di browser), `data/`, `tools/init-data.js`, `vendor/`, `.nojekyll`.
 
 ## ATURAN DATA (penting)
 - Repo ini PUBLIK. Selama pengembangan pakai DATA DUMMY saja.
