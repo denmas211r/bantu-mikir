@@ -79,7 +79,7 @@
       { label: 'Harga', num: true, filter: false, get: (o) => { const p = priceOf(o); return p ? toIDRv(p[0], p[1]) : null; }, html: (o) => { const p = priceOf(o); return p ? money(p[0], p[1]) : ''; } },
       { label: 'Kontrak', nowrap: true, w: 1.25, get: (o) => (o.contract ? 'Ada kontrak' : 'Tanpa kontrak'),
         html: (o) => (o.contract ? `<a href="#" class="oalink" data-oa="${esc(o.contract.doc)}">${esc(o.contract.doc)}</a><span class="k-s">${o.contract.sisaHari != null ? fmt(o.contract.sisaHari, 0) + ' hari lagi' : ''}</span>` : '<span class="muted">–</span>') },
-      ...H.map((p) => ({ label: p, sub: PLANT_NAME[p] || '', title: plantLabel(p), group: `WK ${plantWK(p)} (${plantWK(p) === 'PHE' ? '180' : '100'})`, num: true, filter: false,
+      ...H.map((p) => ({ label: p, title: plantLabel(p), group: `WK ${plantWK(p)} (${plantWK(p) === 'PHE' ? '180' : '100'})`, num: true, filter: false,
         get: (o) => (o.stock.has(p) || o.mrp.has(p) ? o.stock.get(p) || 0 : null), html: (o) => qtyCell(o.stock.has(p) || o.mrp.has(p) ? o.stock.get(p) || 0 : null, o.mrp.get(p)) })),
       { label: 'Plant lain', num: true, filter: false, hide: S.cariWK === 'all', get: (o) => { const v = [...o.stock].filter(([p]) => !H.includes(p)).reduce((a, [, q]) => a + q, 0); return v || null; },
         html: (o) => { const ot = [...o.stock].filter(([p, q]) => !H.includes(p) && q > 0); return ot.length ? `<span title="${esc(ot.map(([p, q]) => `${plantLabel(p)}: ${fmt(q)}`).join('\n'))}">${fmt(ot.reduce((a, [, q]) => a + q, 0))}</span><span class="k-s">${ot.length} plant</span>` : ''; } },
