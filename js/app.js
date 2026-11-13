@@ -101,15 +101,17 @@ $('collapse').onclick = () => { const c = !$('app').classList.contains('collapse
 setSide(!!store.get('sideCollapsed'));
 window.addEventListener('hashchange', () => S && route());
 
+// Menu Bantuan (Panduan, Data SAP, Pengaturan) jadi ikon di bawah sidebar supaya menu utama muat tanpa scroll
 function buildNav() {
-  $('nav').innerHTML = MENU.map(([g, items]) => `<div class="nav-group">${g}</div>` +
+  $('nav').innerHTML = MENU.filter(([g]) => g !== 'Bantuan').map(([g, items]) => `<div class="nav-group">${g}</div>` +
     items.map(([k, t, ic]) => `<a href="#/${k}" data-k="${k}" title="${t}">${svg(ic)}<span>${t}</span></a>`).join('')).join('');
+  $('sideHelp').innerHTML = (MENU.find(([g]) => g === 'Bantuan') || [, []])[1].map(([k, t, ic]) => `<a href="#/${k}" data-k="${k}" class="side-btn" title="${t}" aria-label="${t}">${svg(ic)}</a>`).join('');
 }
 function sideData() {}
 function route() {
   const k = (location.hash.match(/#\/([\w-]+)/) || [, 'beranda'])[1];
   const r = ROUTES[k] || ROUTES.beranda;
-  document.querySelectorAll('#nav a').forEach((a) => a.classList.toggle('on', a.dataset.k === r[0]));
+  document.querySelectorAll('#nav a, #sideHelp a').forEach((a) => a.classList.toggle('on', a.dataset.k === r[0]));
   $('pageTitle').textContent = r[1]; $('pageSub').textContent = r[3] || ''; $('pageActions').innerHTML = ''; document.title = r[1] + ' · MIM Inventory Analyst';
   $('sidebar').classList.remove('open'); UI.closePop(); UI.closeDrawer();
   (PAGES[r[0]] || soon)(r);
@@ -313,6 +315,9 @@ const hit = (text, groups) => groups.every((g) => g.some((t) => text.toLowerCase
 let timer; const debounce = (fn) => { clearTimeout(timer); timer = setTimeout(fn, 200); };
 const SRC_LABEL = { ds: 'DS', mb52: 'MB52', mrp: 'MRP', me3n: 'ME3N', me2n: 'ME2N', mb51: 'MB51', mb25: 'MB25', rkm: 'RKM' };
 const srcFiles = (k) => (S.src[k] ? Object.values(S.src[k]) : []);
+// teks panjang diringkas: kalimat pertama tampil, teks lengkap di ikon ⓘ (tooltip)
+const infoI = (full) => `<span class="info-i" tabindex="0" title="${esc(UI.strip(full))}" aria-label="${esc(UI.strip(full))}">ⓘ</span>`;
+const brief = (html) => { const m = String(html).match(/^([\s\S]*?[.)])(\s+[A-Z(<][\s\S]*)$/); return m ? m[1] + ' ' + infoI(html) : html; };
 const pill = (t, cls) => `<span class="pill ${cls}">${esc(t)}</span>`;
 const agingPill = (a) => pill(a || '-', a === 'FS' ? 'ok' : a === 'MD' ? 'info' : a === 'SP' ? 'warn' : 'mute');
 // cols lama: [judul, fn(row)->html, kelas ('num'), fn(row)->nilai mentah, filter?]
@@ -503,7 +508,7 @@ const PAGES = {
     ];
     $('view').innerHTML = `<section class="panel"><div class="panel-h"><h2>Folder data</h2>
         <span class="right">${fs ? `<button class="btn" id="fp1">Pilih folder</button><button class="btn ghost" id="fp2">Lupakan folder</button>` : ''}</span></div>
-        <p class="muted">${fs ? `Web membaca file terbaru di folder ini setiap login, untuk setiap client SAP: _100_ = WK PEP, _180_ = WK PHE. Khusus MB51, semua file dibaca dan digabung (cocok untuk upload berkala), baris yang sama di beberapa file dihitung sekali. Nama file harus memuat MB52, MRP, ME3N, ME2N, MB51, MB25, atau RKM. File hanya dibaca di browser ini dan tidak dikirim ke mana pun.` : 'Browser ini tidak mendukung akses folder. Pakai Chrome atau Edge di laptop, atau upload file satu per satu di tabel bawah.'}</p>
+        <p class="muted">${fs ? `Web membaca file terbaru di folder ini setiap login; file hanya dibaca di browser ini. ${infoI(`Web membaca file terbaru di folder ini setiap login, untuk setiap client SAP: _100_ = WK PEP, _180_ = WK PHE. Khusus MB51, semua file dibaca dan digabung (cocok untuk upload berkala), baris yang sama di beberapa file dihitung sekali. Nama file harus memuat MB52, MRP, ME3N, ME2N, MB51, MB25, atau RKM. File hanya dibaca di browser ini dan tidak dikirim ke mana pun.`)}` : 'Browser ini tidak mendukung akses folder. Pakai Chrome atau Edge di laptop, atau upload file satu per satu di tabel bawah.'}</p>
         ${S.folderName ? `<p class="source" style="margin-top:8px">Folder <b>${esc(S.folderName)}</b>, terakhir dimuat ${esc(t(S.folderLoadedAt))}</p>` : ''}
         <p class="source" style="margin-top:4px"><span id="cacheInfo">Cache browser: menghitung…</span> <button class="btn ghost" id="cacheClr" title="Hapus hasil baca yang tersimpan di browser ini. Login berikutnya membaca ulang semua Excel.">Hapus cache</button></p></section>
       <section class="panel"><div class="panel-h"><h2>Sumber data</h2><span class="sub">Semua angka di web berasal dari file ini</span></div>
@@ -541,7 +546,7 @@ const PAGES = {
       <section class="panel"><div class="panel-h"><h2>Mata uang dan kurs</h2></div>
         <div class="params"><label>Rupiah per 1 USD<span><input type="number" id="kurs" min="1" step="1" value="${S.set.kurs}"></span></label>
           ${['PEP', 'PHE'].map((w) => `<label>Mata uang nilai stok MB52 WK ${w}<span><select class="wkc" data-w="${w}">${['IDR', 'USD'].map((c) => `<option ${(S.set.wkCur || {})[w] === c ? 'selected' : ''}>${c}</option>`).join('')}</select></span></label>`).join('')}</div>
-        <p class="muted small" style="margin-top:8px">Kurs dipakai untuk konversi IDR dan USD di dashboard dan estimasi nilai. MB52 tidak mencantumkan mata uang, jadi mata uang nilai stok diatur per WK (company code). Pastikan sesuai dengan SAP. Nilai awal Rp 18.150 mengikuti JISDOR awal November 2026. Sesuaikan dengan kurs yang dipakai kantor.</p></section>
+        <p class="muted small" style="margin-top:8px">Nilai awal Rp 18.150 (JISDOR awal Nov 2026); sesuaikan dengan kurs kantor. ${infoI('Kurs dipakai untuk konversi IDR dan USD di dashboard dan estimasi nilai. MB52 tidak mencantumkan mata uang, jadi mata uang nilai stok diatur per WK (company code). Pastikan sesuai dengan SAP.')}</p></section>
       <section class="panel"><div class="panel-h"><h2>Metode perhitungan MRP</h2></div>
         <div class="radios">${Object.entries(METHOD).map(([k, t]) => `<label class="radio"><input type="radio" name="method" value="${k}" ${S.set.method === k ? 'checked' : ''}>${esc(t)}</label>`).join('')}</div>
         ${S.set.method === 'tko' ? `<div class="params" style="margin-top:12px">${TKO_FIELDS.map(([k, t, u]) => `<label>${esc(t)} <span class="muted">(${u})</span><span><input type="number" step="0.5" min="0" data-k="${k}" value="${P(k)}"></span></label>`).join('')}
@@ -551,7 +556,7 @@ const PAGES = {
           <p class="muted small" style="margin-top:8px">Penjelasan rumus ada di <a href="#/regulasi">Panduan & Aturan</a>. <a href="#" id="tkoReset">Kembalikan default</a></p>` : ''}</section>
       <section class="panel"><div class="panel-h"><h2>MRP WK PHE</h2><span class="sub">Sementara, sampai file MRP PHE dibuat</span></div>
         <div class="params"><label>Lead time default bila material tidak ada di master MRP PEP<span><input type="number" id="pheLT" min="0.5" max="36" step="0.5" value="${S.set.pheLT || 3}"></span></label></div>
-        <p class="muted small" style="margin-top:8px">Pemakaian diambil dari MB51 client 180: Mvt kategori Own Use dan Return, tanpa GI ke network/proyek (221, 222, 949, 950). Aturan ini sama dengan file MRP PEP (dicek Oktober 2026, cocok 363 dari 364 material×plant).</p></section>
+        <p class="muted small" style="margin-top:8px">Pemakaian dari MB51 client 180 (Own Use + Return, tanpa network/proyek). ${infoI('Pemakaian diambil dari MB51 client 180: Mvt kategori Own Use dan Return, tanpa GI ke network/proyek (221, 222, 949, 950). Aturan ini sama dengan file MRP PEP (dicek Oktober 2026, cocok 363 dari 364 material×plant).')}</p></section>
       <section class="panel"><div class="panel-h"><h2>Basis kebutuhan</h2><span class="sub">Angka AMU yang dipakai mesin MRP</span></div>
         <div class="radios">${Object.entries(BASIS).map(([k, t]) => `<label class="radio"><input type="radio" name="basis" value="${k}" ${S.set.basis === k ? 'checked' : ''}>${esc(t)}</label>`).join('')}</div></section>
       <section class="panel"><div class="panel-h"><h2>Long lead item</h2></div>
@@ -771,12 +776,12 @@ function drawABC(pool, idrOf, cmoney, selTxt) {
   if (!A.cell || !A.cell.includes('|')) { const c = ['A|DS', 'A|SP', 'A|MD', 'B|DS', 'B|SP', 'A|FS'].find((c) => cell(...c.split('|')).length); A.cell = c || 'A|FS'; }
   const [ck, cg] = A.cell.split('|'), list = cell(ck, cg).sort((a, b) => b.idr - a.idr);
   const risk = (k, g) => k !== 'C' && (g === 'SP' || g === 'DS');
-  $('abcPanel').innerHTML = `<div class="panel-h"><h2>Analisis ABC</h2><span class="sub">Material mana yang paling mahal, dan mana yang diam di gudang. A = 80% nilai teratas, B = 15% berikutnya, C = sisanya.</span><span class="right" id="abcBasis"></span></div>
+  $('abcPanel').innerHTML = `<div class="panel-h"><h2>Analisis ABC</h2><span class="sub">A = 80% nilai teratas, B = 15% berikutnya, C = sisanya ${infoI('Material mana yang paling mahal, dan mana yang diam di gudang.')}</span><span class="right" id="abcBasis"></span></div>
     <div class="abc-grid"><div><h4 class="sub-h">Kelas nilai × pergerakan <small class="muted">klik sel untuk melihat daftarnya</small></h4><div class="plain-wrap"><table class="plain abc-m"><tr><th>Kelas</th>${AG.map((g) => `<th class="num" title="${AGN[g]}">${g === '–' ? 'Tanpa MRP' : g}</th>`).join('')}<th class="num">Total</th></tr>
       ${['A', 'B', 'C'].map((k) => `<tr><th>${k}</th>${AG.map((g) => { const xs = cell(k, g); return `<td class="num${xs.length ? ' pick' : ''}${A.cell === k + '|' + g ? ' on' : ''}${risk(k, g) && xs.length ? ' risk' : ''}" data-c="${k}|${g}">${xs.length ? `<b>${cmoney(sum(xs))}</b><small>${fmt(xs.length, 0)} baris</small>` : '<span class="muted">–</span>'}</td>`; }).join('')}
         <td class="num"><b>${cmoney(sum(rows.filter((x) => x.k === k)))}</b><small>${fmt(rows.filter((x) => x.k === k).length, 0)} baris</small></td></tr>`).join('')}</table></div>
-      <p class="muted small" style="margin-top:6px">FS dipakai ≤ 12 bulan, MD ≤ 24 bulan, SP ≤ 60 bulan, DS lebih dari 60 bulan tidak dipakai (B7-004). Angka di sel = nilai stok. Sel merah = nilai besar yang tidak bergerak.${A.basis === 'pakai' ? ' Dengan dasar pemakaian, material yang tidak dipakai 12 bulan otomatis masuk kelas C.' : ''}</p></div>
-      <div><h4 class="sub-h">Insight dan tindakan</h4><ul class="reco abc-ins">${ins.map(([c, t]) => `<li class="${c}"><span>${t}</span></li>`).join('')}</ul></div></div>
+      <p class="muted small" style="margin-top:6px">Sel merah = nilai besar yang tidak bergerak. ${infoI(`FS dipakai ≤ 12 bulan, MD ≤ 24 bulan, SP ≤ 60 bulan, DS lebih dari 60 bulan tidak dipakai (B7-004). Angka di sel = nilai stok. Sel merah = nilai besar yang tidak bergerak.${A.basis === 'pakai' ? ' Dengan dasar pemakaian, material yang tidak dipakai 12 bulan otomatis masuk kelas C.' : ''}`)}</p></div>
+      <div><h4 class="sub-h">Insight dan tindakan</h4><ul class="reco abc-ins">${ins.map(([c, t]) => `<li class="${c}"><span>${brief(t)}</span></li>`).join('')}</ul></div></div>
     <h4 class="sub-h">Kelas ${esc(ck)}, ${esc(AGN[cg])}: ${fmt(list.length, 0)} baris, ${cmoney(sum(list))}</h4><div id="abcList"></div>`;
   UI.seg($('abcBasis'), [['stok', 'Dasar: nilai stok'], ['pakai', 'Dasar: nilai pemakaian 12 bln']], A.basis, (v) => { A.basis = v; A.cell = ''; save(); });
   $('abcPanel').querySelectorAll('td.pick').forEach((td) => (td.onclick = () => { A.cell = td.dataset.c; save(); }));
