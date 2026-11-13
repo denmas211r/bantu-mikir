@@ -410,3 +410,6 @@ dl.gloss { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px;
 .tip-u { border-bottom: 1px dotted var(--muted); cursor: help; }
 .o-kv { margin-bottom: 14px; background: #fff; } .o-kv small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
 #pageActions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.oa-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 2px; }
+.oa-sim { font-size: 12.5px; font-weight: 600; color: var(--brand); padding: 3px 8px; border: 1px solid var(--brand-soft); border-radius: 6px; background: var(--brand-soft); }
+.oa-sim:hover { border-color: var(--brand); }

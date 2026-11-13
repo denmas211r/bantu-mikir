@@ -262,14 +262,14 @@
     $('pageActions').innerHTML = '<span id="vSeg"></span>';
     UI.seg($('vSeg'), [['kartu', 'Kartu'], ['tabel', 'Tabel']], S.kView, (v) => { S.kView = v; store.set('kView', v); route(); });
     if (S.kView === 'tabel') return tableKontrak();
-    const F = S.kf || (S.kf = { q: '', st: new Set(), pg: new Set(), wk: new Set(), kel: new Set(), sort: 'hari', n: 60, allKel: false });
+    // bawaan: utamakan kontrak Zona 1 (PG X07) dan Regional 1 Zona 1&4 (PG X02); PG lain bisa ditambah lewat filter
+    const F = S.kf || (S.kf = { q: '', st: new Set(), pg: new Set(store.get('kPg') || ['X07', 'X02']), wk: new Set(), kel: new Set(), sort: 'hari', n: 60 });
     const usedBy = new Map(); if (S.mrpRes) for (const r of S.mrpRes.values()) if (r.contract) usedBy.set(r.contract.doc, (usedBy.get(r.contract.doc) || 0) + 1);
     const stOf = (d) => { const a = []; if (d.sisaHari != null && d.sisaHari < 0) a.push('Berakhir'); else if (d.sisaHari != null && d.sisaHari <= 90) a.push('Habis ≤ 90 hari'); else if (d.sisaHari != null && d.sisaHari <= 180) a.push('Habis ≤ 180 hari'); if (d.pctSisa < 0.2) a.push('Sisa nilai < 20%'); return a.length ? a : ['Aman']; };
     const all = [...S.me3n.docs.values()];
     $('view').innerHTML = `<div class="filters"><label class="dt-search">${UI.I.search}<input type="search" id="kq" placeholder="Cari No. OA, vendor, atau material…" value="${esc(F.q)}"></label>
         <span id="kKelF"></span><span id="kSt"></span><span id="kPg"></span><span id="kWk"></span>
         <label class="select"><span class="select-k">Urut</span><select id="kSort" class="bare">${[['hari', 'Sisa hari'], ['nilai', 'Sisa nilai (%)'], ['pakai', 'Dipakai MRP'], ['oa', 'No. OA']].map(([v, l]) => `<option value="${v}" ${F.sort === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
-      <section class="panel"><div class="panel-h"><h2>Ringkasan kelompok barang</h2><span class="sub">Kelompok dibaca dari deskripsi item ME3N. Klik baris untuk menyaring kartu.</span></div><div id="kKel"></div></section>
       <p class="source" id="kCount"></p><div class="oa-grid" id="kGrid"></div><div class="more" id="kMore"></div>`;
     // ringkasan per kelompok barang (kontrak dihitung pada kelompok utamanya)
     const kelRows = (() => {
@@ -279,16 +279,7 @@
         if (d.sisaHari != null && d.sisaHari >= 0 && d.sisaHari <= 90) g.soon++; if (act && d.end && (!g.end || d.end < g.end)) g.end = d.end; });
       return [...m.values()].sort((a, b) => (a.kel === 'Lainnya') - (b.kel === 'Lainnya') || b.n - a.n);
     })();
-    const drawKel = () => {
-      const vis = F.allKel ? kelRows : kelRows.slice(0, 8);
-      $('kKel').innerHTML = `<div class="plain-wrap"><table class="plain kel-t"><tr><th>Kelompok barang</th><th class="num">Kontrak</th><th class="num">Aktif</th><th class="num">Habis ≤ 90 hari</th><th class="num">Item</th><th class="num">Dipakai MRP</th><th class="num">Sisa nilai kontrak aktif</th><th>Berakhir paling cepat</th></tr>` +
-        vis.map((g) => `<tr class="clickable${F.kel.has(g.kel) ? ' on' : ''}" data-kel="${esc(g.kel)}"><td><b>${esc(g.kel)}</b></td><td class="num">${fmt(g.n, 0)}</td><td class="num">${fmt(g.aktif, 0)}</td><td class="num">${g.soon ? `<span class="q-low">${fmt(g.soon, 0)}</span>` : '0'}</td>
-          <td class="num">${fmt(g.items, 0)}</td><td class="num">${fmt(g.used, 0)}</td><td class="num">${Object.entries(g.sisa).sort().map(([c, v]) => money(v, c)).join('<br>') || '–'}</td><td>${dstr(g.end)}</td></tr>`).join('') + '</table></div>' +
-        (kelRows.length > 8 ? `<button class="btn ghost" id="kKelAll" style="margin-top:8px">${F.allKel ? 'Ringkas' : `Tampilkan semua ${kelRows.length} kelompok`}</button>` : '');
-      $('kKel').querySelectorAll('tr[data-kel]').forEach((tr) => (tr.onclick = () => { const k = tr.dataset.kel; F.kel.has(k) ? F.kel.delete(k) : F.kel.add(k); F.n = 60; drawKel(); kelMulti(); draw(); }));
-      if ($('kKelAll')) $('kKelAll').onclick = () => { F.allKel = !F.allKel; drawKel(); };
-    };
-    const kelMulti = () => UI.multi($('kKelF'), { label: 'Kelompok', options: kelRows.map((g) => ({ value: g.kel, label: g.kel })), selected: F.kel, onChange: () => { F.n = 60; drawKel(); draw(); } });
+    const kelMulti = () => UI.multi($('kKelF'), { label: 'Kelompok', options: kelRows.map((g) => ({ value: g.kel, label: g.kel })), selected: F.kel, onChange: () => { F.n = 60; draw(); } });
     const draw = () => {
       const g = expand(F.q);
       let list = all.filter((d) => (!F.kel.size || F.kel.has(d.kel)) && (!F.pg.size || F.pg.has(d.pg)) && (!F.wk.size || F.wk.has(d.wk)) && (!F.st.size || stOf(d).some((x) => F.st.has(x))) &&
@@ -305,18 +296,18 @@
           <div class="oa-meta"><span><b>${fmt(d.items, 0)}</b> item</span><span><b>${fmt(usedBy.get(d.doc) || 0, 0)}</b> dipakai MRP</span><span>PG <b>${esc(d.pg)}</b></span><span>s.d. <b>${dstr(d.end)}</b></span></div>
           <div class="oa-meta"><span>Sisa nilai <b>${money(d.sisa, d.currency)}</b> dari ${money(d.target, d.currency)}</span></div>
           <div class="progress ${d.pctSisa < 0.05 ? 'bad' : d.pctSisa < 0.2 ? 'warn' : ''}" title="Terpakai ${fmt(used, 0)}%"><i style="width:${used.toFixed(1)}%"></i></div>
-          ${st[0] !== 'Aman' && st.some((x) => x.startsWith('Sisa')) ? `<span class="small" style="color:var(--warn)">Sisa nilai di bawah 20%</span>` : ''}</button>`;
+          <div class="oa-foot">${st[0] !== 'Aman' && st.some((x) => x.startsWith('Sisa')) ? `<span class="small" style="color:var(--warn)">Sisa nilai di bawah 20%</span>` : '<span></span>'}${d.sisaHari == null || d.sisaHari >= 0 ? `<span class="oa-sim" data-sim="${esc(d.doc)}" role="button" tabindex="0" title="Rencanakan Call RO dari kontrak ini">Simulasi RO</span>` : ''}</div></button>`;
       }).join('') || '<div class="panel empty"><h3>Tidak ada kontrak yang cocok</h3><p>Ubah kata kunci atau filter.</p></div>';
       $('kMore').innerHTML = list.length > F.n ? `<button class="btn" id="kMoreB">Tampilkan ${Math.min(60, list.length - F.n)} lagi</button>` : '';
       if ($('kMoreB')) $('kMoreB').onclick = () => { F.n += 60; draw(); };
-      document.querySelectorAll('.oa-card').forEach((c) => (c.onclick = () => openContract(c.dataset.oa)));
+      document.querySelectorAll('.oa-card').forEach((c) => (c.onclick = (e) => openContract(c.dataset.oa, e.target.closest('.oa-sim') ? 'sim' : undefined)));
     };
     let t; $('kq').oninput = (e) => { clearTimeout(t); t = setTimeout(() => { F.q = e.target.value; F.n = 60; draw(); }, 200); };
     $('kSort').onchange = (e) => { F.sort = e.target.value; draw(); };
     const later = () => { F.n = 60; draw(); };
-    drawKel(); kelMulti();
+    kelMulti();
     UI.multi($('kSt'), { label: 'Status', options: ['Aman', 'Habis ≤ 90 hari', 'Habis ≤ 180 hari', 'Sisa nilai < 20%', 'Berakhir'].map((v) => ({ value: v, label: v })), selected: F.st, onChange: later });
-    UI.multi($('kPg'), { label: 'Purch. group', options: [...new Set(all.map((d) => d.pg))].sort().map((v) => ({ value: v, label: `${v} ${Contract.PIC[v] || ''}`.trim() })), selected: F.pg, onChange: later });
+    UI.multi($('kPg'), { label: 'Purch. group', options: [...new Set(all.map((d) => d.pg))].sort().map((v) => ({ value: v, label: `${v} ${Contract.PIC[v] || ''}`.trim() })), selected: F.pg, onChange: () => { store.set('kPg', [...F.pg]); later(); } });
     UI.multi($('kWk'), { label: 'WK', options: [...new Set(all.map((d) => d.wk))].sort().map((v) => ({ value: v, label: 'WK ' + v })), selected: F.wk, onChange: later });
     draw();
   };
@@ -345,7 +336,7 @@
     });
     return out.sort((a, b) => (b.l.docDate || 0) - (a.l.docDate || 0));
   }
-  function openContract(doc) {
+  function openContract(doc, tab) {
     const d = S.me3n && S.me3n.docs.get(doc);
     const lines = S.me2n ? S.me2n.lines.filter((l) => l.oa === doc && !l.deleted) : [];
     if (!d && !lines.length) { UI.drawer(`<div class="d-head"><h2>OA ${esc(doc)}</h2></div><div class="d-sec">Kontrak ini tidak ada di ME3N maupun ME2N yang dimuat.</div>`, { label: 'Kontrak' }); return; }
@@ -357,7 +348,7 @@
     // pemakaian kontrak per plant (nilai RO)
     const perPlant = new Map(); lines.forEach((l) => { const g = perPlant.get(l.plant) || perPlant.set(l.plant, { plant: l.plant, n: 0, value: 0, open: 0 }).get(l.plant); g.n++; g.value += l.value; g.open += l.openValue || 0; });
     const roVal = lines.reduce((a, l) => a + l.value, 0);
-    const T = { tab: items.length ? 'item' : 'ro' };
+    const T = { tab: tab || (items.length ? 'item' : 'ro') };
     const body = UI.drawer('', { label: 'Kontrak ' + doc, wide: true });
     // ---------- Simulasi Call RO: qty RO per material × field, dengan stok dan estimasi sesudah RO ----------
     const SIMK = 'simRO', simAll = store.get(SIMK) || {}, SIM = (simAll[doc] = simAll[doc] || { q: {}, zona: '', need: true });
@@ -468,7 +459,7 @@
   // tautan material di mana pun → buka analisis material
   document.addEventListener('click', (e) => {
     const a = e.target.closest('.mlink, .oalink, .calclink'); if (!a || a.closest('.drawer')) return; e.preventDefault();
-    if (a.classList.contains('oalink')) openContract(a.dataset.oa);
+    if (a.classList.contains('oalink')) openContract(a.dataset.oa, a.dataset.tab);
     else if (a.classList.contains('calclink')) openMaterial(a.dataset.mat, { calc: a.dataset.p });
     else openMaterial(a.dataset.mat);
   });

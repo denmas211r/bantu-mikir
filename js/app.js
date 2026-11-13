@@ -995,7 +995,7 @@ PAGES.order = function () {
   const roText = (doc) => { const its = ro.filter((o) => o.r.contract.doc === doc); const k = its[0].r.contract;
     return `Yth. ${k.vendor},\n\nBerikut rencana Release Order atas kontrak ${doc}:\n\n` + its.map((o, i) => `${i + 1}. ${o.r.material} - ${o.r.desc} : ${fmt(o.r.toOrder)} ${o.r.contract.uom || o.r.uom} (plant ${o.r.plant})`).join('\n') + `\n\nMohon konfirmasi ketersediaan dan jadwal pengiriman.\n\nTerima kasih.`; };
   const TABS = {
-    ro: ['Draft RO (ada kontrak)', ro, [['No. OA', (o) => `<span class="mono">${esc(o.r.contract.doc)}</span><br><span class="muted small">item ${esc(o.r.contract.item)}</span>`, '', (o) => o.r.contract.doc], ['Vendor', (o) => esc(o.r.contract.vendor)], ['PIC', (o) => esc(o.r.contract.pic)],
+    ro: ['Draft RO (ada kontrak)', ro, [['No. OA', (o) => `<a href="#" class="mono oalink" data-oa="${esc(o.r.contract.doc)}" data-tab="sim" title="Buka simulasi Call RO kontrak ini">${esc(o.r.contract.doc)}</a><br><span class="muted small">item ${esc(o.r.contract.item)}</span>`, '', (o) => o.r.contract.doc], ['Vendor', (o) => esc(o.r.contract.vendor)], ['PIC', (o) => esc(o.r.contract.pic)],
       ['Plant', (o) => esc(o.r.plant)], ['Material', (o) => `<a class="mono mlink" href="#" data-mat="${esc(o.r.material)}">${esc(o.r.material)}</a>`, '', (o) => o.r.material], ['Deskripsi', (o) => esc(o.r.desc)],
       ['Qty', (o) => `<a href="#" class="calclink" data-mat="${esc(o.r.material)}" data-p="${esc(o.r.plant)}" title="Lihat rumus Min/Max dan To Order">${fmt(o.r.toOrder)}</a>`, 'num', (o) => o.r.toOrder], ['UoM', (o) => esc(o.r.contract.uom || o.r.uom)], ['Harga kontrak', (o) => money(o.r.contract.price, o.r.contract.currency), 'num', (o) => o.r.contract.price],
       ['Nilai', (o) => money(o.value, o.r.contract.currency), 'num', (o) => o.value], ['Mata uang', (o) => esc(o.r.contract.currency)],
@@ -1003,7 +1003,7 @@ PAGES.order = function () {
       ['Sisa hari', (o) => fmt(o.r.contract.sisaHari, 0), 'num', (o) => o.r.contract.sisaHari],
       ['Sumber', (o) => esc(orderSrc(o.r)), '', (o) => orderSrc(o.r)],
       ['Kontak', (o) => `<button class="btn ghost mail" data-doc="${esc(o.r.contract.doc)}" data-v="${esc(o.r.contract.vendorCode || o.r.contract.vendor)}">Email vendor</button>`, '', () => '', false]],
-      (o) => o.r.contract.doc + ' ' + o.r.contract.vendor + ' ' + o.r.material + ' ' + o.r.desc, 'Item To Order yang tercover kontrak aktif → terbitkan RO. Kontrak dipilih dengan prioritas X07 → X02 → X10 → X03.'],
+      (o) => o.r.contract.doc + ' ' + o.r.contract.vendor + ' ' + o.r.material + ' ' + o.r.desc, 'Klik No. OA untuk simulasi Call RO. Kontrak dipilih dengan prioritas X07 → X02 → X10 → X03.'],
     pr: ['Draft PR + OE (tanpa kontrak)', pr, [['Kelompok', (o) => esc(o.grp), '', (o) => o.grp], ['Plant', (o) => esc(o.r.plant)], ['Material', (o) => `<a class="mono mlink" href="#" data-mat="${esc(o.r.material)}">${esc(o.r.material)}</a>`, '', (o) => o.r.material],
       ['Deskripsi', (o) => esc(o.r.desc)], ['Qty', (o) => `<a href="#" class="calclink" data-mat="${esc(o.r.material)}" data-p="${esc(o.r.plant)}" title="Lihat rumus Min/Max dan To Order">${fmt(o.r.toOrder)}</a>`, 'num', (o) => o.r.toOrder], ['UoM', (o) => esc(o.r.uom)],
       ['Harga OE', (o) => (o.p.price ? money(o.p.price, o.p.currency) : pill('Belum ada', 'warn')), 'num', (o) => o.p.price], ['Sumber harga', (o) => esc(o.p.src)],
