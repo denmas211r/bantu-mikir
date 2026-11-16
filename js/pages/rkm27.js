@@ -78,12 +78,9 @@ PAGES.rkm27 = function () {
   if (S.r27p !== 'all' && !plants.includes(S.r27p)) S.r27p = 'all';
   const inP = (p) => S.r27p === 'all' || (p || '?') === S.r27p;
   $('pageActions').insertAdjacentHTML('afterbegin', '<span id="r27P"></span>');
-  UI.seg($('r27P'), [['all', 'Semua plant']].concat(plants.map((p) => [p, p === '?' ? 'Plant belum diisi' : plantLabel(p)])), S.r27p, (v) => { S.r27p = v; store.set('r27p', v); S.r27m = null; route(); });
+  UI.seg($('r27P'), plants.map((p) => [p, p === '?' ? 'Plant belum diisi' : plantLabel(p)]).concat([['all', 'Semua plant']]), S.r27p, (v) => { S.r27p = v; store.set('r27p', v); S.r27m = null; route(); });
 
   const rows = D.rows.filter((o) => inP(o.plant));
-  const sel = S.r27m || null;
-  const pen = rows.filter((o) => !sel || (sel === 'late' ? o.f.shortTotal && o.due != null && o.due < D.nowIdx : String(o.due) === sel && o.f.shortTotal))
-    .sort((a, b) => (b.f.shortTotal > 0) - (a.f.shortTotal > 0) || (a.due == null) - (b.due == null) || (a.due || 0) - (b.due || 0));
   const kept = C.kept.filter((r) => inP(r.plant)), dups = C.dups.filter((r) => inP(r.plant));
   const from = D.nowIdx, to = RKM_YEAR * 12 + 11;
   const MN = MON;
@@ -92,19 +89,6 @@ PAGES.rkm27 = function () {
   const kimapA = (o) => (o.material ? `<a class="mono mlink" href="#" data-mat="${esc(o.material)}">${esc(o.kimap || o.material)}</a>` : o.kimap ? `<span class="mono">${esc(o.kimap)}</span>` : pill('tanpa KIMAP', 'low'));
   const plantC = ['Plant', (o) => esc(o.plant || '?'), '', (o) => o.plant || ''];
 
-  const penCols = [
-    ['Status', (o) => pill(o.st[0], o.st[1]), '', (o) => o.st[0]], plantC, ['KIMAP', kimapA, '', (o) => o.kimap || o.material || ''], ['Deskripsi', (o) => esc(o.desc)],
-    ['Satuan', (o) => (o.units.size > 1 ? pill(o.unit, 'warn') : esc(o.unit)), '', (o) => o.unit],
-    ['Kebutuhan', (o) => `<span class="tip-u" title="${esc(needTip(o))}">${fmt(o.total)}${o.guessed ? '*' : ''}</span>`, 'num', (o) => o.total],
-    ['Stok + PO', (o) => (o.src ? `<span class="tip-u" title="${esc(`Stok ZNORMAL ${fmt(o.stock)} · PO/RO jalan ${fmt(o.ospo)} (dari ${o.src})`)}">${fmt(o.stock + o.ospo)}</span>` : '<span class="muted" title="Belum ada di MRP/MB52">0</span>'), 'num', (o) => o.stock + o.ospo],
-    ['Kurang', (o) => (o.f.shortTotal ? `<b>${fmt(o.f.shortTotal)}</b>` : '0'), 'num', (o) => o.f.shortTotal],
-    ['Mulai kurang', (o) => esc(r27Label(o.shortIdx)), '', (o) => (o.shortIdx == null ? '' : r27Label(o.shortIdx))],
-    ['LT (bln)', (o) => (o.lt == null ? '<span class="muted">-</span>' : fmt(o.lt, 1)), 'num', (o) => (o.lt == null ? '' : o.lt)],
-    ['Pesan paling lambat', (o) => (o.due == null ? '' : `<span class="${o.due < D.nowIdx ? 'neg' : ''}">${esc(r27Label(o.due))}</span>`), '', (o) => (o.due == null ? '' : r27Label(o.due))],
-    ['Lewat', (o) => (!o.lewat ? '' : o.lewat === 'RO' ? `${pill('RO', 'info')} ${oaLink(o.oa)}` : pill('PR', 'warn')), '', (o) => (o.lewat === 'RO' ? 'RO ' + o.oa : o.lewat)],
-    [`Timeline ${r27Label(from)} – ${r27Label(to)}`, (o) => r27Gantt(o, from, to), '', (o) => (o.f.shortTotal ? `Kurang mulai ${r27Label(o.shortIdx)}${o.due != null ? ', pesan paling lambat ' + r27Label(o.due) : ''}` : 'Tercukupi')],
-    ['PIC', (o) => `<span class="tip-u" title="${esc(picTip(o))}">${fmt(o.pics.length, 0)}</span>`, 'num', (o) => o.pics.length],
-  ];
   const monthCols = MN.map((m, k) => [m, (o) => (o.months[k] ? fmt(o.months[k]) : ''), 'num', (o) => o.months[k] || '']);
   const rekapCols = [plantC, ['KIMAP', kimapA, '', (o) => o.kimap || ''], ['Deskripsi', (o) => esc(o.desc)], ['Satuan', (o) => (o.units.size > 1 ? pill(o.unit, 'warn') : esc(o.unit)), '', (o) => o.unit],
     ['Total 2027', (o) => `<b>${fmt(o.total)}</b>`, 'num', (o) => o.total], ...monthCols,
@@ -133,29 +117,38 @@ PAGES.rkm27 = function () {
     ['Dipakai', (o) => (o.f ? fmt(o.n, 0) : ''), 'num', (o) => (o.f ? o.n : '')], ['Dobel', (o) => (o.f ? fmt(o.d, 0) : ''), 'num', (o) => (o.f ? o.d : '')],
     ['Catatan', (o) => (o.skip ? pill('Dilewati: file hasil rekap', 'mute') : o.fail ? pill('Gagal dibaca', 'low') + ' ' + esc(o.fail.why) : o.f.skipped.length ? 'Sheet dilewati: ' + esc(o.f.skipped.join(', ')) : '')]];
 
-  const shortN = rows.filter((o) => o.f.shortTotal).length;
+  // Realisasi: apakah user benar memakai sesuai rencana? Pemakaian nyata dari MB51 (Own Use + GI proyek), per material+plant
+  const U = usageByMonth(), y0 = RKM_YEAR * 12, upto = Math.min(D.nowIdx, y0 + 11);
+  const real = rows.map((o) => {
+    const g = U.get((o.material || o.kimap) + '|' + o.plant) || new Map();
+    let h12 = 0; for (let m = D.nowIdx - 12; m < D.nowIdx; m++) h12 += g.get(m) || 0;
+    const act = MN.map((_, k) => g.get(y0 + k) || 0), past = upto >= y0 ? upto - y0 + 1 : 0;
+    const plan = o.need.slice(0, past).reduce((a, b) => a + b, 0), done = act.slice(0, past).reduce((a, b) => a + b, 0);
+    const ratio = h12 > 0 ? o.total / h12 : null;
+    const vs = !S.mb51 ? ['MB51 belum dimuat', 'mute'] : h12 <= 0 ? ['Tanpa pemakaian 12 bln', 'warn'] : ratio > 2 ? ['Jauh di atas histori', 'low'] : ratio < 0.5 ? ['Jauh di bawah histori', 'warn'] : ['Wajar', 'ok'];
+    return Object.assign({}, o, { h12, ratio, vs, act, past, plan, done });
+  });
+  const realTip = (o) => MN.map((m, k) => `${m}: rencana ${fmt(o.need[k])}${k < o.past ? ', realisasi ' + fmt(o.act[k]) : ''}`).join('\n');
+  const realCols = [plantC, ['KIMAP', kimapA, '', (o) => o.kimap || o.material || ''], ['Deskripsi', (o) => esc(o.desc)], ['Satuan', (o) => esc(o.unit)],
+    ['RKM 2027', (o) => `<span class="tip-u" title="${esc(realTip(o))}">${fmt(o.total)}</span>`, 'num', (o) => o.total],
+    ['Pakai 12 bln terakhir', (o) => (S.mb51 ? fmt(o.h12) : ''), 'num', (o) => o.h12],
+    ['RKM ÷ histori', (o) => (o.ratio == null ? '' : fmt(o.ratio, 1) + '×'), 'num', (o) => (o.ratio == null ? '' : o.ratio)],
+    ['Rencana vs histori', (o) => pill(o.vs[0], o.vs[1]), '', (o) => o.vs[0]],
+    ['Rencana s.d. bln ini', (o) => (o.past ? fmt(o.plan) : '<span class="muted">belum mulai</span>'), 'num', (o) => o.plan],
+    ['Realisasi s.d. bln ini', (o) => (o.past ? fmt(o.done) : ''), 'num', (o) => o.done],
+    ['% realisasi', (o) => (o.past && o.plan ? fmt((o.done / o.plan) * 100, 0) + '%' : ''), 'num', (o) => (o.plan ? o.done / o.plan : '')],
+    ['PIC', (o) => `<span class="tip-u" title="${esc(picTip(o))}">${esc(o.pics.map((p) => (p.pic || p.fungsi).split(' ').slice(0, 2).join(' ')).join(', '))}</span>`, '', (o) => o.pics.map((p) => p.pic || p.fungsi).join('; ')]];
   const TABS = {
-    pen: ['Pemenuhan', pen, penCols, (o) => [o.kimap, o.desc, o.plant, o.oa].join(' '),
-      `${fmt(shortN, 0)} dari ${fmt(rows.length, 0)} material perlu dipesan ${infoI('Stok ZNORMAL + PO/RO jalan dipakai untuk bulan paling awal dulu. Bulan mulai kurang − lead time = pesan paling lambat. Lewat RO kalau ada kontrak aktif, selain itu PR. Kebutuhan bertanda * tidak punya rincian bulan dan dianggap butuh di Januari.')}
-      <span class="r27-leg g-leg"><span><i class="g-c c"></i>Butuh, tertutup</span><span><i class="g-c s"></i>Butuh, kurang</span><span><i class="g-c o ro"></i><i class="g-c o pr"></i>Masa tunggu RO / PR</span><span><i class="g-c due"></i>Batas pesan</span></span>${sel ? ` <button class="btn ghost small" id="r27clr">Tampilkan semua bulan</button>` : ''}`, null, 1650],
+    real: ['Realisasi vs rencana', real, realCols, (o) => [o.kimap, o.desc, o.plant, o.pics.map((p) => p.pic + ' ' + p.fungsi).join(' ')].join(' '),
+      `Apakah user memakai sesuai rencananya? Pemakaian nyata dari MB51 (Own Use + GI ke proyek/network, gerakan keluar) per material dan plant. Sebelum ${RKM_YEAR} berjalan, bandingkan dengan pemakaian 12 bulan terakhir: lebih dari 2× = rencana jauh di atas histori, kurang dari 0,5× = jauh di bawah. Realisasi tidak bisa dibagi per PIC karena MB51 tidak mencatat PIC. Arahkan kursor ke angka RKM untuk rincian per bulan.`, null, 1300],
     rekap: ['Rekap per material', rows, rekapCols, (o) => [o.kimap, o.desc, o.plant, o.pics.map((p) => p.pic + ' ' + p.fungsi).join(' ')].join(' '), 'Satu baris per material dan plant. Kebutuhan dari PIC berbeda dijumlah; rinciannya di kolom PIC dan tab Per PIC.', null, 1200],
     pic: ['Per PIC', kept, picCols, (r) => [r.kimap, r.desc, r.pic, r.fungsi, r.plant].join(' '), 'Semua baris RKM yang dihitung, apa adanya dari file. Tanda * = tanpa rincian bulan.', null, 1400],
     dup: ['Dobel', dups.concat(forced), dupCols, (r) => [r.kimap, r.desc, r.pic, r.fungsi, r.file].join(' '), 'Tidak dihitung karena sudah ada di file lain (dipakai file terbaru). Centang kalau ternyata bukan dobel.', (el) => el.querySelectorAll('.r27k').forEach((cb) => (cb.onchange = () => {
       const k = new Set(store.get('rkmKeep') || []); cb.checked ? k.add(cb.dataset.id) : k.delete(cb.dataset.id); store.set('rkmKeep', [...k]); recompute(); route(); })), 1200],
     file: ['File', fileRows, fileCols, (o) => (o.f ? o.f.fileName : o.skip || o.fail.name), 'File yang namanya memuat "rekap", "integrated", atau "format SHU" dianggap hasil olahan dan tidak dihitung.'],
   };
-  if (!TABS[S.r27Tab]) S.r27Tab = 'pen';
-  const top = S.r27Tab === 'pen' ? r27Chart(rows, D.nowIdx, sel) : '';
-  tabbed('r27Tab', TABS, top);
-  // interaksi grafik
-  const tip = document.querySelector('.r27-tip');
-  document.querySelectorAll('.r27-b').forEach((b) => {
-    b.onclick = () => { S.r27m = S.r27m === b.dataset.k ? null : b.dataset.k; route(); };
-    b.onmouseenter = b.onfocus = () => { if (!tip) return; tip.textContent = b.dataset.tip; tip.hidden = false; const r = b.getBoundingClientRect(), p = b.closest('.r27c').getBoundingClientRect(); tip.style.left = Math.min(r.left - p.left, p.width - 240) + 'px'; tip.style.top = r.top - p.top - 34 + 'px'; };
-    b.onmouseleave = b.onblur = () => { if (tip) tip.hidden = true; };
-  });
-  const clr = $('r27clr'); if (clr) clr.onclick = () => { S.r27m = null; route(); };
+  if (!TABS[S.r27Tab]) S.r27Tab = 'real';
+  tabbed('r27Tab', TABS, '');
 };
-HIDE['r27Tab:pen'] = ['Mulai kurang', 'PIC'];
 HIDE['r27Tab:rekap'] = MON.slice();
 HIDE['r27Tab:pic'] = MON.concat(['Demand driver', 'Prioritas']);

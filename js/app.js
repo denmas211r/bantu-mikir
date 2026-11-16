@@ -26,11 +26,10 @@ const MENU = [
     ['cari', 'Cari Material', 'search', 'Cek stok sebuah material di semua gudang, lengkap dengan analisisnya'],
     ['gudang', 'Analisis Warehouse', 'gauge', 'ABC dan material terbesar per warehouse'],
     ['gerak', 'Keluar-Masuk Barang', 'flow', 'Barang apa yang masuk dan keluar gudang, dari mana dan ke mana'],
+    ['resv', 'Reservasi', 'list', 'Reservasi MB25 terbuka dan arsipnya, lengkap dengan pengambilan barang di MB51'],
   ]],
   ['2. Rencana', [
-    ['rkmtl', 'RKM Timeline', 'list', 'Stok per bulan per plant dan PIC: kebutuhan, stok, OS PO, reservasi, saldo (jendela bergulir)'],
-    ['rkm27', 'RKM 2027', 'list', 'Rekap RKM semua lapangan dan fungsi tanpa dobel, dan kapan harus dipesan'],
-    ['rkm', 'Kebutuhan & MRP', 'chart', 'Hitung stok minimum dan maksimum, dan kapan harus pesan'],
+    ['rencana', 'Perencanaan', 'chart', 'RKM per plant dan PIC: timeline stok bergulir, MRP & stok level, dan realisasi rencana user'],
     ['order', 'Perlu Dipesan', 'cart', 'Barang yang harus dipesan: lewat kontrak (RO) atau permintaan pembelian baru (PR)'],
   ]],
   ['3. Pengadaan', [
@@ -113,6 +112,8 @@ function buildNav() {
 function sideData() {}
 function route() {
   const k = (location.hash.match(/#\/([\w-]+)/) || [, 'beranda'])[1];
+  const OLD = { rkmtl: 'tl', rkm: 'mrp', rkm27: 'data' }; // menu lama → sub-fitur Perencanaan
+  if (OLD[k]) { S.renTab = OLD[k]; location.hash = '#/rencana'; return; }
   const r = ROUTES[k] || ROUTES.beranda;
   document.querySelectorAll('#nav a, #sideHelp a').forEach((a) => a.classList.toggle('on', a.dataset.k === r[0]));
   $('pageTitle').textContent = r[1]; $('pageSub').textContent = r[3] || ''; $('pageActions').innerHTML = ''; document.title = r[1] + ' · MIM Inventory Analyst';
@@ -184,6 +185,19 @@ function betterAging(res) {
     r.since = Math.max(0, nowYM - last);
     r.aging = r.since < 12 ? 'FS' : r.since < 24 ? 'MD' : r.since < 60 ? 'SP' : 'DS';
   });
+}
+// Reservasi terbuka = belum final issue, tidak dihapus, masih ada sisa. Selain itu = selesai/arsip (hanya catatan).
+const resvOpen = (l) => !l.finalIssue && !l.deleted && l.diff > 0;
+// Pemakaian nyata per Material|Plant per bulan (ym = tahun×12 + bulan) dari MB51: Own Use + GI ke proyek/network, hanya gerakan keluar.
+function usageByMonth() {
+  if (S._ubm && S._ubm.ver === S.ver && S._ubm.src === S.mb51) return S._ubm.map;
+  const map = new Map();
+  if (S.mb51) for (const m of S.mb51.moves) {
+    if (!m.date || !m.material || !(Number(m.qty) < 0) || !(m.cat === 'Own Use' || OUT_MT.has(String(m.mt)))) continue;
+    const k = m.material + '|' + m.plant, ym = m.date.getFullYear() * 12 + m.date.getMonth(), g = map.get(k) || map.set(k, new Map()).get(k);
+    g.set(ym, (g.get(ym) || 0) - m.qty);
+  }
+  S._ubm = { ver: S.ver, src: S.mb51, map }; return map;
 }
 function activeItems() {
   if (S.mb52) return Parser.merge(S.mb52.items, S.mrp ? S.mrp.map : null, S.mrpPlants);

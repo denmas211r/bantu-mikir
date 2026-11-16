@@ -26,7 +26,7 @@ PAGES.expediting = function () {
   });
   // reservasi terbuka yang sudah jatuh tempo → cek apakah gudang sudah GI
   const stock = new Map(S.mb52 ? S.mb52.items.map((i) => [i.material + '|' + i.plant, i.soh]) : []);
-  const resv = S.mb25 ? S.mb25.lines.filter((l) => !l.finalIssue && l.diff > 0 && (!sel.size || sel.has(l.plant)) && l.reqDate && l.reqDate <= t0).map((l) => {
+  const resv = S.mb25 ? S.mb25.lines.filter((l) => resvOpen(l) && (!sel.size || sel.has(l.plant)) && l.reqDate && l.reqDate <= t0).map((l) => {
     const st = stock.get(l.material + '|' + l.plant), gi = st == null ? ['Stok tidak diketahui', 'mute'] : st >= l.diff ? ['Stok ada, belum GI', 'warn'] : st > 0 ? ['Stok kurang', 'low'] : ['Stok kosong', 'low'];
     return { kind: 'Reservasi', key: 'rs|' + l.resv + '|' + l.item, doc: l.resv, item: l.item, plant: l.plant, field: fieldName(l.plant), material: l.material, desc: l.desc, value: null, date: l.reqDate,
       status: gi[0], cls: gi[1], late: Math.round((t0 - l.reqDate) / 864e5), who: l.recipient || l.costCenter || l.wbs || '', open: l.diff, uom: l.uom, stock: st, mt: l.mt, note: '', gr: '', prio: 2 };

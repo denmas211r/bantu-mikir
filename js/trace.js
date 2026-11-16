@@ -80,10 +80,10 @@
       const resv = s(r[c('Reservation')]); if (!resv) continue;
       const l = { resv, item: s(r[c('Item No.Stock Transfer Reserv.')]), plant: s(r[c('Plant')]), mt: s(r[c('Movement Type')]), material: s(r[c('Material')]), desc: s(r[c('Material Description')]),
         reqDate: toDate(r[c('Requirement Date')], XLSX), reqQty: n(r[c('Requirement Quantity')]), removed: n(r[c('Removed quantity')]), diff: n(r[c('Difference Quantity')]), uom: s(r[c('Base Unit of Measure')]),
-        finalIssue: s(r[c('Final Issue')]) === 'X', status: s(r[c('Reserv. status')]), wbs: s(r[c('WBS Element')]), network: s(r[c('Network')]), costCenter: s(r[c('Cost Center')]),
+        finalIssue: s(r[c('Final Issue')]) === 'X', deleted: /^x$/i.test(s(r[c('Item deleted')]) || s(r[c('Deletion Indicator')]) || s(r[c('Deletion indicator')])), status: s(r[c('Reserv. status')]), wbs: s(r[c('WBS Element')]), network: s(r[c('Network')]), costCenter: s(r[c('Cost Center')]),
         recipient: s(r[c('Goods recipient')]), user: s(r[c('User name')]) };
       lines.push(l);
-      if (!l.finalIssue && l.diff > 0 && l.material) { const k = l.material + '|' + l.plant; open.set(k, (open.get(k) || 0) + l.diff); }
+      if (!l.finalIssue && !l.deleted && l.diff > 0 && l.material) { const k = l.material + '|' + l.plant; open.set(k, (open.get(k) || 0) + l.diff); }
     }
     return { lines, open };
   }

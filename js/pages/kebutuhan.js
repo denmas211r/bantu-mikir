@@ -57,7 +57,7 @@ PAGES.rkm = function () {
   const TABS = {
     mrp: ['MRP', res, mrpCols, (r) => r.material + ' ' + r.desc + ' ' + (r.oa || ''), '', null, V.cmp ? 1750 : V.rkm ? 1350 : 0],
     // (lebar minimum: tabel geser ke samping kalau kolom banyak)
-    rkm: ['RKM', rkmRows, rk, (o) => [o.x && o.x.kimap, o.x && o.x.desc, o.x && o.x.fungsi, o.r && o.r.material, o.r && o.r.desc].filter(Boolean).join(' '), '', null, 1300],
+    rkm: ['RKM ↔ MRP', rkmRows, rk, (o) => [o.x && o.x.kimap, o.x && o.x.desc, o.x && o.x.fungsi, o.r && o.r.material, o.r && o.r.desc].filter(Boolean).join(' '), '', null, 1300],
     sehat: ['Penyehatan stok', sehat, [['Plant', (r) => esc(r.plant)], ['Material', matA, '', (r) => r.material], ['Deskripsi', (r) => esc(r.desc)], ['Aging', (r) => agingPill(r.aging), '', (r) => r.aging],
       ['Stok', (r) => fmt(r.stock), 'num', (r) => r.stock], ['Max', (r) => fmt(r.max2), 'num', (r) => r.max2], ['Surplus', (r) => fmt(r.surplus), 'num', (r) => r.surplus],
       ['Cakupan (bln)', (r) => (r.cover == null ? '-' : isFinite(r.cover) ? fmt(r.cover, 1) : '∞'), 'num', (r) => (isFinite(r.cover) ? r.cover : '')],

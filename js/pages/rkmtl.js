@@ -41,12 +41,18 @@ PAGES.rkmtl = function () {
   // indeks PO terbuka dan reservasi terbuka per Material|Plant
   const poIdx = new Map(), rsIdx = new Map(), push = (m, k, v) => (m.get(k) || m.set(k, []).get(k)).push(v);
   if (S.me2n) S.me2n.lines.forEach((l) => { if (!l.deleted && l.openQty > 0 && l.material) push(poIdx, l.material + '|' + l.plant, l); });
-  if (S.mb25) S.mb25.lines.forEach((l) => { if (!l.finalIssue && l.diff > 0 && l.material) push(rsIdx, l.material + '|' + l.plant, l); });
+  if (S.mb25) S.mb25.lines.forEach((l) => { if (resvOpen(l) && l.material) push(rsIdx, l.material + '|' + l.plant, l); });
   const q = T.q.trim() ? expand(T.q.trim()) : null;
   let list = base.filter((o) => (!pic0() || o.rows.some((x) => (x.pic || x.fungsi) === T.pic)) && (!q || hit([o.kimap, o.material, o.desc, o.pics.map((p) => p.pic).join(' ')].join(' '), q)))
     .map((o) => ({ o, t: tlBuild(o, T.pic, nowIdx, endIdx, poIdx, rsIdx) }));
   function pic0() { return T.pic; }
   if (T.onlyShort) list = list.filter((x) => x.t.firstShort >= 0);
+  // batas pesan: bulan saldo mulai negatif − lead time; RO kalau ada kontrak aktif, selain itu PR
+  list.forEach((x) => { const o = x.o; x.sIdx = x.t.firstShort >= 0 ? nowIdx + x.t.firstShort : null; x.due = x.sIdx != null && o.lt != null ? x.sIdx - Math.ceil(o.lt) : null;
+    x.lewat = o.r && o.r.oa ? 'RO' : 'PR'; x.f = { shortTotal: x.sIdx != null ? 1 : 0 };
+    x.st = x.sIdx == null ? ['Tercukupi', 'ok'] : x.due == null ? ['LT belum ada', 'mute'] : x.due < nowIdx ? ['Terlambat pesan', 'low'] : x.due <= nowIdx + 1 ? ['Pesan sekarang', 'warn'] : ['Terjadwal', 'info']; });
+  const chart = r27Chart(list, nowIdx, S.r27m);
+  if (S.r27m) list = list.filter((x) => x.sIdx != null && (S.r27m === 'late' ? x.due != null && x.due < nowIdx : String(x.due) === S.r27m));
   list.sort((a, b) => (b.t.firstShort >= 0) - (a.t.firstShort >= 0) || (a.t.firstShort < 0 ? 0 : a.t.firstShort - b.t.firstShort) || a.o.desc.localeCompare(b.o.desc));
   const cols = []; for (let m = fromIdx; m <= toIdx; m++) cols.push(m);
   const off = (m) => m - nowIdx;
@@ -54,11 +60,11 @@ PAGES.rkmtl = function () {
   const LAB = [['need', 'Kebutuhan (RKM)'], ['soh', 'Stok awal bulan'], ['po', 'OS PO (ETA)'], ['rs', 'Reservasi'], ['bal', 'Saldo']];
   const cell = (t, k, m) => { const v = t[k][off(m)]; return k === 'bal' ? `<td class="num tl-bal ${v < 0 ? 'neg' : 'pos'}">${fmt(v)}</td>` : `<td class="num${k === 'soh' ? ' tl-soh' : ''}">${v ? fmt(v) : k === 'soh' ? '0' : ''}</td>`; };
   const rowsHtml = shown.map((x, i) => { const { o, t } = x, mat = o.material || o.kimap;
-    return LAB.map(([k, l], j) => `<tr class="tl-r tl-${k}${j === 0 ? ' tl-first' : ''}">${j === 0 ? `<td rowspan="5" class="tl-n">${i + 1}</td><td rowspan="5" class="tl-k">${o.material ? `<a class="mono mlink" href="#" data-mat="${esc(o.material)}">${esc(o.kimap || o.material)}</a>` : o.kimap ? `<span class="mono">${esc(o.kimap)}</span>` : pill('tanpa KIMAP', 'low')}</td><td rowspan="5" class="tl-d"><b>${esc(o.desc)}</b><small>${esc([o.plant, [...o.units].join('/')].filter(Boolean).join(' · '))}${t.firstShort >= 0 ? ` · ${pill('Kurang mulai ' + r27Label(nowIdx + t.firstShort), 'low')}` : ''}</small></td>` : ''}<td class="tl-l">${l}</td>${cols.map((m) => cell(t, k, m)).join('')}</tr>`).join(''); }).join('');
+    return LAB.map(([k, l], j) => `<tr class="tl-r tl-${k}${j === 0 ? ' tl-first' : ''}">${j === 0 ? `<td rowspan="5" class="tl-n">${i + 1}</td><td rowspan="5" class="tl-k">${o.material ? `<a class="mono mlink" href="#" data-mat="${esc(o.material)}">${esc(o.kimap || o.material)}</a>` : o.kimap ? `<span class="mono">${esc(o.kimap)}</span>` : pill('tanpa KIMAP', 'low')}</td><td rowspan="5" class="tl-d"><b>${esc(o.desc)}</b><small>${esc([o.plant, [...o.units].join('/')].filter(Boolean).join(' · '))}</small><small>${pill(x.st[0], x.st[1])}${x.sIdx != null ? ` Kurang mulai ${esc(r27Label(x.sIdx))}${x.due != null ? `, pesan paling lambat <b>${esc(r27Label(x.due))}</b>` : ''} lewat ${x.lewat === 'RO' ? 'RO ' + oaLink(o.r.oa) : 'PR'}` : ''}</small>${o.r ? `<small>MRP: ${agingPill(o.r.aging)} Min ${fmt(o.r.min2)} · Max ${fmt(o.r.max2)} · LT ${fmt(o.lt, 1)} bln${o.r.toOrder ? ` · To Order <b>${fmt(o.r.toOrder)}</b>` : ''}</small>` : '<small class="muted">Belum ada di MRP</small>'}</td>` : ''}<td class="tl-l">${l}</td>${cols.map((m) => cell(t, k, m)).join('')}</tr>`).join(''); }).join('');
   $('pageActions').insertAdjacentHTML('afterbegin', '<span id="r27P"></span>');
-  UI.seg($('r27P'), plants.map((p) => [p, p === '?' ? 'Plant belum diisi' : plantLabel(p)]).concat([['all', 'Semua plant']]), S.r27p, (v) => { S.r27p = v; store.set('r27p', v); T.page = 1; route(); });
+  UI.seg($('r27P'), plants.map((p) => [p, p === '?' ? 'Plant belum diisi' : plantLabel(p)]).concat([['all', 'Semua plant']]), S.r27p, (v) => { S.r27p = v; store.set('r27p', v); S.r27m = null; T.page = 1; route(); });
   const shortN = list.filter((x) => x.t.firstShort >= 0).length;
-  $('view').innerHTML = `<p class="tab-note">Stok awal bulan ini dari MRP/MB52, lalu bergulir: <b>Saldo = Stok awal + OS PO − Kebutuhan − Reservasi</b>, dan saldo jadi stok awal bulan berikutnya. OS PO dihitung di bulan tanggal kirimnya, reservasi di bulan tanggal butuhnya (yang sudah lewat masuk bulan ini). ${T.pic ? 'Dengan filter PIC, kebutuhan hanya milik PIC itu, sedangkan stok, PO, dan reservasi tetap total plant (belum dibagi per PIC).' : ''}</p>
+  $('view').innerHTML = `${chart}${S.r27m ? '<p><button class="btn ghost small" id="r27clr">Tampilkan semua bulan</button></p>' : ''}<p class="tab-note">Stok awal bulan ini dari MRP/MB52, lalu bergulir: <b>Saldo = Stok awal + OS PO − Kebutuhan − Reservasi</b>, dan saldo jadi stok awal bulan berikutnya. OS PO dihitung di bulan tanggal kirimnya, reservasi di bulan tanggal butuhnya (yang sudah lewat masuk bulan ini). ${T.pic ? 'Dengan filter PIC, kebutuhan hanya milik PIC itu, sedangkan stok, PO, dan reservasi tetap total plant (belum dibagi per PIC).' : ''}</p>
     <div class="tl-filters"><label>PIC<select id="tlPic"><option value="">Semua PIC</option>${pics.map((p) => `<option${p === T.pic ? ' selected' : ''}>${esc(p)}</option>`).join('')}</select></label>
       <label>Dari<input type="month" id="tlFrom" min="${ymStr(nowIdx)}" max="${ymStr(endIdx)}" value="${ymStr(fromIdx)}"></label><label>Sampai<input type="month" id="tlTo" min="${ymStr(nowIdx)}" max="${ymStr(endIdx)}" value="${ymStr(toIdx)}"></label>
       <label>Cari<input type="search" id="tlQ" placeholder="KIMAP atau deskripsi" value="${esc(T.q)}"></label><label class="chk"><input type="checkbox" id="tlShort"${T.onlyShort ? ' checked' : ''}> Hanya yang kurang</label>
@@ -67,13 +73,20 @@ PAGES.rkmtl = function () {
     <div class="plain-wrap tl-wrap"><table class="plain tl"><thead><tr><th>No</th><th>KIMAP</th><th>Deskripsi</th><th>Keterangan</th>${cols.map((m) => `<th class="num">${esc(r27Label(m))}</th>`).join('')}</tr></thead><tbody>${rowsHtml || `<tr><td colspan="${4 + cols.length}" class="muted">Tidak ada material untuk filter ini.</td></tr>`}</tbody></table></div>
     ${list.length > shown.length ? `<p><button type="button" class="btn" id="tlMore">Tampilkan ${fmt(Math.min(TL_PAGE, list.length - shown.length), 0)} lagi (${fmt(shown.length, 0)} dari ${fmt(list.length, 0)})</button></p>` : ''}`;
   const again = () => { T.page = 1; route(); };
+  const tip = document.querySelector('.r27-tip');
+  document.querySelectorAll('.r27-b').forEach((b) => {
+    b.onclick = () => { S.r27m = S.r27m === b.dataset.k ? null : b.dataset.k; again(); };
+    b.onmouseenter = b.onfocus = () => { if (!tip) return; tip.textContent = b.dataset.tip; tip.hidden = false; const r = b.getBoundingClientRect(), p = b.closest('.r27c').getBoundingClientRect(); tip.style.left = Math.min(r.left - p.left, p.width - 240) + 'px'; tip.style.top = r.top - p.top - 34 + 'px'; };
+    b.onmouseleave = b.onblur = () => { if (tip) tip.hidden = true; };
+  });
+  const clr = $('r27clr'); if (clr) clr.onclick = () => { S.r27m = null; again(); };
   $('tlPic').onchange = (e) => { T.pic = e.target.value; again(); };
   $('tlFrom').onchange = (e) => { T.from = e.target.value; again(); }; $('tlTo').onchange = (e) => { T.to = e.target.value; again(); };
   $('tlQ').onchange = (e) => { T.q = e.target.value; again(); }; $('tlShort').onchange = (e) => { T.onlyShort = e.target.checked; again(); };
   const more = $('tlMore'); if (more) more.onclick = () => { T.page++; route(); };
   $('tlXls').onclick = () => {
-    const aoa = [['No', 'Plant', 'KIMAP', 'Deskripsi', 'Keterangan'].concat(cols.map(r27Label))];
-    list.forEach((x, i) => LAB.forEach(([k, l], j) => aoa.push([j ? '' : i + 1, j ? '' : x.o.plant, j ? '' : x.o.kimap || x.o.material, j ? '' : x.o.desc, l].concat(cols.map((m) => x.t[k][off(m)])))));
+    const aoa = [['No', 'Plant', 'KIMAP', 'Deskripsi', 'Status', 'Pesan paling lambat', 'Lewat', 'Keterangan'].concat(cols.map(r27Label))];
+    list.forEach((x, i) => LAB.forEach(([k, l], j) => aoa.push([j ? '' : i + 1, j ? '' : x.o.plant, j ? '' : x.o.kimap || x.o.material, j ? '' : x.o.desc, j ? '' : x.st[0], j || x.due == null ? '' : r27Label(x.due), j || x.sIdx == null ? '' : x.lewat, l].concat(cols.map((m) => x.t[k][off(m)])))));
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'RKM Timeline');
     XLSX.writeFile(wb, `RKM-Timeline-${S.r27p}${T.pic ? '-' + T.pic.replace(/[^\w]+/g, '_') : ''}.xlsx`);
   };

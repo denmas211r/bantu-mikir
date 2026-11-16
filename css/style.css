@@ -467,3 +467,6 @@ table.tl td.tl-d { white-space: normal; min-width: 260px; max-width: 360px; } ta
 table.tl .tl-l { color: var(--muted); } table.tl .tl-soh td, table.tl tr.tl-soh .tl-l { font-weight: 600; background: var(--surface-2); }
 table.tl tr.tl-bal td:not(.tl-n):not(.tl-k):not(.tl-d) { font-weight: 600; }
 table.tl td.tl-bal.pos { background: var(--ok-soft); color: var(--ok); } table.tl td.tl-bal.neg { background: var(--bad-soft); color: var(--bad); }
+table.tl td.tl-d small + small { margin-top: 3px; }
+.drawer details.arc summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
+.ren-nav { margin: 0 0 10px; }
