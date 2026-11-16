@@ -28,6 +28,7 @@ const MENU = [
     ['gerak', 'Keluar-Masuk Barang', 'flow', 'Barang apa yang masuk dan keluar gudang, dari mana dan ke mana'],
   ]],
   ['2. Rencana', [
+    ['rkmtl', 'RKM Timeline', 'list', 'Stok per bulan per plant dan PIC: kebutuhan, stok, OS PO, reservasi, saldo (jendela bergulir)'],
     ['rkm27', 'RKM 2027', 'list', 'Rekap RKM semua lapangan dan fungsi tanpa dobel, dan kapan harus dipesan'],
     ['rkm', 'Kebutuhan & MRP', 'chart', 'Hitung stok minimum dan maksimum, dan kapan harus pesan'],
     ['order', 'Perlu Dipesan', 'cart', 'Barang yang harus dipesan: lewat kontrak (RO) atau permintaan pembelian baru (PR)'],
@@ -151,11 +152,38 @@ function recompute() {
   if (S.mb52) { const im = new Map(S.mb52.items.map((i) => [i.material + '|' + i.plant, i]));
     res.forEach((r, k) => { const i = im.get(k); r.transit = i ? i.transit || 0 : 0; r.stockOther = i ? i.sohOther || 0 : 0;
       r.otherVal = i ? Object.entries(i.byVal || {}).filter(([v, q]) => q && v !== 'ZNORMAL' && v !== '(tanpa val. type)').map(([v, q]) => v + ' ' + fmt(q)).join(', ') : ''; }); }
+  betterAging(res);
   S.mrpRes = res;
   const map = new Map();
   for (const r of S.mrpRes.values()) map.set(r.plant + '|' + r.material, { min: r.min2 || 0, max: r.max2 || 0, aging: r.aging, toOrder: r.toOrder });
   S.mrp = { map, plants: [...new Set([...S.mrpRes.values()].map((r) => r.plant))].sort() };
   S.ver = (S.ver || 0) + 1;
+}
+// Aging "lebih baik": hitung dari SEMUA pemakaian (histori MRP + semua gerakan keluar MB51 termasuk GI ke proyek/network),
+// bukan aging bawaan MRP. Material klasifikasi Project yang belum pernah terpakai = 'PJ' (bukan dead stock).
+// Aging bawaan MRP disimpan di r.agingMRP; kelas MRO/Project dari kolom Cat MRP di r.kelasMat.
+const OUT_MT = new Set(['221', '949']); // GI ke network/proyek: dikeluarkan dari pemakaian MRP, tapi tetap pemakaian nyata
+function betterAging(res) {
+  const lastUse = new Map(), nm = (v) => Number(v) || 0;
+  if (S.mb51 && S.mb51.moves) for (const m of S.mb51.moves) {
+    if (!m.date || !m.material || nm(m.qty) >= 0) continue; // hanya gerakan keluar
+    if (!(m.cat === 'Own Use' || OUT_MT.has(String(m.mt)))) continue;
+    const k = m.plant + '|' + m.material, ym = m.date.getFullYear() * 12 + m.date.getMonth();
+    if (!(lastUse.get(k) >= ym)) lastUse.set(k, ym);
+  }
+  const now = new Date(), nowYM = now.getFullYear() * 12 + now.getMonth();
+  const wbOf = (r) => (r.wk === 'PHE' ? S.mrpWB_PHE : S.mrpWB);
+  res.forEach((r) => {
+    r.agingMRP = r.aging; r.kelasMat = /project/i.test(r.cat || '') ? 'Project' : r.cat ? 'MRO' : '';
+    let last = lastUse.get(r.plant + '|' + r.material) ?? -1;
+    const L = (wbOf(r) || {}).monthLabels || [], u = r.usageAll || [];
+    for (let i = u.length - 1; i >= 0; i--) if (u[i]) { const [y, mo] = String(L[i] || '').split('-').map(Number);
+      if (y && mo) last = Math.max(last, (y < 100 ? 2000 + y : y) * 12 + mo - 1); break; }
+    r.lastUseYM = last >= 0 ? last : null;
+    if (last < 0) { r.since = Infinity; r.aging = r.kelasMat === 'Project' ? 'PJ' : 'DS'; return; }
+    r.since = Math.max(0, nowYM - last);
+    r.aging = r.since < 12 ? 'FS' : r.since < 24 ? 'MD' : r.since < 60 ? 'SP' : 'DS';
+  });
 }
 function activeItems() {
   if (S.mb52) return Parser.merge(S.mb52.items, S.mrp ? S.mrp.map : null, S.mrpPlants);
@@ -324,7 +352,7 @@ const srcFiles = (k) => (S.src[k] ? Object.values(S.src[k]) : []);
 const infoI = (full) => `<span class="info-i" tabindex="0" title="${esc(UI.strip(full))}" aria-label="${esc(UI.strip(full))}">ⓘ</span>`;
 const brief = (html) => { const m = String(html).match(/^([\s\S]*?[.)])(\s+[A-Z(<][\s\S]*)$/); return m ? m[1] + ' ' + infoI(html) : html; };
 const pill = (t, cls) => `<span class="pill ${cls}">${esc(t)}</span>`;
-const agingPill = (a) => pill(a || '-', a === 'FS' ? 'ok' : a === 'MD' ? 'info' : a === 'SP' ? 'warn' : 'mute');
+const agingPill = (a) => pill(a || '-', a === 'FS' ? 'ok' : a === 'MD' ? 'info' : a === 'SP' ? 'warn' : a === 'PJ' ? 'info' : 'mute');
 // cols lama: [judul, fn(row)->html, kelas ('num'), fn(row)->nilai mentah, filter?]
 const HIDE = {};
 Object.assign(HIDE, {

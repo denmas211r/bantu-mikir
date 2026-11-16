@@ -154,7 +154,7 @@ function drawTop(pool, idrOf, cmoney) {
 function drawABC(pool, idrOf, cmoney, selTxt) {
   const A = S.abc || (S.abc = Object.assign({ basis: 'stok', cell: '' }, store.get('abcSet') || {}));
   const save = () => { store.set('abcSet', A); drawABC(pool, idrOf, cmoney, selTxt); };
-  const AG = ['FS', 'MD', 'SP', 'DS', '–'], AGN = { FS: 'Fast', MD: 'Moderate', SP: 'Slow', DS: 'Dead stock', '–': 'Belum dipantau MRP' };
+  const AG = ['FS', 'MD', 'SP', 'DS', 'PJ', '–'], AGN = { FS: 'Fast', MD: 'Moderate', SP: 'Slow', DS: 'Dead stock', PJ: 'Project (belum terpakai)', '–': 'Belum dipantau MRP' };
   const rows = pool.map((i) => {
     const r = S.mrpRes && S.mrpRes.get(i.material + '|' + i.plant), idr = idrOf(i), unit = i.soh > 0 ? idr / i.soh : 0;
     const u12 = r && r.usageAll ? r.usageAll.slice(-12).reduce((a, v) => a + Math.abs(v || 0), 0) : 0;
@@ -175,6 +175,7 @@ function drawABC(pool, idrOf, cmoney, selTxt) {
     if (r && r.berlebih) return ['warn', 'Stop order, transfer kelebihan ke plant lain'];
     if (r && r.toOrder > 0) return r.contract ? ['', 'Terbitkan RO lewat OA ' + r.contract.doc] : ['warn', 'Perlu order tanpa kontrak, usulkan OA/COO'];
     if (x.aging === 'MD') return ['', 'Pantau, konfirmasi kebutuhan ke user'];
+    if (x.aging === 'PJ') return ['', 'Material project: tunggu pemakaian proyek, bukan dead stock'];
     if (x.aging === '–') return ['', 'Belum dipantau MRP'];
     return ['ok', 'Aman, pantau Min/Max']; };
   rows.forEach((x) => (x.act = act(x)));
@@ -200,7 +201,7 @@ function drawABC(pool, idrOf, cmoney, selTxt) {
     <div class="abc-grid"><div><h4 class="sub-h">Kelas nilai × pergerakan <small class="muted">klik sel untuk melihat daftarnya</small></h4><div class="plain-wrap"><table class="plain abc-m"><tr><th>Kelas</th>${AG.map((g) => `<th class="num" title="${AGN[g]}">${g === '–' ? 'Tanpa MRP' : g}</th>`).join('')}<th class="num">Total</th></tr>
       ${['A', 'B', 'C'].map((k) => `<tr><th>${k}</th>${AG.map((g) => { const xs = cell(k, g); return `<td class="num${xs.length ? ' pick' : ''}${A.cell === k + '|' + g ? ' on' : ''}${risk(k, g) && xs.length ? ' risk' : ''}" data-c="${k}|${g}">${xs.length ? `<b>${cmoney(sum(xs))}</b><small>${fmt(xs.length, 0)} baris</small>` : '<span class="muted">–</span>'}</td>`; }).join('')}
         <td class="num"><b>${cmoney(sum(rows.filter((x) => x.k === k)))}</b><small>${fmt(rows.filter((x) => x.k === k).length, 0)} baris</small></td></tr>`).join('')}</table></div>
-      <p class="muted small" style="margin-top:6px">Sel merah = nilai besar yang tidak bergerak. ${infoI(`FS dipakai ≤ 12 bulan, MD ≤ 24 bulan, SP ≤ 60 bulan, DS lebih dari 60 bulan tidak dipakai (B7-004). Angka di sel = nilai stok. Sel merah = nilai besar yang tidak bergerak.${A.basis === 'pakai' ? ' Dengan dasar pemakaian, material yang tidak dipakai 12 bulan otomatis masuk kelas C.' : ''}`)}</p></div>
+      <p class="muted small" style="margin-top:6px">Sel merah = nilai besar yang tidak bergerak. ${infoI(`Aging dihitung dari semua pemakaian (MRP + semua gerakan keluar MB51, termasuk GI ke proyek), bukan aging bawaan MRP. FS dipakai ≤ 12 bulan, MD ≤ 24 bulan, SP ≤ 60 bulan, DS lebih dari 60 bulan tidak dipakai (B7-004). PJ = klasifikasi Project di MRP yang belum pernah terpakai, bukan dead stock. Angka di sel = nilai stok. Sel merah = nilai besar yang tidak bergerak.${A.basis === 'pakai' ? ' Dengan dasar pemakaian, material yang tidak dipakai 12 bulan otomatis masuk kelas C.' : ''}`)}</p></div>
       <div><h4 class="sub-h">Insight dan tindakan</h4><ul class="reco abc-ins">${ins.map(([c, t]) => `<li class="${c}"><span>${brief(t)}</span></li>`).join('')}</ul></div></div>
     <h4 class="sub-h">Kelas ${esc(ck)}, ${esc(AGN[cg])}: ${fmt(list.length, 0)} baris, ${cmoney(sum(list))}</h4><div id="abcList"></div>`;
   UI.seg($('abcBasis'), [['stok', 'Dasar: nilai stok'], ['pakai', 'Dasar: nilai pemakaian 12 bln']], A.basis, (v) => { A.basis = v; A.cell = ''; save(); });
