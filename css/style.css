@@ -470,3 +470,10 @@ table.tl td.tl-bal.pos { background: var(--ok-soft); color: var(--ok); } table.t
 table.tl td.tl-d small + small { margin-top: 3px; }
 .drawer details.arc summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
 .ren-nav { margin: 0 0 10px; }
+.mv-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 14px; }
+@media (max-width: 760px) { .mv-grid { grid-template-columns: minmax(0, 1fr); } }
+.mv-card { border: 1px solid var(--line); border-radius: var(--r-panel); padding: 12px 14px; background: var(--surface); }
+.mv-card .cols { height: 150px; }
+.mv-yr, .mv-tx { max-height: 420px; overflow: auto; } .mv-yr { max-height: 190px; }
+.mv-tx thead th, .mv-yr thead th { position: sticky; top: 0; background: var(--surface-2); z-index: 1; }
+.d-block { display: block; } .pos-q { color: var(--ok); }

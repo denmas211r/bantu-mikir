@@ -97,7 +97,7 @@
   // ---------- Panel analisis material: MB52, ME2N, MRP, MB51 dengan filter zona / plant / periode ----------
   // opt.calc = plant yang langsung dibuka penjelasan hitungan MRP-nya
   const PERIODS = [[3, '3 bulan'], [6, '6 bulan'], [12, '12 bulan'], [24, '24 bulan'], [0, 'Semua data']];
-  const TABS_M = [['ringkas', 'Ringkasan'], ['stok', 'Stok'], ['mrp', 'MRP'], ['pakai', 'Pemakaian'], ['kontrak', 'Kontrak'], ['po', 'PR/PO/RO'], ['resv', 'Reservasi'], ['gerak', 'Gerakan']];
+  const TABS_M = [['ringkas', 'Ringkasan'], ['stok', 'Stok'], ['mrp', 'MRP'], ['pakai', 'Pemakaian'], ['kontrak', 'Kontrak'], ['po', 'PR/PO/RO'], ['resv', 'Reservasi'], ['gerak', 'Transaksi MB51']];
   function openMaterial(m, opt = {}) {
     const mi = matIndex(), o = mi.map.get(m);
     if (!o) { UI.drawer(`<div class="d-head"><h2>${esc(m)}</h2></div><div class="d-sec">Material tidak ada di MB52 maupun file MRP yang dimuat.</div>`); return; }
@@ -134,8 +134,15 @@
       const takenBy = new Map(); if (S.mb51) S.mb51.moves.forEach((x) => { if (x.resv && x.material === m) takenBy.set(x.resv, (takenBy.get(x.resv) || 0) - x.qty); });
       const mv = S.mb51 ? S.mb51.moves.filter((x) => x.material === m && okP(x.plant) && okD(x.date)).sort((a, b) => (b.date || 0) - (a.date || 0)) : [];
       const lp = S.me2n && S.me2n.lastPrice.get(m);
-      const mvtMap = new Map(); mv.forEach((x) => { const c = x.cat || 'Tanpa kategori'; const g = mvtMap.get(c) || mvtMap.set(c, { cat: c, qty: 0, n: 0, p: new Set() }).get(c); g.qty += x.qty; g.n++; g.p.add(x.plant); });
-      const mvtSum = [...mvtMap.values()].map((g) => ({ cat: g.cat, qty: g.qty, n: g.n, plants: [...g.p].sort().join(', ') })).sort((a, b) => b.n - a.n);
+      // Analisa MB51: rekap per tahun + pemakaian GI 24 bulan (GI = Own Use + GI proyek/network, gerakan keluar)
+      const mvAll = S.mb51 ? S.mb51.moves.filter((x) => x.material === m && okP(x.plant) && x.date) : [];
+      const isGI = (x) => Number(x.qty) < 0 && (x.cat === 'Own Use' || OUT_MT.has(String(x.mt)));
+      const yrMap = new Map(); mvAll.forEach((x) => { const g = yrMap.get(x.date.getFullYear()) || yrMap.set(x.date.getFullYear(), { y: x.date.getFullYear(), in: 0, out: 0, gi: 0, n: 0 }).get(x.date.getFullYear());
+        if (x.qty > 0) g.in += x.qty; else g.out -= x.qty; if (isGI(x)) g.gi -= x.qty; g.n++; });
+      const yrs = [...yrMap.values()].sort((a, b) => b.y - a.y), rng = S.mb51 && S.mb51.range;
+      const endYM = rng ? rng[1].getFullYear() * 12 + rng[1].getMonth() : new Date().getFullYear() * 12 + new Date().getMonth();
+      const gi24 = new Array(24).fill(0); mvAll.forEach((x) => { const i = x.date.getFullYear() * 12 + x.date.getMonth() - (endYM - 23); if (i >= 0 && i < 24 && isGI(x)) gi24[i] -= x.qty; });
+      const lbl24 = gi24.map((_, i) => { const ym = endYM - 23 + i; return MON[ym % 12] + ' ' + Math.floor(ym / 12); });
       // pemakaian bulanan per WK dari baris MRP plant terpilih
       const useWK = {};
       mrpRows.forEach((r) => { const L = mi.labels[r.wk] || []; if (!L.length) return; const u = useWK[r.wk] || (useWK[r.wk] = new Array(L.length).fill(0)); (r.usageAll || []).forEach((v, k) => (u[k] += Math.abs(v || 0))); });
@@ -184,10 +191,14 @@
         ['Status', (l) => (l.openQty <= 0 ? pill('Selesai', 'ok') : l.lateDays ? pill('Terlambat ' + l.lateDays + ' hari', 'low') : pill('Dalam pengiriman', 'info'))]]) : '<p class="muted">Tidak ada PO/RO di plant dan periode ini.</p>'}</section>` : ''}
       ${F.tab === 'resv' ? `<section class="d-sec"><h3>Reservasi terbuka <small>MB25 · dipakai di hitungan MRP dan timeline</small></h3>${resv.length ? plainTable(resv, [['Reservasi', (l) => esc(l.resv + (l.item ? '/' + l.item : ''))], ['Plant', (l) => esc(l.plant)], ['Butuh', (l) => dstr(l.reqDate) + (l.reqDate && l.reqDate < new Date() ? ' ' + pill('lewat', 'low') : '')], ['Diminta', (l) => fmt(l.reqQty), 'num'], ['Diambil (MB51)', (l) => fmt(takenBy.get(l.resv) || l.removed || 0), 'num'], ['Sisa', (l) => `<b>${fmt(l.diff)}</b>`, 'num'], ['Penerima', (l) => esc(l.recipient || l.costCenter || l.wbs || l.network)]]) : '<p class="muted">Tidak ada reservasi terbuka di plant ini.</p>'}</section>
       ${resvArc.length ? `<details class="d-sec arc"><summary>Arsip: ${fmt(resvArc.length, 0)} reservasi selesai/ditutup <small class="muted">(hanya catatan, tidak dihitung)</small></summary>${plainTable(resvArc.slice(0, 100), [['Reservasi', (l) => esc(l.resv + (l.item ? '/' + l.item : ''))], ['Plant', (l) => esc(l.plant)], ['Butuh', (l) => dstr(l.reqDate)], ['Diminta', (l) => fmt(l.reqQty), 'num'], ['Diambil', (l) => fmt(takenBy.get(l.resv) || l.removed || 0), 'num'], ['Status', (l) => pill(l.deleted ? 'Dihapus' : l.finalIssue ? 'Final issue' : 'Terpenuhi', 'mute')], ['Penerima', (l) => esc(l.recipient || l.costCenter || l.wbs || l.network)]])}</details>` : ''}` : ''}
-      ${F.tab === 'gerak' ? `      <section class="d-sec"><h3>Gerakan per kategori <small>MB51 · ${fmt(mv.length, 0)} gerakan</small></h3>${mvtSum.length ? plainTable(mvtSum, [['Kategori', (x) => esc(x.cat)], ['Plant', (x) => esc(x.plants)], ['Qty', (x) => fmt(x.qty) + ' ' + esc(uom), 'num'], ['Gerakan', (x) => fmt(x.n, 0), 'num']]) : '<p class="muted">Tidak ada gerakan di plant dan periode ini.</p>'}</section>` : ''}
-      ${F.tab === 'gerak' ? `      ${mv.length ? `<section class="d-sec"><h3>Daftar gerakan <small>MB51${mv.length > 100 ? ', 100 terbaru' : ''}</small></h3>${plainTable(mv.slice(0, 100), [['Tanggal', (x) => dstr(x.date)], ['Plant', (x) => esc(x.plant)], ['Mvt', (x) => esc(x.mt + ' ' + x.mtText)], ['Kategori', (x) => esc(x.cat || '')], ['Qty', (x) => fmt(x.qty), 'num'], ['Reservasi', (x) => esc(x.resv || '')], ['Keterangan', (x) => esc(x.header || x.po || '')]])}</section>` : ''}
-` : ''}
+      ${F.tab === 'gerak' ? `${!S.mb51 ? '<p class="muted">MB51 belum dimuat.</p>' : `<p class="muted small">Detail transaksi MB51 ${rng ? esc(dstr(rng[0])) + ' s/d ' + esc(dstr(rng[1])) : ''} · ${F.plant ? esc(plantLabel(F.plant)) : 'semua plant'}</p>
+      <div class="mv-grid"><section class="d-sec mv-card"><h3>Pemakaian (GI) per bulan <small>24 bulan · total ${fmt(gi24.reduce((a, b) => a + b, 0))} ${esc(uom)}</small></h3><div id="dGI"></div></section>
+        <section class="d-sec mv-card"><h3>Rekap per tahun <small>semua data</small></h3>${yrs.length ? `<div class="mv-yr">${plainTable(yrs, [['Tahun', (g) => String(g.y)], ['Masuk', (g) => fmt(g.in), 'num'], ['Keluar', (g) => fmt(g.out), 'num'], ['Pemakaian GI', (g) => `<b>${fmt(g.gi)}</b>`, 'num'], ['Trx', (g) => fmt(g.n, 0), 'num']])}</div>` : '<p class="muted">Tidak ada transaksi.</p>'}</section></div>
+      <section class="d-sec"><h3>Transaksi <small>${fmt(mv.length, 0)} baris di periode ini${mv.length > 300 ? ', 300 terbaru tampil' : ''}</small></h3>${mv.length ? `<div class="mv-tx">${plainTable(mv.slice(0, 300), [['Posting date', (x) => dstr(x.date)], ['Plant', (x) => `<b class="mono">${esc(x.plant)}</b><small class="muted d-block">${esc(plantLabel(x.plant))}</small>`], ['SLoc', (x) => esc(x.sloc)],
+        ['Mvt', (x) => `<b class="mono">${esc(x.mt)}</b><small class="muted d-block">${esc(x.mtText)}</small>`], ['Qty', (x) => `<b class="${x.qty < 0 ? 'neg' : 'pos-q'}">${x.qty > 0 ? '+' : ''}${fmt(x.qty)}</b>`, 'num'], ['Nilai', (x) => money(x.amount, x.cur || stockCur(x.plant)), 'num'],
+        ['Material doc', (x) => `<span class="mono">${esc(x.matDoc)}</span>`], ['Reservasi', (x) => `<span class="mono">${esc(x.resv || '')}</span>`], ['Header text', (x) => esc(x.header)], ['User', (x) => esc(x.user)], ['PO', (x) => `<span class="mono">${esc(x.po || '')}</span>`]])}</div>` : '<p class="muted">Tidak ada gerakan di plant dan periode ini.</p>'}</section>`}` : ''}
       <div><a class="btn" href="#/lacak" id="dTrace">Lihat jejak lengkap</a></div>`;
+      const gEl = body.querySelector('#dGI'); if (gEl) UI.columns(gEl, lbl24, gi24, (v) => fmt(v, 1) + ' ' + uom);
       body.querySelectorAll('.dUse').forEach((el) => { const w = el.dataset.w, L = mi.labels[w], n = F.months || L.length;
         UI.columns(el, L.slice(-n).map((l) => { const [y, mm] = l.split('-'); return ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'][+mm - 1] + ' 20' + y; }), useWK[w].slice(-n), (v) => fmt(v, 1) + ' ' + uom); });
       UI.seg(body.querySelector('#mfP'), [['', 'Semua plant']].concat(allPlants.map((p) => [p, plantLabel(p)])), F.plant, (v) => { F.plant = v; render(); });
