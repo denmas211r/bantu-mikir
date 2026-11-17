@@ -12,6 +12,7 @@ Live: https://denmas211r.github.io/bantu-mikir/
 | `js/app.js` | Otak web: menu 5 grup, filter Zona, pindah halaman, muat folder |
 | `js/config.js` | Konfigurasi satu tempat: pemetaan plant ke zona, nama plant |
 | `js/grid.js` | Komponen tabel baru (AG Grid): cari, urut, pin, filter checkbox, date range (Flatpickr), unduh Excel |
+| `js/pages/mplan.js` | Material Planning: Cari Material (klik baris = detail), Overview/Detail MRP per plant, Timeline & Horizon (grafik ECharts + tabel), RKM |
 | `js/pages/raw.js` | SAP Raw Data: tab MB52, MB51, ME2N, ME3N apa adanya, file sejenis digabung |
 | `js/ui.js` | Komponen lama (dipakai halaman lama, diganti bertahap): tabel (cari, urut, filter pilihan ganda, pilih kolom, halaman, unduh Excel), dropdown pilihan ganda, grafik |
 | `js/contract.js`, `js/trace.js` | Kontrak ME3N, PO/RO ME2N, pergerakan MB51, reservasi MB25, expediting & pelacakan |

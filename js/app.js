@@ -23,9 +23,13 @@ const svg = (k) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" s
 const MENU = [
   ['', [['beranda', 'Beranda', 'home', 'Gambaran cepat dari stok sampai laporan']]],
   ['Material Planning', [
-    ['cari', 'Cari Material', 'search', 'Cek stok sebuah material di semua gudang, lengkap dengan analisisnya'],
-    ['rencana', 'Perencanaan', 'chart', 'RKM per plant dan PIC: timeline stok bergulir, MRP & stok level, dan realisasi rencana user'],
+    ['cari', 'Cari Material', 'search', 'Cari material, lihat stok per plant; klik baris untuk detail (stok, OS/PO, reservasi, kontrak, transaksi)'],
+    ['overview', 'Overview Material', 'gauge', 'Stok, OS PO, reservasi, dan kontrak per material di zona terpilih; Detail = MRP per plant'],
+    ['horizon', 'Timeline & Horizon', 'chart', 'Kapan stok mulai kurang dan kapan harus dipesan, dari data SAP + RKM'],
+    ['rkmx', 'RKM', 'list', 'RKM per material: pemenuhan stok + PO, perbandingan dengan MRP, dan data tanpa KIMAP'],
     ['order', 'Perlu Dipesan', 'cart', 'Barang yang harus dipesan: lewat kontrak (RO) atau permintaan pembelian baru (PR)'],
+    ['rencana', 'Perencanaan (lama)', 'chart', 'Halaman lama: timeline RKM, MRP & stok level, data RKM. Dipindah bertahap'],
+    ['carilama', 'Cari Material (matriks)', 'search', 'Halaman lama: tampilan matriks plant dan material'],
   ]],
   ['Contract & Expediting', [
     ['kontrak', 'Kontrak', 'doc', 'Kontrak vendor yang masih berlaku, sisa nilainya, dan kapan habis'],
@@ -138,8 +142,9 @@ function route() {
   $('pageTitle').textContent = r[1]; $('pageSub').textContent = r[3] || ''; $('pageActions').innerHTML = ''; document.title = r[1] + ' · MIM Inventory Analyst';
   $('sidebar').classList.remove('open'); UI.closePop(); UI.closeDrawer();
   if (S.rawG) { S.rawG.destroy(); S.rawG = null; S.rawTok = (S.rawTok || 0) + 1; }
+  G.cleanup(); if (window.MP) MP.zonaHook = null;
   (PAGES[r[0]] || soon)(r);
-  mountTables();
+  mountTables(); G.cleanup();
 }
 
 // ---------- Hitung ulang semua (MB52 + MRP + RKM + pengaturan) ----------
