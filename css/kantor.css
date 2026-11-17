@@ -1,0 +1,69 @@
+/* ================= Kantor 2.0: layout, sidebar, grid (gaya SAP Fiori: padat, netral) ================= */
+/* Sidebar terang, tanpa warna gelap */
+.sidebar { border-right: 1px solid var(--line); padding: 0; }
+.brand { padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.brand-title, .who b { color: var(--ink); } .brand-title small, .who small { color: var(--muted); }
+.logo { border-radius: 3px; width: 30px; height: 30px; font-size: 13px; }
+.nav { padding: 4px 0 8px; }
+.nav-group { padding: 14px 16px 4px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.nav a { height: 32px; padding: 0 16px; border-radius: 0; gap: 10px; border-left: 3px solid transparent; }
+.nav a svg { width: 16px; height: 16px; opacity: .7; }
+.nav a:hover { background: var(--side-hover); color: var(--ink); }
+.nav a.on { background: var(--side-on); color: var(--brand); border-left-color: var(--brand); font-weight: 600; }
+.nav a.on svg { opacity: 1; }
+.side-foot { border-top: 1px solid var(--line); padding: 8px 10px; }
+.side-btn:hover { background: var(--side-hover); color: var(--ink); }
+.side-tools { display: flex; align-items: center; gap: 2px; }
+.avatar { background: var(--side-on); color: var(--brand); }
+.app.collapsed .nav a { border-left-width: 0; } .app.collapsed .nav-group { height: 8px; }
+.login { background: var(--bg); } .login-card { border: 1px solid var(--line); }
+
+/* Topbar */
+.topbar { padding: 8px 20px; min-height: 52px; gap: 14px; }
+.topbar h1 { font-size: 18px; font-weight: 600; } .topbar .sub { font-size: 12px; }
+.content { padding: 14px 20px 28px; gap: 12px; max-width: none; }
+.panel { padding: 14px 16px; box-shadow: none; }
+.banner { padding: 7px 12px; font-size: 13px; }
+.zona { display: flex; align-items: center; gap: 12px; font-size: 13px; padding-left: 14px; border-left: 1px solid var(--line); }
+.zona label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; white-space: nowrap; }
+.zona-l { color: var(--muted); }
+.zona input { width: 14px; height: 14px; accent-color: var(--brand); }
+.gloss-btn { display: none; }
+@media (max-width: 860px) { .zona { display: none; } }
+
+/* ---------- Tabel SAP Raw Data / komponen G.table ---------- */
+.raw-body { margin-top: 10px; } .pad { padding: 16px 0; }
+.gt { display: flex; flex-direction: column; gap: 8px; }
+.gt-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.gt-search { display: flex; flex: 0 1 300px; }
+.gt-search input { width: 100%; height: 30px; }
+.gt-count { color: var(--muted); font-size: 12.5px; }
+.gt-tools { margin-left: auto; display: flex; gap: 6px; }
+.gt .btn { height: 30px; padding: 0 12px; font-size: 13px; }
+.gt-filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.fchip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: var(--r-ctl); background: #fff; cursor: pointer; font-size: 12.5px; color: var(--ink-2); max-width: 260px; }
+.fchip:hover { border-color: #b5b9bd; }
+.fchip span { color: var(--muted); white-space: nowrap; } .fchip b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fchip.on { border-color: var(--brand); background: var(--brand-soft); } .fchip.on span { color: var(--ink-2); }
+.fchip.fdate input { border: 0; height: 24px; width: 150px; padding: 0; background: transparent; cursor: pointer; font-size: 12.5px; box-shadow: none; }
+.fchip .fx { border: 0; background: transparent; cursor: pointer; font-size: 16px; line-height: 1; color: var(--muted); padding: 0 2px; }
+.gt-grid { height: calc(100vh - 215px); min-height: 280px; width: 100%; }
+.gt-foot { font-size: 12px; color: var(--muted); }
+.cm { max-height: 340px; }
+.cm-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.cm-pin { border: 1px solid var(--line); background: #fff; border-radius: 3px; font-size: 11px; padding: 1px 6px; cursor: pointer; color: var(--muted); }
+.cm-pin.on { background: var(--brand); border-color: var(--brand); color: #fff; }
+
+/* AG Grid: rasa SAP ALV (padat, garis tipis, header abu) */
+.ag-theme-quartz {
+  --ag-font-family: '72', 'Segoe UI', system-ui, Arial, sans-serif; --ag-font-size: 12.5px; --ag-grid-size: 4px;
+  --ag-row-height: 26px; --ag-header-height: 30px; --ag-list-item-height: 26px;
+  --ag-background-color: #fff; --ag-foreground-color: var(--ink-2);
+  --ag-header-background-color: #f2f4f5; --ag-header-foreground-color: var(--ink); --ag-header-column-separator-display: block; --ag-header-column-separator-color: #d9d9d9; --ag-header-column-separator-height: 60%;
+  --ag-border-color: var(--line); --ag-row-border-color: #ebebeb; --ag-odd-row-background-color: #fff;
+  --ag-row-hover-color: #f5f9fd; --ag-selected-row-background-color: var(--brand-soft);
+  --ag-borders: solid 1px; --ag-wrapper-border-radius: 3px; --ag-cell-horizontal-padding: 8px;
+  --ag-input-focus-border-color: var(--brand); --ag-range-selection-border-color: var(--brand);
+}
+.ag-theme-quartz .ag-header-cell-label { font-weight: 600; }
+.ag-theme-quartz .ag-cell { border-right: 1px solid #f1f1f1; }

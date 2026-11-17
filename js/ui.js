@@ -251,5 +251,5 @@
     el.innerHTML = `<div class="cols">${vals.map((v, i) => `<div class="col" tabindex="0"><span class="col-f" style="height:${v > 0 ? Math.max(3, (v / max) * 100) : 0}%"></span><span class="tip">${esc(labels[i])}<br>${esc(fmtv(v))}</span></div>`).join('')}</div>
       <div class="cols-x"><span>${esc(labels[0] || '')}</span><span>${esc(labels[labels.length - 1] || '')}</span></div>`;
   }
-  root.UI = { table, multi, seg, bars, esc, strip, closePop, I, drawer, closeDrawer, spark, columns };
+  root.UI = { table, multi, seg, bars, esc, strip, closePop, openPop, checklist, I, drawer, closeDrawer, spark, columns };
 })(window);

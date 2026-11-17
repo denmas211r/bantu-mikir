@@ -1,19 +1,19 @@
 /* ================= MIM Inventory Analyst — Style ================= */
 :root {
-  --bg: #f3f5f8; --surface: #ffffff; --surface-2: #f7f9fb;
-  --ink: #17212e; --ink-2: #3b4757; --muted: #6a7686;
-  --line: #dde3ea; --line-2: #edf1f5;
-  --brand: #1d5fae; --brand-2: #174d8e; --brand-soft: #e8f0fa;
-  --side: #14243b; --side-ink: #c5d0e0; --side-mute: #8394ad; --side-hover: #1c3150; --side-on: #22406a;
-  --ok: #1e7d43; --ok-soft: #e7f4ec; --warn: #9a5806; --warn-soft: #fbf1e1; --bad: #b8342b; --bad-soft: #fbeceb; --mute-soft: #eef1f5;
-  --z1: #2a78d6; --z4: #eb6834; --z5: #1baf7a; --z6: #eda100; --z7: #e87ba4; --z8: #6250d6; --z0: #8a95a3;
-  --r-panel: 10px; --r-ctl: 6px; --r-pill: 4px;
-  --font: Calibri, Carlito, 'Segoe UI', system-ui, sans-serif;
-  --side-w: 236px;
+  --bg: #f5f6f7; --surface: #ffffff; --surface-2: #f7f8f9;
+  --ink: #1d2d3e; --ink-2: #32363a; --muted: #5f6368;
+  --line: #d9d9d9; --line-2: #ebebeb;
+  --brand: #0a6ed1; --brand-2: #085caf; --brand-soft: #ebf5fe;
+  --side: #ffffff; --side-ink: #32363a; --side-mute: #5f6368; --side-hover: #f0f2f4; --side-on: #e5f0fa;
+  --ok: #107e3e; --ok-soft: #f1fdf6; --warn: #8c5400; --warn-soft: #fef7f1; --bad: #bb0000; --bad-soft: #ffeaea; --mute-soft: #f0f2f4;
+  --z1: #0a6ed1; --z4: #e9730c; --z5: #107e3e; --z6: #8c5400; --z7: #a9426a; --z8: #5b4fb5; --z0: #8a8d91;
+  --r-panel: 4px; --r-ctl: 4px; --r-pill: 3px;
+  --font: '72', 'Segoe UI', system-ui, Arial, sans-serif;
+  --side-w: 232px;
 }
 * { box-sizing: border-box; }
 html, body { height: 100%; }
-body { margin: 0; font: 400 15px/1.5 var(--font); color: var(--ink); background: var(--bg); -webkit-font-smoothing: antialiased; font-variant-numeric: tabular-nums; }
+body { margin: 0; font: 400 14px/1.45 var(--font); color: var(--ink); background: var(--bg); -webkit-font-smoothing: antialiased; font-variant-numeric: tabular-nums; }
 a { color: var(--brand); text-decoration: none; } a:hover { text-decoration: underline; }
 button, input, select { font: inherit; color: inherit; }
 svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }

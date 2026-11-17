@@ -18,40 +18,44 @@ const ICON = {
 };
 const svg = (k) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICON[k]}</svg>`;
 
-// Menu: [grup, [route, label, icon, sub-judul, tahap belum jadi?]]
-// Menu mengikuti alur kerja Analyst dari awal sampai akhir: cek stok → hitung kebutuhan → pesan → pantau → laporkan.
+// Menu: [grup, [[route, label, icon, sub-judul, catatan (halaman belum jadi)]]]
+// 5 grup (Kantor 2.0). Fase 1: grup 1-4 sementara memuat halaman lama; isinya dirombak bertahap di fase 2-5.
 const MENU = [
-  ['Ringkasan', [['beranda', 'Beranda', 'home', 'Gambaran cepat dari stok sampai laporan']]],
-  ['1. Stok', [
+  ['', [['beranda', 'Beranda', 'home', 'Gambaran cepat dari stok sampai laporan']]],
+  ['Material Planning', [
     ['cari', 'Cari Material', 'search', 'Cek stok sebuah material di semua gudang, lengkap dengan analisisnya'],
-    ['gudang', 'Analisis Warehouse', 'gauge', 'ABC dan material terbesar per warehouse'],
-    ['gerak', 'Keluar-Masuk Barang', 'flow', 'Barang apa yang masuk dan keluar gudang, dari mana dan ke mana'],
-    ['resv', 'Reservasi', 'list', 'Reservasi MB25 terbuka dan arsipnya, lengkap dengan pengambilan barang di MB51'],
-  ]],
-  ['2. Rencana', [
     ['rencana', 'Perencanaan', 'chart', 'RKM per plant dan PIC: timeline stok bergulir, MRP & stok level, dan realisasi rencana user'],
     ['order', 'Perlu Dipesan', 'cart', 'Barang yang harus dipesan: lewat kontrak (RO) atau permintaan pembelian baru (PR)'],
   ]],
-  ['3. Pengadaan', [
+  ['Contract & Expediting', [
     ['kontrak', 'Kontrak', 'doc', 'Kontrak vendor yang masih berlaku, sisa nilainya, dan kapan habis'],
     ['expediting', 'Pantau Pesanan', 'truck', 'Pesanan yang belum datang, terlambat, atau belum diambil user'],
+    ['resv', 'Reservasi', 'list', 'Reservasi MB25 terbuka dan arsipnya, lengkap dengan pengambilan barang di MB51'],
+    ['gerak', 'Keluar-Masuk Barang', 'flow', 'Barang apa yang masuk dan keluar gudang, dari mana dan ke mana'],
     ['lacak', 'Lacak Material', 'route', 'Jejak satu material atau dokumen dari permintaan sampai dipakai'],
   ]],
-  ['4. Laporan', [['optim', 'Deadstock & BAU', 'recycle', 'Berapa deadstock yang sudah terpakai atau dipindah, dan laporan BAU per bulan']]],
-  ['Bantuan', [
-    ['regulasi', 'Panduan & Aturan', 'book', 'Aturan Pedoman/TKO dan cara web ini menghitung'],
-    ['data', 'Data SAP', 'db', 'File SAP yang dibaca web ini'],
-    ['pengaturan', 'Pengaturan', 'gear', 'Plant, zona, kurs, dan parameter MRP'],
+  ['Performance & Reporting', [
+    ['gudang', 'Analisis Warehouse', 'gauge', 'ABC dan material terbesar per warehouse'],
+    ['optim', 'Deadstock & BAU', 'recycle', 'Berapa deadstock yang sudah terpakai atau dipindah, dan laporan BAU per bulan'],
   ]],
+  ['Governance', [
+    ['tko', 'TKO', 'book', 'Pembaca dokumen TKO', 'Fase 5'],
+    ['regulasi', 'Regulasi', 'book', 'Aturan Pedoman/TKO dan cara web ini menghitung'],
+  ]],
+  ['SAP Raw Data', [
+    ['raw', 'Data SAP', 'db', 'MB52, MB51, ME2N, ME3N apa adanya dari file tarikan'],
+    ['data', 'Sumber Data', 'db', 'Folder dan file SAP yang dibaca web ini'],
+  ]],
+  ['Bantuan', [['pengaturan', 'Pengaturan', 'gear', 'Plant, zona, kurs, dan parameter MRP']]],
 ];
 const ROUTES = Object.fromEntries(MENU.flatMap(([, items]) => items.map((i) => [i[0], i])));
 const DEFAULT_MRP_PLANTS = ['W101', 'W102', 'W802', 'W803'];
-const DEFAULT_ZONA = Object.assign({ W101: 'Zona 1', W102: 'Zona 1', W802: 'Zona 1', W803: 'Zona 1', W105: 'Zona 4', W106: 'Zona 4', W801: 'Zona 4', W809: 'Zona 4', W811: 'Zona 4' },
+const DEFAULT_ZONA = Object.assign({}, CFG.PLANT_ZONA,
   Object.fromEntries(Object.entries(Master.PHE_PLANT).map(([p, [, , z]]) => [p, z])));
 const ZONA_LIST = ['Zona 1', 'Zona 4', 'Lainnya'];
 const zonaOf = (p) => { const z = (S.set.zona || {})[p]; return (ZONA_LIST.includes(z) && z) || DEFAULT_ZONA[p] || 'Lainnya'; };
 const ZONA_COLOR = { 'Zona 1': 'var(--z1)', 'Zona 4': 'var(--z4)', Lainnya: 'var(--z0)' };
-const PLANT_NAME = Object.assign({ W101: 'Rantau', W102: 'Pangkalan Susu', W802: 'Jambi', W803: 'Lirik', W105: 'Prabumulih', W106: 'Pendopo', W801: 'Limau', W809: 'Adera', W811: 'Ramba' },
+const PLANT_NAME = Object.assign({}, CFG.PLANT_NAME,
   Object.fromEntries(Object.entries(Master.PHE_PLANT).map(([p, [n]]) => [p, n])));
 const METHOD = { tko: 'Metode TKO / Pedoman (disarankan)', excel: 'Metode Excel lama (untuk validasi)' };
 const TKO_FIELDS = [['amuMonths', 'AMU dari berapa bulan terakhir', 'bln'], ['nonContractLT', 'Tambahan lead time pengadaan bila tanpa kontrak', 'bln'], ['roqMonths', 'Reorder quantity (Max = ROP + n × AMU)', 'bln'], ['ssCapMonths', 'Batas safety stock maintenance/slow', 'bln × AMU'], ['chemSSMonths', 'Safety stock chemical/catalyst', 'bln × AMU'], ['chemP', 'Periode review chemical (P)', 'bln'], ['excessGeneral', 'Batas berlebih (umum)', 'bln'], ['excessChem', 'Batas berlebih (chemical)', 'bln']];
@@ -103,11 +107,26 @@ $('collapse').onclick = () => { const c = !$('app').classList.contains('collapse
 setSide(!!store.get('sideCollapsed'));
 window.addEventListener('hashchange', () => S && route());
 
-// Menu Bantuan (Panduan, Data SAP, Pengaturan) jadi ikon di bawah sidebar supaya menu utama muat tanpa scroll
+// Pengaturan jadi ikon di bawah sidebar; 5 grup lain di menu utama
 function buildNav() {
-  $('nav').innerHTML = MENU.filter(([g]) => g !== 'Bantuan').map(([g, items]) => `<div class="nav-group">${g}</div>` +
+  $('nav').innerHTML = MENU.filter(([g]) => g !== 'Bantuan').map(([g, items]) => (g ? `<div class="nav-group">${g}</div>` : '') +
     items.map(([k, t, ic]) => `<a href="#/${k}" data-k="${k}" title="${t}">${svg(ic)}<span>${t}</span></a>`).join('')).join('');
   $('sideHelp').innerHTML = (MENU.find(([g]) => g === 'Bantuan') || [, []])[1].map(([k, t, ic]) => `<a href="#/${k}" data-k="${k}" class="side-btn" title="${t}" aria-label="${t}">${svg(ic)}</a>`).join('');
+  buildZona();
+}
+// Filter Zona global (checkbox). Data Zona 4 belum dimuat, pemetaan plant->zona ada di js/config.js
+function buildZona() {
+  const z = (S.zona = store.get('zona') || { sel: CFG.ZONA_DEFAULT.slice() });
+  const both = () => z.sel.length >= CFG.ZONA_LIST.length;
+  const paint = () => { $('zona').innerHTML = '<span class="zona-l">Zona</span>' + CFG.ZONA_LIST.map((n) => `<label><input type="checkbox" data-z="${n}" ${z.sel.includes(n) ? 'checked' : ''}>${n}</label>`).join('') + `<label><input type="checkbox" data-z="*" ${both() ? 'checked' : ''}>Semua</label>`; };
+  paint();
+  $('zona').onchange = (e) => {
+    const v = e.target.dataset.z;
+    z.sel = v === '*' ? (e.target.checked ? CFG.ZONA_LIST.slice() : CFG.ZONA_DEFAULT.slice()) : CFG.ZONA_LIST.filter((n) => (n === v ? e.target.checked : z.sel.includes(n)));
+    if (!z.sel.length) z.sel = CFG.ZONA_DEFAULT.slice();
+    store.set('zona', z); paint(); document.dispatchEvent(new Event('zonachange'));
+  };
+  G.zonaOk = (p) => both() || z.sel.includes(zonaOf(p));
 }
 function sideData() {}
 function route() {
@@ -118,6 +137,7 @@ function route() {
   document.querySelectorAll('#nav a, #sideHelp a').forEach((a) => a.classList.toggle('on', a.dataset.k === r[0]));
   $('pageTitle').textContent = r[1]; $('pageSub').textContent = r[3] || ''; $('pageActions').innerHTML = ''; document.title = r[1] + ' · MIM Inventory Analyst';
   $('sidebar').classList.remove('open'); UI.closePop(); UI.closeDrawer();
+  if (S.rawG) { S.rawG.destroy(); S.rawG = null; S.rawTok = (S.rawTok || 0) + 1; }
   (PAGES[r[0]] || soon)(r);
   mountTables();
 }
@@ -307,6 +327,10 @@ async function loadSAP(k, file) {
     S.raw.mb51[wk] = Trace.mergeMB51([...F[wk].values()]);
   } else S.raw[k][wk] = await parseFile(k, file, PARSE[k]);
   S[k] = MERGE[k](byWK(S.raw[k]));
+  // berkas asli untuk halaman SAP Raw Data: MB51 semua file, jenis lain hanya yang terbaru per client
+  const RF = ((S.rawFiles = S.rawFiles || {})[k] = S.rawFiles[k] || new Map());
+  if (k !== 'mb51') [...RF].forEach(([n, e]) => { if (e.wk === wk) RF.delete(n); });
+  RF.set(wk + '|' + file.name, { file, wk });
   srcMark(k, file, wk);
   if (k === 'mb52') { S.plantWK = new Map(); S.mb52.items.forEach((i) => S.plantWK.set(i.plant, i.wk)); }
 }
@@ -341,7 +365,7 @@ async function loadFolder(h) {
   const log = []; loadStat.hit = loadStat.read = 0; Cache.resetUsed(); const t0 = performance.now();
   try {
     const c = Folder.classify(await Folder.listExcel(h));
-    S.raw = {}; S.src = {}; S.mb51Files = {}; S.ds = null; ['mb52', 'me3n', 'me2n', 'mb51', 'mb25'].forEach((k) => (S[k] = null));
+    S.raw = {}; S.src = {}; S.mb51Files = {}; S.rawFiles = {}; S.ds = null; ['mb52', 'me3n', 'me2n', 'mb51', 'mb25'].forEach((k) => (S[k] = null));
     for (const k of ['mb52', 'me3n', 'me2n', 'mb51', 'mb25']) for (const f of c[k] || []) { await tick(); await loadSAP(k, f.file); log.push(f.name); }
     if (c.mrp) { await tick(); await loadMRP(c.mrp.file); log.push(c.mrp.name); }
     if (c.ds) { await tick(); try { await loadDS(c.ds.file); log.push(c.ds.name); } catch (e) { log.push('Gagal: ' + c.ds.name + ' (' + e.message + ')'); } }
