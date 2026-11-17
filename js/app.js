@@ -49,8 +49,9 @@ const MENU = [
     ['optim', 'Deadstock & BAU (lama)', 'recycle', 'Halaman lama deadstock dan BAU'],
   ]],
   ['Governance', [
-    ['tko', 'TKO', 'book', 'Pembaca dokumen TKO', 'Fase 5'],
-    ['regulasi', 'Regulasi', 'book', 'Aturan Pedoman/TKO dan cara web ini menghitung'],
+    ['tko', 'TKO', 'book', 'Pembaca dokumen TKO/TKI: daftar, penampil per halaman, cari teks'],
+    ['regulasi', 'Regulasi', 'book', 'Pembaca Pedoman dan Regulasi: daftar, penampil per halaman, cari teks'],
+    ['regulasilama', 'Panduan & Aturan (lama)', 'book', 'Halaman lama: aturan Pedoman/TKO dan cara web ini menghitung'],
   ]],
   ['SAP Raw Data', [
     ['raw', 'Data SAP', 'db', 'MB52, MB51, ME2N, ME3N apa adanya dari file tarikan'],

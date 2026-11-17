@@ -83,3 +83,5 @@
 .ch-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 8px; margin-bottom: 8px; } .ch-row:empty { display: none; }
 .ch-row .mp-chart { margin-bottom: 0; }
 .oin { width: 120px; height: 28px; text-align: right; }
+
+.pdf-frame { width: 100%; height: calc(100vh - 210px); border: 1px solid var(--line); border-radius: var(--r-ctl); background: #fff; }

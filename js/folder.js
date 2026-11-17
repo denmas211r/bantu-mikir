@@ -12,9 +12,9 @@
       o.onsuccess = () => { const tx = o.result.transaction(STORE, mode); const r = fn(tx.objectStore(STORE)); tx.oncomplete = () => res(r && r.result); tx.onerror = () => rej(tx.error); };
     });
   }
-  const saveHandle = (h) => idb('readwrite', (s) => s.put(h, KEY));
-  const loadHandle = () => idb('readonly', (s) => s.get(KEY)).catch(() => null);
-  const forget = () => idb('readwrite', (s) => s.delete(KEY));
+  const saveHandle = (h, k = KEY) => idb('readwrite', (s) => s.put(h, k));
+  const loadHandle = (k = KEY) => idb('readonly', (s) => s.get(k)).catch(() => null);
+  const forget = (k = KEY) => idb('readwrite', (s) => s.delete(k));
 
   async function pick() { const h = await root.showDirectoryPicker({ id: 'mim-data', mode: 'read' }); await saveHandle(h); return h; }
   async function permission(h, ask) {
@@ -54,5 +54,15 @@
       ds: nw(xl.filter((f) => !/mb5[12]|me[23]n|mb25|mrp/i.test(base(f))), /deadstock|(^|[_\s-])ds([_\s.-]|$)/i),
       rkm, rkmSkip, regulasi: nw(md, /regulasi|pedoman|otak/i) };
   }
-  root.Folder = { clientOf, supported, pick, loadHandle, forget, permission, listExcel, classify, RKM_OUTPUT };
+  // Folder dokumen (Pedoman/TKO/TKI/Regulasi) = folder terpisah dari folder data SAP, disimpan dengan kunci sendiri. Hanya PDF, sampai 4 tingkat subfolder.
+  async function listPdf(h, depth = 0, prefix = '') {
+    const out = [];
+    for await (const [name, e] of h.entries()) {
+      if (e.kind === 'file' && /\.pdf$/i.test(name)) out.push({ name, path: prefix + name, file: await e.getFile() });
+      else if (e.kind === 'directory' && depth < 4) out.push(...(await listPdf(e, depth + 1, prefix + name + '/')));
+    }
+    return out;
+  }
+  const docs = { pick: async () => { const h = await root.showDirectoryPicker({ id: 'mim-docs', mode: 'read' }); await saveHandle(h, 'docFolder'); return h; }, load: () => loadHandle('docFolder'), forget: () => forget('docFolder'), listPdf };
+  root.Folder = { docs, clientOf, supported, pick, loadHandle, forget, permission, listExcel, classify, RKM_OUTPUT };
 })(typeof window !== 'undefined' ? window : globalThis);
