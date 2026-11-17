@@ -43,8 +43,10 @@ const MENU = [
     ['geraklama', 'Keluar-Masuk (lama)', 'flow', 'Halaman lama pergerakan barang'],
   ]],
   ['Performance & Reporting', [
-    ['gudang', 'Analisis Warehouse', 'gauge', 'ABC dan material terbesar per warehouse'],
-    ['optim', 'Deadstock & BAU', 'recycle', 'Berapa deadstock yang sudah terpakai atau dipindah, dan laporan BAU per bulan'],
+    ['gudang', 'Analisis Warehouse', 'gauge', 'Nilai persediaan per plant, komposisi aging, stok vs Min/Max, tren gerakan MB51'],
+    ['dsbau', 'Deadstock & BAU', 'recycle', 'Optimasi deadstock vs target, daftar DS, pivot bulan, dan laporan BAU'],
+    ['gudanglama', 'Analisis Warehouse (lama)', 'gauge', 'Halaman lama: ABC dan material terbesar per warehouse'],
+    ['optim', 'Deadstock & BAU (lama)', 'recycle', 'Halaman lama deadstock dan BAU'],
   ]],
   ['Governance', [
     ['tko', 'TKO', 'book', 'Pembaca dokumen TKO', 'Fase 5'],

@@ -68,7 +68,7 @@ Fondasi: AG Grid Community, ECharts, Flatpickr (lokal di `vendor/`). Mesin hitun
 - **Fase 1 (selesai, belum di-push):** fondasi (grid, filter bar, layout 5 grup, CSS) dan SAP Raw Data (MB52, MB51, ME2N, ME3N).
 - **Fase 2 Material Planning (selesai a-e, lokal; Perencanaan lama dan matriks stok lama masih ada di menu sampai fiturnya dipindah):** a) cari material tampilan ala SAP; b) overview per zona: stok, OS/PO, reservasi, kontrak available; c) MRP per plant (toggle Overview/Detail) untuk rekomendasi material transfer/BAU vs RO baru; d) timeline/horizon sesuai SAP + RKM, per plant atau keseluruhan; e) sub-fitur RKM. Lanjutan: komparasi RO baru vs material transfer di Replenishment Decision.
 - **Fase 3 Contract & Expediting (selesai a-d, lokal; Pantau Pesanan, Lacak Material, dan halaman lama lain tetap di menu berlabel (lama)):** a) kontrak ongoing + status + item + histori pemanfaatan (ME3N); b) PO ongoing/closed (ME2N); c) open reservation (MB25); d) keluar masuk barang (MB51). Lanjutan: penyusun HPS/OE dari histori + proyeksi.
-- **Fase 4 Performance & Reporting:** a) analisis warehouse; b) deadstock & BAU optimization. Lanjutan: laporan bulanan sesuai template.
+- **Fase 4 Performance & Reporting (selesai a-b, lokal; halaman lama tetap berlabel (lama); KPI TOR/slow moving belum ditampilkan karena rumusnya belum ada):** a) analisis warehouse; b) deadstock & BAU optimization. Lanjutan: laporan bulanan sesuai template.
 - **Fase 5 Governance:** TKO reader dan Regulasi reader (dokumen dibaca dari folder lokal, tidak di-commit). Chatbot ditunda.
 - Push ke GitHub per fase, setelah Digi cek lokal dan memberi izin.
 
