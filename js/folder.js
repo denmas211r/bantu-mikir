@@ -34,6 +34,8 @@
     return out;
   }
   // File hasil rekap/olahan (bukan RKM dari user) → tidak dihitung supaya tidak dobel
+  // Client SAP dari nama file: 100 (WK PEP) atau 180 (WK PHE), dengan pemisah apa saja (mis. _100_ atau "MB51 180 2021")
+  const clientOf = (name) => ((String(name).match(/(?:^|[^0-9])(100|180)(?:[^0-9]|$)/) || [])[1]) || '';
   const RKM_OUTPUT = /integrated|rekap\s*(rkm|per\s*lapangan)|format\s*shu|lli\s*monitoring|rkm\s*x\s*mrp/i;
   // Pilih file berdasarkan nama: MB52 & MRP = yang terbaru; RKM = semua; .md regulasi/pedoman = yang terbaru
   function classify(files) {
@@ -47,10 +49,10 @@
     const nw = (arr, re) => arr.filter((f) => re.test(base(f))).sort((a, b) => b.file.lastModified - a.file.lastModified)[0] || null;
     // file SAP: ambil yang terbaru untuk SETIAP client (mis. _100_ = WK PEP, _180_ = WK PHE)
     const perClient = (re) => { const m = new Map(); xl.filter((f) => re.test(base(f))).sort((a, b) => b.file.lastModified - a.file.lastModified)
-      .forEach((f) => { const c = (base(f).match(/_(\d{3})_/) || [, ''])[1]; if (!m.has(c)) m.set(c, f); }); return [...m.values()]; };
+      .forEach((f) => { const c = clientOf(base(f)); if (!m.has(c)) m.set(c, f); }); return [...m.values()]; };
     return { mb52: perClient(/mb52/i), mrp: nw(xl, /mrp/i), me3n: perClient(/me3n/i), me2n: perClient(/me2n/i), mb51: xl.filter((f) => /mb51/i.test(base(f))).sort((a, b) => a.file.lastModified - b.file.lastModified), mb25: perClient(/mb25/i), // MB51: semua file (upload berkala) digabung
       ds: nw(xl.filter((f) => !/mb5[12]|me[23]n|mb25|mrp/i.test(base(f))), /deadstock|(^|[_\s-])ds([_\s.-]|$)/i),
       rkm, rkmSkip, regulasi: nw(md, /regulasi|pedoman|otak/i) };
   }
-  root.Folder = { supported, pick, loadHandle, forget, permission, listExcel, classify, RKM_OUTPUT };
+  root.Folder = { clientOf, supported, pick, loadHandle, forget, permission, listExcel, classify, RKM_OUTPUT };
 })(typeof window !== 'undefined' ? window : globalThis);

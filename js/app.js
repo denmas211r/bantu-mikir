@@ -271,7 +271,7 @@ const mrpNote = () => { if (S.mrpWK !== 'PHE' || !S.mrpWB_PHE) return ''; const 
 
 // ---------- Muat file (dua client SAP: 100 = WK PEP, 180 = WK PHE) ----------
 const CLIENT_WK = { '100': 'PEP', '180': 'PHE' };
-const clientOf = (name) => { const m = String(name).match(/_(\d{3})_/); return m ? m[1] : ''; };
+const clientOf = Folder.clientOf; // sama dengan deteksi di Raw Data (K-206)
 const wkOfFile = (name) => CLIENT_WK[clientOf(name)] || 'PEP';
 const WK_ORDER = ['PEP', 'PHE'];
 const byWK = (obj) => WK_ORDER.filter((w) => obj[w]).map((w) => [w, obj[w]]).concat(Object.entries(obj).filter(([w]) => !WK_ORDER.includes(w)));
