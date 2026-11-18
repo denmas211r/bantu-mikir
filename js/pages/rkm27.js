@@ -57,7 +57,7 @@ function r27Chart(rows, nowIdx, sel) {
   rows.forEach((o) => { if (!o.f.shortTotal || o.due == null) return; const b = B.find((x) => x.k === (o.due < nowIdx ? 'late' : String(o.due))); if (b) b[o.lewat === 'RO' ? 'ro' : 'pr']++; });
   const max = Math.max(1, ...B.map((b) => b.ro + b.pr));
   const noLT = rows.filter((o) => o.f.shortTotal && o.due == null).length;
-  return `<section class="panel r27c"><div class="panel-h"><h2>Kapan harus mulai dipesan</h2><span class="sub">Jumlah material per bulan pesan paling lambat (bulan mulai kurang − lead time). Klik batang untuk menyaring tabel.</span></div>
+  return `<section class="panel r27c" data-fold="r27chart" data-fold-default="0"><div class="panel-h"><h2>Kapan harus mulai dipesan</h2><span class="sub">Jumlah material per bulan pesan paling lambat (bulan mulai kurang − lead time). Klik batang untuk menyaring tabel.</span></div>
     <div class="r27-leg"><span><i style="background:var(--ro)"></i>Lewat kontrak (RO)</span><span><i style="background:var(--pr)"></i>Tanpa kontrak (PR)</span>${noLT ? `<span class="muted">${fmt(noLT, 0)} material kurang tapi lead time belum ada</span>` : ''}</div>
     <div class="r27-bars" role="list">${B.map((b) => { const t = b.ro + b.pr;
       return `<button type="button" role="listitem" class="r27-b${sel === b.k ? ' on' : ''}${b.k === 'late' ? ' late' : ''}" data-k="${b.k}" ${t ? '' : 'disabled'} aria-label="${esc(b.l)}: ${t} material, RO ${b.ro}, PR ${b.pr}" data-tip="${esc(`${b.k === 'late' ? 'Sudah lewat batas pesan' : 'Pesan paling lambat ' + b.l}: ${t} material · RO ${b.ro} · PR ${b.pr}`)}">
@@ -77,8 +77,7 @@ PAGES.rkm27 = function () {
   if (S.r27p == null) S.r27p = store.get('r27p') || 'all';
   if (S.r27p !== 'all' && !plants.includes(S.r27p)) S.r27p = 'all';
   const inP = (p) => S.r27p === 'all' || (p || '?') === S.r27p;
-  $('pageActions').insertAdjacentHTML('afterbegin', '<span id="r27P"></span>');
-  UI.seg($('r27P'), plants.map((p) => [p, p === '?' ? 'Plant belum diisi' : plantLabel(p)]).concat([['all', 'Semua plant']]), S.r27p, (v) => { S.r27p = v; store.set('r27p', v); S.r27m = null; route(); });
+  renPlantFilter(plants);
 
   const rows = D.rows.filter((o) => inP(o.plant));
   const kept = C.kept.filter((r) => inP(r.plant)), dups = C.dups.filter((r) => inP(r.plant));

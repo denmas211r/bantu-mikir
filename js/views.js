@@ -37,7 +37,13 @@
     S._mi = { ver: S.ver, map, labels };
     return S._mi;
   }
-  const statusCls = (s) => (s === 'Perlu order' || s === 'Kosong' || s === 'Di bawah Min' ? 'low' : s === 'Surplus' ? 'warn' : s === 'Aman' ? 'ok' : 'mute');
+  // Warna status konsep MRP (legenda di Overview Material): merah = di bawah SS/kosong/perlu order, kuning = di bawah Min (ROP), hijau = normal, biru = di atas Max
+  const statusCls = (s) => (s === 'Perlu order' || s === 'Kosong' ? 'low' : s === 'Di bawah Min' ? 'min' : s === 'Surplus' ? 'max' : s === 'Aman' ? 'ok' : 'mute');
+  const MRP_POS = { low: 'Di bawah SS / kosong', min: 'Di bawah Min (ROP)', ok: 'Normal (Min sampai Max)', max: 'Di atas Max' };
+  const mrpPos = (q, r) => { if (q == null || !r) return ''; const mn = r.min2 || 0, mx = r.max2 || 0, ss = r.ss || 0;
+    return (mn > 0 && q <= 0) || (ss > 0 && q < ss) ? 'low' : mn > 0 && q < mn ? 'min' : mx > 0 && q > mx ? 'max' : 'ok'; };
+  window.MRP_POS = MRP_POS; window.mrpPos = mrpPos;
+  window.mrpLegend = () => `<p class="legend-line mx-legend" aria-label="Legenda warna stok">${['low', 'min', 'ok', 'max'].map((k) => `<span><i class="mx-sw mx-${k}"></i>${MRP_POS[k]}</span>`).join('')}<span><i class="mx-sw mx-none"></i>Tanpa MRP</span></p>`;
   const qtyPill = (q, r) => (q == null ? '<span class="qty na">–</span>' : `<span class="qty ${q <= 0 ? 'zero' : r && r.min2 && q < r.min2 ? 'low' : 'pos'}">${fmt(q)}</span>`);
 
   // ---------- Cari Material ----------
@@ -54,22 +60,22 @@
     });
     return Object.keys(STATUS_RANK).find((k) => STATUS_RANK[k] === best) || 'Tidak dipantau';
   }
-  const qtyCell = (q, r) => (q == null ? '' : `<span class="${q <= 0 ? 'q-zero' : r && r.min2 && q < r.min2 ? 'q-low' : 'q-pos'}">${fmt(q)}</span>`);
-  const tableCari = PAGES.cari;
-  PAGES.cari = function () {
-    if (!S.mb52 && !S.mrpRes) { $('view').innerHTML = needFile('file MB52', 'Cari Material membaca stok dari MB52 (WK PEP dan PHE). Min/Max diambil dari mesin MRP.'); return; }
-    const wks = WK_ORDER.filter((w) => homePlants().some((p) => plantWK(p) === w));
+  // sel stok per plant: warna menurut posisi terhadap SS/Min/Max (ada tooltip dan legenda, bukan warna saja)
+  const qtyCell = (q, r) => { if (q == null) return ''; const k = mrpPos(q, r); return `<span class="mx-c ${k ? 'mx-' + k : 'mx-none'}"${k ? ` title="${esc(MRP_POS[k])}"` : ''}>${fmt(q)}</span>`; };
+  // Matriks plant x material (dulu Cari Material); dipakai tab Overview di Overview Material. host = elemen tujuan.
+  PAGES.matriks = function (host) {
+    if (!S.mb52 && !S.mrpRes) { host.innerHTML = needFile('file MB52', 'Overview Material membaca stok dari MB52 (WK PEP dan PHE). Min/Max diambil dari mesin MRP.'); return; }
+    const HP = () => homePlants().filter((p) => G.zonaOk(p)); // ikut filter Zona di kanan atas
+    const wks = WK_ORDER.filter((w) => HP().some((p) => plantWK(p) === w));
     if (S.cariWK !== 'all' && !wks.includes(S.cariWK)) S.cariWK = 'all';
-    $('pageActions').innerHTML = `${wks.length > 1 ? '<span id="wkSeg"></span>' : ''}<span id="vSeg"></span>`;
-    if (wks.length > 1) UI.seg($('wkSeg'), [['all', 'Semua WK']].concat(wks.map((w) => [w, `WK ${w}`])), S.cariWK, (v) => { S.cariWK = v; store.set('cariWK', v); route(); });
-    UI.seg($('vSeg'), [['matriks', 'Matriks'], ['tabel', 'Tabel']], S.cariView, (v) => { S.cariView = v; store.set('cariView', v); route(); });
-    if (S.cariView === 'tabel') return tableCari();
     const { map } = matIndex();
     const showWK = S.cariWK === 'all' ? wks : [S.cariWK];
-    const H = homePlants().filter((p) => showWK.includes(plantWK(p))).sort((a, b) => WK_ORDER.indexOf(plantWK(a)) - WK_ORDER.indexOf(plantWK(b)) || a.localeCompare(b));
+    const H = HP().filter((p) => showWK.includes(plantWK(p))).sort((a, b) => WK_ORDER.indexOf(plantWK(a)) - WK_ORDER.indexOf(plantWK(b)) || a.localeCompare(b));
     const rows = [...map.values()].filter((o) => H.some((p) => o.stock.get(p) > 0 || o.mrp.has(p)) || (S.cariWK === 'all' && o.total > 0));
     const st = new Map(rows.map((o) => [o, statusFor(o, H)]));
     const ordOf = (o) => H.reduce((a, p) => a + ((o.mrp.get(p) || {}).toOrder || 0), 0);
+    const X = window.MP ? MP.idx() : null; // OS PO/RO (ME2N) dan reservasi terbuka (MB25) di plant yang tampil
+    const osOf = (o, k) => (!X || !(k === 'po' ? S.me2n : S.mb25) ? null : (X[k].get(o.material) || []).filter((l) => H.includes(l.plant)).reduce((a, l) => a + (k === 'po' ? l.openQty : l.diff), 0));
     const priceOf = (o) => (o.contract ? [o.contract.price, o.contract.currency] : o.price != null ? [o.price, o.priceCur] : null);
     const cols = [
       { label: 'Material', wide: true, w: 3.8, filter: false, get: (o) => o.desc,
@@ -85,12 +91,15 @@
         html: (o) => { const ot = [...o.stock].filter(([p, q]) => !H.includes(p) && q > 0); return ot.length ? `<span title="${esc(ot.map(([p, q]) => `${plantLabel(p)}: ${fmt(q)}`).join('\n'))}">${fmt(ot.reduce((a, [, q]) => a + q, 0))}</span><span class="k-s">${ot.length} plant</span>` : ''; } },
       { label: 'Pakai', sub: '12 bulan', num: true, filter: false, w: 1.05, get: (o) => o.use12, html: (o) => (o.use12 == null ? '' : fmt(o.use12, 0)) },
       { label: 'Order', sub: 'MRP', num: true, filter: false, w: 0.95, get: (o) => ordOf(o) || null, html: (o) => (ordOf(o) ? `<b>${fmt(ordOf(o))}</b>` : '') },
+      { label: 'OS PO/RO', num: true, filter: false, hide: true, get: (o) => osOf(o, 'po'), html: (o) => (osOf(o, 'po') == null ? '' : fmt(osOf(o, 'po'))) },
+      { label: 'Reservasi', num: true, filter: false, hide: true, get: (o) => osOf(o, 'rs'), html: (o) => (osOf(o, 'rs') == null ? '' : fmt(osOf(o, 'rs'))) },
       { label: 'Status', nowrap: true, w: 1.35, get: (o) => st.get(o), html: (o) => `<span class="st ${statusCls(st.get(o))}">${esc(st.get(o))}</span>` },
       { label: 'WK', get: (o) => [...o.wk].join(', '), hide: true },
     ];
-    $('view').innerHTML = `<p class="legend-line"><span>Angka = stok per plant (MB52)</span><span class="q-low">Merah = di bawah Min</span><span>Klik baris untuk analisis material</span></p><div id="mx"></div>`;
-    UI.table($('mx'), { id: 'cari-mx3-' + S.cariWK, rows, cols, name: 'Cari Material', match: (o, q) => hit(o.material + ' ' + o.desc, expand(q)), sort: { i: cols.findIndex((c) => c.label === 'Pakai'), dir: -1 },
-      placeholder: 'Cari deskripsi atau kode material… (mis. packer 7, laker)', rowKey: (o) => o.material, onRow: openMaterial });
+    host.innerHTML = `<div class="mx-bar">${wks.length > 1 ? '<span id="wkSeg"></span>' : ''}<div class="mx-leg-wrap"><span class="legend-line"><span>Angka = stok per plant (MB52, unrestricted). Klik baris untuk detail material.</span></span>${mrpLegend()}</div></div><div id="mx"></div>`;
+    if (wks.length > 1) UI.seg($('wkSeg'), [['all', 'Semua WK']].concat(wks.map((w) => [w, `WK ${w}`])), S.cariWK, (v) => { S.cariWK = v; store.set('cariWK', v); route(); });
+    UI.table($('mx'), { id: 'cari-mx3-' + S.cariWK, rows, cols, name: 'Overview Material', match: (o, q) => hit(o.material + ' ' + o.desc, expand(q)), sort: { i: cols.findIndex((c) => c.label === 'Pakai'), dir: -1 },
+      placeholder: 'Cari deskripsi atau kode material… (mis. packer 7, laker)', rowKey: (o) => o.material, onRow: (m) => (window.MP ? MP.detail(m) : openMaterial(m)) });
   };
 
   // ---------- Analisis Material (panel) ----------
@@ -276,18 +285,14 @@
   }
 
   // ---------- Kontrak: kartu ----------
-  const tableKontrak = PAGES.kontrak;
-  PAGES.kontrak = function () {
-    if (!S.me3n) { $('view').innerHTML = needFile('file kontrak ME3N', 'Tambahkan download ME3N (WK PEP dan PHE), dan ME2N untuk PO/RO, di Data SAP atau di folder data.'); return; }
-    $('pageActions').innerHTML = '<span id="vSeg"></span>';
-    UI.seg($('vSeg'), [['kartu', 'Kartu'], ['tabel', 'Tabel']], S.kView, (v) => { S.kView = v; store.set('kView', v); route(); });
-    if (S.kView === 'tabel') return tableKontrak();
+  PAGES.kartuKontrak = function (host) { // tampilan Kartu di halaman Kontrak (cexp.js); host = elemen tujuan
+    if (!S.me3n) { host.innerHTML = needFile('file kontrak ME3N', 'Tambahkan download ME3N (WK PEP dan PHE), dan ME2N untuk PO/RO, di Data SAP atau di folder data.'); return; }
     // bawaan: utamakan kontrak Zona 1 (PG X07) dan Regional 1 Zona 1&4 (PG X02); PG lain bisa ditambah lewat filter
     const F = S.kf || (S.kf = { q: '', st: new Set(), pg: new Set(store.get('kPg') || ['X07', 'X02']), wk: new Set(), kel: new Set(), sort: 'hari', n: 60 });
     const usedBy = new Map(); if (S.mrpRes) for (const r of S.mrpRes.values()) if (r.contract) usedBy.set(r.contract.doc, (usedBy.get(r.contract.doc) || 0) + 1);
     const stOf = (d) => { const a = []; if (d.sisaHari != null && d.sisaHari < 0) a.push('Berakhir'); else if (d.sisaHari != null && d.sisaHari <= 90) a.push('Habis ≤ 90 hari'); else if (d.sisaHari != null && d.sisaHari <= 180) a.push('Habis ≤ 180 hari'); if (d.pctSisa < 0.2) a.push('Sisa nilai < 20%'); return a.length ? a : ['Aman']; };
     const all = [...S.me3n.docs.values()];
-    $('view').innerHTML = `<div class="filters"><label class="dt-search">${UI.I.search}<input type="search" id="kq" placeholder="Cari No. OA, vendor, atau material…" value="${esc(F.q)}"></label>
+    host.innerHTML = `<div class="filters"><label class="dt-search">${UI.I.search}<input type="search" id="kq" placeholder="Cari No. OA, vendor, atau material…" value="${esc(F.q)}"></label>
         <span id="kKelF"></span><span id="kSt"></span><span id="kPg"></span><span id="kWk"></span>
         <label class="select"><span class="select-k">Urut</span><select id="kSort" class="bare">${[['hari', 'Sisa hari'], ['nilai', 'Sisa nilai (%)'], ['pakai', 'Dipakai MRP'], ['oa', 'No. OA']].map(([v, l]) => `<option value="${v}" ${F.sort === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
       <p class="source" id="kCount"></p><div class="oa-grid" id="kGrid"></div><div class="more" id="kMore"></div>`;
@@ -320,7 +325,7 @@
       }).join('') || '<div class="panel empty"><h3>Tidak ada kontrak yang cocok</h3><p>Ubah kata kunci atau filter.</p></div>';
       $('kMore').innerHTML = list.length > F.n ? `<button class="btn" id="kMoreB">Tampilkan ${Math.min(60, list.length - F.n)} lagi</button>` : '';
       if ($('kMoreB')) $('kMoreB').onclick = () => { F.n += 60; draw(); };
-      document.querySelectorAll('.oa-card').forEach((c) => (c.onclick = (e) => openContract(c.dataset.oa, e.target.closest('.oa-sim') ? 'sim' : undefined)));
+      document.querySelectorAll('.oa-card').forEach((c) => (c.onclick = (e) => (e.target.closest('.oa-sim') || !window.KX ? openContract(c.dataset.oa, e.target.closest('.oa-sim') ? 'sim' : undefined) : KX.contract(c.dataset.oa))));
     };
     let t; $('kq').oninput = (e) => { clearTimeout(t); t = setTimeout(() => { F.q = e.target.value; F.n = 60; draw(); }, 200); };
     $('kSort').onchange = (e) => { F.sort = e.target.value; draw(); };
@@ -479,8 +484,9 @@
   // tautan material di mana pun → buka analisis material
   document.addEventListener('click', (e) => {
     const a = e.target.closest('.mlink, .oalink, .calclink'); if (!a || a.closest('.drawer')) return; e.preventDefault();
-    if (a.classList.contains('oalink')) openContract(a.dataset.oa, a.dataset.tab);
+    if (a.classList.contains('oalink')) { if (!a.dataset.tab && window.KX && S.me3n && S.me3n.docs.has(a.dataset.oa)) KX.contract(a.dataset.oa); else openContract(a.dataset.oa, a.dataset.tab); }
     else if (a.classList.contains('calclink')) openMaterial(a.dataset.mat, { calc: a.dataset.p });
+    else if (window.MP) MP.detail(a.dataset.mat, a.dataset.p);
     else openMaterial(a.dataset.mat);
   });
   window.openMaterial = openMaterial; window.openContract = openContract; window.explainMRP = explainMRP;
@@ -531,72 +537,38 @@
   PAGES.gerak = function () {
     if (!S.mb51) { $('view').innerHTML = needFile('file MB51', 'Pergerakan material dibaca dari MB51. Taruh semua file MB51 (misalnya per bulan) di folder data: web menggabungkannya dan membuang baris yang dobel.'); return; }
     const D = prep();
-    const G = S.gf || (S.gf = { from: '', to: '', wk: new Set(), plant: new Set(), ni: false });
-    if (!D.months.includes(G.to)) G.to = D.months[D.months.length - 1] || '';
-    if (!D.months.includes(G.from)) G.from = D.months[Math.max(0, D.months.indexOf(G.to) - 11)] || ''; // bawaan: 12 bulan terakhir
+    const F = S.gf || (S.gf = { from: '', to: '', wk: new Set(), plant: new Set(), ni: false });
+    if (!D.months.includes(F.to)) F.to = D.months[D.months.length - 1] || '';
+    if (!D.months.includes(F.from)) F.from = D.months[Math.max(0, D.months.indexOf(F.to) - 11)] || ''; // bawaan: 12 bulan terakhir
     const plants = [...new Set(D.moves.map((x) => x.m.plant))].sort();
     const unk = new Map(); D.moves.forEach((x) => { if (!x.cat) unk.set(x.m.mkey, (unk.get(x.m.mkey) || 0) + 1); });
     const opt = (v, sel) => `<option value="${v}"${v === sel ? ' selected' : ''}>${ymLabel(v)}</option>`;
     $('view').innerHTML = `
       ${unk.size ? `<div class="banner warn"><span>Ada ${fmt([...unk.values()].reduce((a, b) => a + b, 0), 0)} gerakan dengan kunci Mvt yang belum ada di tabel referensi: ${esc([...unk].sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k, n]) => `${k} (${n})`).join(', '))}. Kirim kategorinya supaya bisa ditambahkan.</span></div>` : ''}
-      <div class="filters"><label class="select"><span>Dari</span><select class="bare" id="gFrom">${D.months.map((m) => opt(m, G.from)).join('')}</select></label>
-        <label class="select"><span>Sampai</span><select class="bare" id="gTo">${D.months.map((m) => opt(m, G.to)).join('')}</select></label>
+      <div class="filters"><label class="select"><span>Dari</span><select class="bare" id="gFrom">${D.months.map((m) => opt(m, F.from)).join('')}</select></label>
+        <label class="select"><span>Sampai</span><select class="bare" id="gTo">${D.months.map((m) => opt(m, F.to)).join('')}</select></label>
         <span id="gWK"></span><span id="gPl"></span>
-        <label class="chk"><input type="checkbox" id="gNI"${G.ni ? ' checked' : ''}> Tampilkan juga gerakan yang tidak dihitung</label></div>
+        <label class="chk"><input type="checkbox" id="gNI"${F.ni ? ' checked' : ''}> Tampilkan juga gerakan yang tidak dihitung</label></div>
       <div id="gBody"></div>`;
     const redraw = () => reader(D);
-    $('gFrom').onchange = (e) => { G.from = e.target.value; if (G.to < G.from) G.to = G.from; redraw(); };
-    $('gTo').onchange = (e) => { G.to = e.target.value; if (G.from > G.to) G.from = G.to; redraw(); };
-    $('gNI').onchange = (e) => { G.ni = e.target.checked; redraw(); };
+    $('gFrom').onchange = (e) => { F.from = e.target.value; if (F.to < F.from) F.to = F.from; redraw(); };
+    $('gTo').onchange = (e) => { F.to = e.target.value; if (F.from > F.to) F.from = F.to; redraw(); };
+    $('gNI').onchange = (e) => { F.ni = e.target.checked; redraw(); };
     const wks = [...new Set(D.moves.map((x) => x.m.wk))].sort();
-    if (wks.length > 1) UI.multi($('gWK'), { label: 'WK', options: wks.map((w) => ({ value: w, label: 'WK ' + w })), selected: G.wk, onChange: redraw });
-    UI.multi($('gPl'), { label: 'Plant', options: plants.map((p) => ({ value: p, label: plantLabel(p) })), selected: G.plant, onChange: redraw });
+    if (wks.length > 1) UI.multi($('gWK'), { label: 'WK', options: wks.map((w) => ({ value: w, label: 'WK ' + w })), selected: F.wk, onChange: redraw });
+    UI.multi($('gPl'), { label: 'Plant', options: plants.map((p) => ({ value: p, label: plantLabel(p) })), selected: F.plant, onChange: redraw });
     redraw();
   };
 
   function reader(D) {
-    const G = S.gf;
-    const rows = D.moves.filter((x) => x.month >= G.from && x.month <= G.to && (!G.wk.size || G.wk.has(x.m.wk)) && (!G.plant.size || G.plant.has(x.m.plant))
-      && (G.ni || x.cat !== 'Not Included')).sort((a, b) => (b.m.date || 0) - (a.m.date || 0));
-    UI.table($('gBody'), { id: 'mb51-reader', minWidth: 1500, rows, name: 'MB51 ' + G.from + ' sd ' + G.to, rowKey: (x) => x.m.material, onRow: (k) => openMaterial(k),
-      match: (x, q) => hit([x.m.material, x.m.desc, x.m.matDoc, x.m.po, x.m.header, x.m.resv, x.m.mt, x.m.mtText, x.from, x.to].join(' '), expand(q)), placeholder: 'Cari material, deskripsi, dokumen, PO, Mvt, keterangan…', cols: [
-      { label: 'Tanggal', nowrap: true, w: 1.1, get: (x) => x.m.date, html: (x) => dstr(x.m.date) },
-      { label: 'Plant', get: (x) => x.m.plant, title: '' },
-      { label: 'SLoc', get: (x) => x.m.sloc },
-      { label: 'Mvt', get: (x) => x.m.mt, html: (x) => `<span title="${esc(x.m.mtText)}">${esc(x.m.mt)}</span>` },
-      { label: 'Teks Mvt', get: (x) => x.m.mtText, hide: true },
-      { label: 'Kategori', get: (x) => catName(x.cat) },
-      { label: 'Material', nowrap: true, w: 1.4, get: (x) => x.m.material, html: (x) => `<span class="mono">${esc(x.m.material)}</span>` },
-      { label: 'Deskripsi', wide: true, get: (x) => x.m.desc },
-      { label: 'Qty', num: true, get: (x) => x.m.qty, html: (x) => fmt(x.m.qty) },
-      { label: 'UoM', get: (x) => x.m.uom },
-      { label: 'Nilai', num: true, get: (x) => x.m.amount, html: (x) => money(x.m.amount, x.cur) },
-      { label: 'Mata uang', get: (x) => x.cur, hide: true },
-      { label: 'PO/RO', nowrap: true, get: (x) => x.m.po },
-      { label: 'Item', get: (x) => x.m.poItem, hide: true },
-      { label: 'Dari', get: (x) => x.from }, { label: 'Ke', get: (x) => x.to },
-      { label: 'Header text', get: (x) => x.m.header },
-      { label: 'Mat. Doc', nowrap: true, get: (x) => x.m.matDoc, hide: true },
-      { label: 'Val. type', get: (x) => x.m.batch, hide: true },
-      { label: 'Reservasi', get: (x) => x.m.resv, hide: true },
-      { label: 'User', get: (x) => x.m.user, hide: true },
-      { label: 'Reference', get: (x) => x.m.ref, hide: true },
-    ] });
+    const F = S.gf;
+    const rows = D.moves.filter((x) => x.month >= F.from && x.month <= F.to && (!F.wk.size || F.wk.has(x.m.wk)) && (!F.plant.size || F.plant.has(x.m.plant))
+      && (F.ni || x.cat !== 'Not Included')).sort((a, b) => (b.m.date || 0) - (a.m.date || 0));
+    const d = G.fromObjs(rows, [['Tanggal', (x) => x.m.date], ['Plant', (x) => x.m.plant], ['SLoc', (x) => x.m.sloc], ['Mvt', (x) => x.m.mt], ['Teks Mvt', (x) => x.m.mtText], ['Kategori', (x) => catName(x.cat)], ['Material', (x) => x.m.material], ['Deskripsi', (x) => x.m.desc], ['Qty', (x) => x.m.qty], ['UoM', (x) => x.m.uom],
+      ['Nilai', (x) => x.m.amount], ['Mata uang', (x) => x.cur], ['PO/RO', (x) => x.m.po], ['Item', (x) => x.m.poItem], ['Dari', (x) => x.from], ['Ke', (x) => x.to], ['Header text', (x) => x.m.header], ['Mat. Doc', (x) => x.m.matDoc], ['Val. type', (x) => x.m.batch], ['Reservasi', (x) => x.m.resv], ['User', (x) => x.m.user], ['Reference', (x) => x.m.ref], ['WK', (x) => x.m.wk]]);
+    G.table($('gBody'), { head: d.head, rows: d.rows, name: 'MB51_' + F.from + '_sd_' + F.to, plantCol: 1, types: { Mvt: 'text', Material: 'text', 'PO/RO': 'text', Item: 'text', Reservasi: 'text', 'Mat. Doc': 'text' },
+      hide: ['Teks Mvt', 'Item', 'Mat. Doc', 'Val. type', 'Reservasi', 'User', 'Reference', 'WK'], rowClick: (x) => MP.detail(x.m.material, x.m.plant),
+      source: 'Sumber: MB51 (semua file digabung, baris dobel dibuang). Nilai dalam mata uang client (IDR atau USD), tidak dijumlahkan lintas mata uang. Kategori = aturan MvT di referensi. Klik baris untuk detail material.' });
   }
 
-  // Tabel aturan Movement Type → kategori (ditampilkan di Panduan & Aturan)
-  window.mvtRulesTable = function (el) {
-    const used = new Map(); (S.mb51 ? S.mb51.moves : []).forEach((m) => used.set(m.mkey, (used.get(m.mkey) || 0) + 1));
-    UI.table(el, { id: 'gerak-aturan', rows: Master.MVT_TABLE, name: 'Aturan MvT', placeholder: 'Cari Mvt, kategori, atau penjelasan…', match: (r, q) => hit(r.join(' '), expand(q)), cols: [
-      { label: 'Kunci', nowrap: true, get: (r) => r[0], html: (r) => `<b class="mono">${esc(r[0])}</b>` },
-      { label: 'Mvt', get: (r) => r[0].slice(0, 3) },
-      { label: 'Arah', get: (r) => (r[0].endsWith('+') ? 'Masuk (+)' : 'Keluar (−)') },
-      { label: 'Teks SAP', get: (r) => r[2] },
-      { label: 'Kategori', get: (r) => r[1], html: (r) => `<b>${esc(r[1])}</b>` },
-      { label: 'Arti di SAP', wide: true, w: 3, get: (r) => r[3] },
-      { label: 'Optimasi DS', get: (r) => r[4] === 'OWN USE' ? 'Internal Usage' : r[4] === 'BAU' ? 'BAU' : r[4] === 'MTA' ? 'MTA' : r[4] === '309' ? 'Opsional (309)' : 'Tidak dihitung' },
-      { label: 'Baris di data', num: true, filter: false, get: (r) => used.get(r[0]) || 0, html: (r) => fmt(used.get(r[0]) || 0, 0) },
-      { label: 'Koreksi dari tabel lama', wide: true, w: 2.2, get: (r) => r[5], html: (r) => (r[5] ? `<span class="muted">${esc(r[5])}</span>` : '') },
-    ] });
-  };
 })();

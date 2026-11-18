@@ -76,9 +76,9 @@
       <div class="dt-bar">
         <label class="dt-search">${I.search}<input type="search" placeholder="${esc(o.placeholder || 'Cari di tabel ini…')}" value="${esc(st.q)}" aria-label="Cari"></label>
         <div class="dt-tools"><span class="dt-count" aria-live="polite"></span>
-          <button type="button" class="btn ghost" data-a="reset" hidden>${I.x}<span>Hapus filter</span></button>
-          <button type="button" class="btn ghost" data-a="cols">${I.cols}<span>Kolom</span></button>
-          <button type="button" class="btn ghost" data-a="xl">${I.dl}<span>Unduh Excel</span></button></div>
+          <button type="button" class="btn" data-a="reset" hidden>${I.x}<span>Hapus filter</span></button>
+          <button type="button" class="btn" data-a="cols">${I.cols}<span>Kolom</span></button>
+          <button type="button" class="btn primary" data-a="xl">${I.dl}<span>Unduh Excel</span></button></div>
       </div>
       <div class="dt-chips"></div>
       <div class="dt-scroll"><table><thead></thead><tbody></tbody></table></div>

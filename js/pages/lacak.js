@@ -3,9 +3,9 @@
 
 PAGES.lacak = function () {
   const q0 = sessionStorage.getItem('lacakQ') || S.lacakQ || ''; sessionStorage.removeItem('lacakQ');
-  const have = [S.me2n && 'ME2N', S.mb51 && 'MB51', S.mb25 && 'MB25', S.mb52 && 'MB52', S.mrpRes && 'MRP'].filter(Boolean);
-  $('view').innerHTML = `<div class="panel"><div class="lacak-bar"><input id="lq" type="search" aria-label="Kata kunci" placeholder="Kode material, No. PO/RO, No. PR, No. OA, atau No. reservasi" value="${esc(q0)}"><button class="btn primary" id="lgo">Lacak</button></div>
-    <p class="muted small">Data yang dimuat: ${have.length ? have.join(', ') : 'belum ada'}.</p></div><div id="lres"></div>`;
+  const have = [['ME2N', S.me2n], ['MB51', S.mb51], ['MB25', S.mb25], ['MB52', S.mb52], ['MRP', S.mrpRes]];
+  $('view').innerHTML = `<section class="panel lc-search"><div class="lacak-bar"><label class="dt-search lc-in">${UI.I.search}<input id="lq" type="search" aria-label="Kata kunci" placeholder="Kode material, No. PO/RO, No. PR, No. OA, atau No. reservasi" value="${esc(q0)}"></label><button class="btn primary" id="lgo">Lacak</button></div>
+    <p class="lc-src"><span class="muted small">Data dimuat:</span> ${have.map(([n, v]) => pill(n, v ? 'ok' : 'mute')).join(' ')}<span class="muted small">Abu-abu = file belum dimuat, jejaknya tidak lengkap.</span></p></section><div id="lres"></div>`;
   const go = () => {
     const q = $('lq').value.trim(); S.lacakQ = q; if (!q) { $('lres').innerHTML = ''; return; }
     const out = [];

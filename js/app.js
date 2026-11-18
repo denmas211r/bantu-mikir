@@ -19,39 +19,28 @@ const ICON = {
 const svg = (k) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICON[k]}</svg>`;
 
 // Menu: [grup, [[route, label, icon, sub-judul, catatan (halaman belum jadi)]]]
-// 5 grup (Kantor 2.0). Fase 1: grup 1-4 sementara memuat halaman lama; isinya dirombak bertahap di fase 2-5.
+// 5 grup (Kantor 2.0). Fase 6 (K-213): halaman lama digabung; route lama yang dihapus diarahkan lewat REDIR di route().
 const MENU = [
   ['', [['beranda', 'Beranda', 'home', 'Gambaran cepat dari stok sampai laporan']]],
   ['Material Planning', [
-    ['cari', 'Cari Material', 'search', 'Cari material, lihat stok per plant; klik baris untuk detail (stok, OS/PO, reservasi, kontrak, transaksi)'],
-    ['overview', 'Overview Material', 'gauge', 'Stok, OS PO, reservasi, dan kontrak per material di zona terpilih; Detail = MRP per plant'],
-    ['horizon', 'Timeline & Horizon', 'chart', 'Kapan stok mulai kurang dan kapan harus dipesan, dari data SAP + RKM'],
+    ['lacak', 'Lacak Material', 'route', 'Jejak satu material atau dokumen (PR, PO/RO, OA, reservasi) dari permintaan sampai dipakai'],
+    ['overview', 'Overview Material', 'gauge', 'Overview = matriks stok plant x material dengan warna MRP; Detail = hasil MRP per plant. Klik baris untuk detail material'],
+    ['rencana', 'Perencanaan', 'chart', 'Timeline RKM per plant dan bulan, MRP & stok level, dan data RKM'],
     ['rkmx', 'RKM', 'list', 'RKM per material: pemenuhan stok + PO, perbandingan dengan MRP, dan data tanpa KIMAP'],
     ['order', 'Perlu Dipesan', 'cart', 'Barang yang harus dipesan: lewat kontrak (RO) atau permintaan pembelian baru (PR)'],
-    ['rencana', 'Perencanaan (lama)', 'chart', 'Halaman lama: timeline RKM, MRP & stok level, data RKM. Dipindah bertahap'],
-    ['carilama', 'Cari Material (matriks)', 'search', 'Halaman lama: tampilan matriks plant dan material'],
   ]],
   ['Contract & Expediting', [
-    ['kontrak', 'Kontrak', 'doc', 'Kontrak ongoing (ME3N) dengan status; klik untuk List Item dan Histori Pemanfaatan'],
-    ['po', 'PO', 'truck', 'PO/RO ongoing dan closed (ME2N): due date, telat kirim, sisa kirim'],
-    ['resv', 'Reservasi', 'list', 'Reservasi MB25 terbuka atau semua, dengan GI di MB51'],
-    ['gerak', 'Keluar-Masuk Barang', 'flow', 'Pergerakan MB51 per movement type, plant, material, dan grafik masuk vs keluar per bulan'],
-    ['expediting', 'Pantau Pesanan (lama)', 'truck', 'Halaman lama: pesanan belum datang, terlambat, status manual dan penerima'],
-    ['lacak', 'Lacak Material (lama)', 'route', 'Halaman lama: jejak satu material atau dokumen dari permintaan sampai dipakai'],
-    ['kontraklama', 'Kontrak (kartu, lama)', 'doc', 'Halaman lama: kontrak tampilan kartu dan tabel'],
-    ['resvlama', 'Reservasi (lama)', 'list', 'Halaman lama reservasi'],
-    ['geraklama', 'Keluar-Masuk (lama)', 'flow', 'Halaman lama pergerakan barang'],
+    ['kontrak', 'Kontrak', 'doc', 'Kontrak (ME3N) dalam tampilan Kartu, List Kontrak, atau Item Kontrak; klik untuk List Item dan Histori Pemanfaatan'],
+    ['po', 'Pesanan', 'truck', 'PO, RO (ME2N: due date, telat kirim, sisa kirim), dan Reservasi (MB25 dengan GI di MB51)'],
+    ['gerak', 'Keluar-Masuk Barang', 'flow', 'Pergerakan MB51 per movement type, plant, material, dengan arah dari-ke'],
   ]],
   ['Performance & Reporting', [
-    ['gudang', 'Analisis Warehouse', 'gauge', 'Nilai persediaan per plant, komposisi aging, stok vs Min/Max, tren gerakan MB51'],
-    ['dsbau', 'Deadstock & BAU', 'recycle', 'Optimasi deadstock vs target, daftar DS, pivot bulan, dan laporan BAU'],
-    ['gudanglama', 'Analisis Warehouse (lama)', 'gauge', 'Halaman lama: ABC dan material terbesar per warehouse'],
-    ['optim', 'Deadstock & BAU (lama)', 'recycle', 'Halaman lama deadstock dan BAU'],
+    ['gudang', 'Analisis Warehouse', 'gauge', 'Nilai persediaan, ABC, dan material terbesar per warehouse'],
+    ['optim', 'Deadstock & BAU', 'recycle', 'Optimasi deadstock vs target, daftar DS, dan laporan BAU'],
   ]],
   ['Governance', [
     ['tko', 'TKO', 'book', 'Pembaca dokumen TKO/TKI: daftar, penampil per halaman, cari teks'],
     ['regulasi', 'Regulasi', 'book', 'Pembaca Pedoman dan Regulasi: daftar, penampil per halaman, cari teks'],
-    ['regulasilama', 'Panduan & Aturan (lama)', 'book', 'Halaman lama: aturan Pedoman/TKO dan cara web ini menghitung'],
   ]],
   ['SAP Raw Data', [
     ['raw', 'Data SAP', 'db', 'MB52, MB51, ME2N, ME3N apa adanya dari file tarikan'],
@@ -59,6 +48,8 @@ const MENU = [
   ]],
   ['Bantuan', [['pengaturan', 'Pengaturan', 'gear', 'Plant, zona, kurs, dan parameter MRP']]],
 ];
+// route lama (bookmark) -> route pengganti; opsi tab diset lewat fungsi
+const REDIR = { cari: 'lacak', carilama: 'overview', horizon: ['rencana', () => (S.renTab = 'tl')], kontraklama: 'kontrak', resv: ['po', () => (S.psTab = 'resv')], resvlama: ['po', () => (S.psTab = 'resv')], expediting: 'po', geraklama: 'gerak', gudanglama: 'gudang', optimlama: 'optim', dsbau: 'optim', regulasilama: 'regulasi' };
 const ROUTES = Object.fromEntries(MENU.flatMap(([, items]) => items.map((i) => [i[0], i])));
 const DEFAULT_MRP_PLANTS = ['W101', 'W102', 'W802', 'W803'];
 const DEFAULT_ZONA = Object.assign({}, CFG.PLANT_ZONA,
@@ -144,6 +135,7 @@ function route() {
   const k = (location.hash.match(/#\/([\w-]+)/) || [, 'beranda'])[1];
   const OLD = { rkmtl: 'tl', rkm: 'mrp', rkm27: 'data' }; // menu lama → sub-fitur Perencanaan
   if (OLD[k]) { S.renTab = OLD[k]; location.hash = '#/rencana'; return; }
+  if (REDIR[k]) { const [to, fn] = [].concat(REDIR[k]); if (fn) fn(); location.hash = '#/' + to; return; }
   const r = ROUTES[k] || ROUTES.beranda;
   document.querySelectorAll('#nav a, #sideHelp a').forEach((a) => a.classList.toggle('on', a.dataset.k === r[0]));
   $('pageTitle').textContent = r[1]; $('pageSub').textContent = r[3] || ''; $('pageActions').innerHTML = ''; document.title = r[1] + ' · MIM Inventory Analyst';
@@ -466,7 +458,7 @@ function tidy(root) {
   });
   root.querySelectorAll('section.panel[data-fold]').forEach((p) => {
     const key = 'fold:' + p.dataset.fold, h = p.querySelector(':scope > .panel-h'); if (!h) return;
-    if (!p.dataset.fi) { p.dataset.fi = '1'; p.classList.toggle('folded', store.get(key) ?? true); }
+    if (!p.dataset.fi) { p.dataset.fi = '1'; p.classList.toggle('folded', store.get(key) ?? p.dataset.foldDefault !== '0'); }
     if (!h.querySelector('.fold-btn')) { const b = document.createElement('button'); b.type = 'button'; b.className = 'btn ghost fold-btn'; h.appendChild(b); }
     const b = h.querySelector('.fold-btn'), lbl = p.classList.contains('folded') ? 'Tampilkan' : 'Sembunyikan'; if (b.textContent !== lbl) b.textContent = lbl;
     b.onclick = () => { const f = p.classList.toggle('folded'); store.set(key, f); b.textContent = f ? 'Tampilkan' : 'Sembunyikan'; };

@@ -85,3 +85,58 @@
 .oin { width: 120px; height: 28px; text-align: right; }
 
 .pdf-frame { width: 100%; height: calc(100vh - 210px); border: 1px solid var(--line); border-radius: var(--r-ctl); background: #fff; }
+
+/* ================= Fase 6 (K-213): warna MRP, penyeragaman tabel dan grafik ================= */
+/* Palet grafik (satu tempat). Dipakai batang grafik di Perencanaan dan Beranda lewat --ro/--pr. */
+:root { --c1: #0a6ed1; --c2: #e9730c; --c3: #107e3e; --c4: #bb0000; --c5: #5b4fb5; --c6: #8a8d91;
+  --ro: var(--c1); --pr: var(--c2);
+  /* konsep MRP: merah di bawah SS/kosong, kuning di bawah Min (ROP), hijau normal, biru di atas Max */
+  --mrp-low: #bb0000; --mrp-low-bg: #ffe3e3; --mrp-min: #7a4a00; --mrp-min-bg: #fff0c2; --mrp-ok: #0d6b34; --mrp-ok-bg: #e2f5e9; --mrp-max: #0a4ea3; --mrp-max-bg: #e1ecfb; }
+.mx-bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 8px; }
+.mx-leg-wrap { display: flex; flex-direction: column; gap: 2px; min-width: 0; } .mx-leg-wrap .legend-line { gap: 6px 14px; }
+.mx-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.mx-sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; border: 1px solid rgba(0, 0, 0, .12); }
+.mx-sw.mx-none { background: #fff; border-color: var(--line); }
+.mx-c { display: inline-block; min-width: 38px; padding: 1px 7px; border-radius: 3px; text-align: right; font-weight: 600; }
+.mx-low { background: var(--mrp-low-bg); color: var(--mrp-low); } .mx-min { background: var(--mrp-min-bg); color: var(--mrp-min); }
+.mx-ok { background: var(--mrp-ok-bg); color: var(--mrp-ok); } .mx-max { background: var(--mrp-max-bg); color: var(--mrp-max); }
+.mx-none { color: var(--muted); font-weight: 400; background: transparent; }
+.mx-c.mx-none { color: var(--ink); }
+.st.min { color: var(--mrp-min); font-weight: 600; } .st.max { color: var(--mrp-max); font-weight: 600; } .st.low { color: var(--mrp-low); }
+.ag-theme-quartz .ag-cell.mx-low, .ag-theme-quartz .ag-cell.mx-min, .ag-theme-quartz .ag-cell.mx-ok, .ag-theme-quartz .ag-cell.mx-max { font-weight: 600; }
+
+/* Tabel: .dt (UI.table) dan table.plain meniru tampilan G.table (AG Grid): header abu, 12,5px, baris belang, bilah cari di kiri, Unduh Excel di kanan */
+.dt { gap: 8px; }
+.dt-bar { gap: 10px; }
+.dt-search { height: 30px; flex: 0 1 300px; max-width: 300px; font-size: 13px; }
+.dt-search input { height: 28px; }
+.dt-count { font-size: 12.5px; }
+.dt-tools .btn { height: 30px; padding: 0 12px; font-size: 13px; }
+.dt-scroll { border-radius: 3px; }
+.dt table, table.plain { font-size: 12.5px; }
+.dt th, table.plain th { background: #f2f4f5; color: var(--ink); font-weight: 600; border-bottom: 1px solid var(--line); }
+.dt td { padding: 4px 8px; border-bottom: 1px solid #ebebeb; line-height: 1.4; }
+table.plain td { padding: 4px 8px; border-bottom: 1px solid #ebebeb; } table.plain th { padding: 5px 8px; }
+.dt tbody tr:nth-child(even) td, table.plain tr:nth-child(even) td { background: #fafbfc; }
+.dt tbody tr:hover td, table.plain tr:hover td { background: #f5f9fd; }
+.dt tr.clickable { cursor: pointer; }
+.dt th.num .th-l, .dt td.num { font-variant-numeric: tabular-nums; }
+.ag-theme-quartz { --ag-odd-row-background-color: #fafbfc; }
+.dt-foot { font-size: 12.5px; }
+.gt-foot, p.source { font-size: 12px; color: var(--muted); }
+
+/* Grafik: judul 13px tebal di kiri atas, legenda di bawah judul, palet --c1..--c6 */
+.panel[data-fold] > .panel-h h2 { font-size: 13px; font-weight: 600; } .panel[data-fold] > .panel-h .sub { font-size: 11.5px; }
+.panel[data-fold] { padding: 10px 14px; }
+.r27-leg, .bars-legend { font-size: 12px; color: var(--ink-2); }
+.mp-chart { border-radius: 3px; }
+
+/* Perencanaan: baris navigasi tab + filter plant */
+.ren-nav { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.ren-plant { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); margin-left: auto; }
+.ren-plant select { height: 30px; border: 1px solid var(--line); border-radius: var(--r-ctl); padding: 0 8px; background: #fff; min-width: 180px; }
+
+/* Lacak Material */
+.lc-search { padding: 12px 16px; } .lacak-bar { align-items: center; } .lc-in { flex: 1 1 360px; max-width: 640px; height: 38px; } .lc-in input { height: 36px; }
+.lc-src { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 8px 0 0; }
+#lres .panel h3 { font-size: 14px; margin-bottom: 6px; } #lres .panel h4 { font-size: 13px; margin: 10px 0 4px; }
