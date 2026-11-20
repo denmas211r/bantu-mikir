@@ -34,12 +34,18 @@
     'Daftar dokumen': 'Document list', 'Cari teks': 'Text search', 'Pilih folder dokumen': 'Choose document folder', 'Bangun / perbarui indeks': 'Build / update index', 'Judul': 'Title', 'Nomor': 'Number', 'Kekuatan aturan': 'Rule strength',
     'Tahun (dari nama)': 'Year (from name)', 'Tanggal dokumen': 'Document date', 'Ukuran (KB)': 'Size (KB)', 'Tgl ubah file': 'File modified', 'Folder': 'Folder', 'Pedoman': 'Guideline', 'Regulasi': 'Regulation', 'Lainnya': 'Other',
     // sumber data
-    'Sumber': 'Sources', 'Data Mentah': 'Raw Data', 'Folder data': 'Data folder', 'Pilih folder': 'Choose folder', 'Lupakan folder': 'Forget folder', 'Muat ulang data': 'Reload data', 'Muat data': 'Load data', 'Hapus cache': 'Clear cache',
+    'Sumber': 'Sources', 'Data': 'Data', 'Folder data': 'Data folder', 'Pilih folder': 'Choose folder', 'Lupakan folder': 'Forget folder', 'Muat ulang data': 'Reload data', 'Muat data': 'Load data', 'Hapus cache': 'Clear cache',
     'Sumber data': 'Data sources', 'Isi': 'Contents', 'File': 'File', 'Jumlah': 'Count', 'Dimuat': 'Loaded', 'Belum dimuat': 'Not loaded', 'Upload': 'Upload', 'Stok per plant dan storage location': 'Stock per plant and storage location',
     'Pergerakan material': 'Material movement', 'PO dan RO': 'PO and RO', 'Reservasi material': 'Material reservations',
     // pengaturan
     'Bahasa': 'Language', 'Bahasa Indonesia': 'Bahasa Indonesia', 'English': 'English', 'Plant dan zona': 'Plants and zones', 'Nama': 'Name', 'Dipantau MRP': 'Monitored by MRP', 'Mata uang dan kurs': 'Currency and exchange rate',
     'Metode perhitungan MRP': 'MRP calculation method', 'Rupiah per 1 USD': 'Rupiah per 1 USD', 'Kembalikan default': 'Restore defaults', 'Metode TKO / Pedoman (disarankan)': 'TKO / Guideline method (recommended)', 'Metode Excel lama (untuk validasi)': 'Legacy Excel method (for validation)',
+    // halaman pantau (Kontrak, Pesanan, Keluar-Masuk) dan pop-up material
+    'Kontrak aktif': 'Active contracts', 'Berakhir ≤ 90 hari': 'Expiring ≤ 90 days', 'Sisa nilai < 20%': 'Remaining value < 20%', 'Habis masa': 'Expired', 'Pesanan berjalan': 'Open orders', 'Jatuh tempo ≤ 30 hari': 'Due ≤ 30 days', 'Sisa kirim': 'Remaining delivery',
+    'Reservasi terbuka': 'Open reservations', 'Lewat tgl butuh': 'Past required date', 'Selesai / ditutup': 'Completed / closed', 'Gerakan': 'Movements', 'Barang masuk': 'Goods in', 'Barang keluar': 'Goods out', 'Pemakaian (Own Use)': 'Usage (Own Use)',
+    'Berjalan': 'Open', 'PO / RO': 'PO / RO', 'Termasuk tidak dihitung': 'Including not counted', '3 bulan': '3 months', '12 bulan': '12 months', 'Tidak ada data yang cocok.': 'No matching data.',
+    'Stok': 'Stock', 'Min – Max': 'Min – Max', 'OS PO/RO': 'Open PO/RO', 'To Order': 'To Order', 'Cakupan': 'Coverage', 'Nilai stok': 'Stock value', 'Semua plant': 'All plants', 'Transaksi': 'Transactions', 'Pemakaian': 'Usage', 'MRP': 'MRP',
+    'Cari material': 'Search material', 'Tanggal ': 'Date', 'Pesanan ': 'Orders',
     // Info (warna dan tanda)
     'Kamus istilah': 'Glossary', 'Warna dan tanda': 'Colors and marks', 'Matriks stok (Material Control)': 'Stock matrix (Material Control)', 'Status': 'Status', 'Pergerakan (aging)': 'Movement (aging)',
     'Merah: perlu tindakan segera.': 'Red: needs action now.', 'Kuning: perhatian.': 'Yellow: attention.', 'Hijau: aman.': 'Green: OK.', 'Biru: informasi.': 'Blue: information.', 'Abu-abu: netral atau belum ada data.': 'Grey: neutral or no data.',

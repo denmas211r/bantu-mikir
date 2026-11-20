@@ -12,10 +12,10 @@ Live: https://denmas211r.github.io/bantu-mikir/
 | `js/app.js` | Otak web: menu 5 grup, filter Zona, pindah halaman, muat folder |
 | `js/config.js` | Konfigurasi satu tempat: pemetaan plant ke zona, nama plant |
 | `js/grid.js` | Komponen tabel baru (AG Grid): cari, urut, pin, filter checkbox, date range (Flatpickr), unduh Excel |
-| `js/pages/mplan.js` | Material Planning: Material Control (sub-fitur Overview = matriks plant x material berwarna MRP dari views.js, Detail = MRP per plant) dan panel detail material |
+| `js/pages/mplan.js` | Material Control (Overview = matriks, Detail = MRP per plant; SS/Min/Max/Stok berwarna) dan pop-up material tunggal `MP.detail` (header, kartu ringkas, tab Stok/MRP/PO-RO/Reservasi/Kontrak/Transaksi/Pemakaian) |
 | `js/pages/analysis.js` | Material Analysis: jejak material/dokumen (PR, PO/RO, OA, reservasi) dengan filter plant dan tanggal |
 | `js/i18n.js` | Bahasa Indonesia/English: kamus EN (menu, judul, tombol, filter, kepala kolom); pilihan disimpan di Pengaturan |
-| `js/pages/cexp.js` | Contract & Expediting: Kontrak (Kartu / List Kontrak / Item Kontrak, detail List Item + Histori Pemanfaatan), Pesanan (tab PO / RO / Reservasi + GI MB51). Keluar-Masuk Barang ada di views.js (grid G.table) |
+| `js/pages/cexp.js` | Contract & Expediting sebagai halaman pantau (kartu ringkas + kotak cari + tabel sederhana lewat `G.listPage`): Kontrak, Pesanan (PO/RO dan Reservasi). Keluar-Masuk Barang ada di views.js. Detail lengkap di pop-up; data mentah SAP di Sumber Data > Data |
 | `js/pages/dokumen.js` | Governance: Dokumen Aturan (Pedoman/TKO/TKI/Regulasi dalam satu daftar, filter Jenis; daftar PDF dari folder lokal, penampil per halaman, cari teks lewat indeks di browser; butuh vendor/pdf.min.mjs untuk pencarian) |
 | `js/pages/raw.js` | Data Mentah (tab di Sumber Data): MB52, MB51, ME2N, ME3N apa adanya, file sejenis digabung |
 | `js/ui.js` | Komponen lama (dipakai halaman lama, diganti bertahap): tabel (cari, urut, filter pilihan ganda, pilih kolom, halaman, unduh Excel), dropdown pilihan ganda, grafik |

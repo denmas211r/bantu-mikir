@@ -46,7 +46,7 @@ PAGES.data = function () {
   if (S.rawG) { S.rawG.destroy(); S.rawG = null; }
   if (tab === 'src') dataSources(); else $('view').innerHTML = '<div id="dtBody"></div>';
   $('view').insertAdjacentHTML('afterbegin', '<div class="seg-bar"><span id="dtSeg"></span></div>');
-  UI.seg($('dtSeg'), [['src', 'Sumber'], ['raw', 'Data Mentah']], tab, (v) => { S.dataTab = v; PAGES.data(); });
+  UI.seg($('dtSeg'), [['src', 'Sumber'], ['raw', 'Data']], tab, (v) => { S.dataTab = v; PAGES.data(); });
   if (tab === 'raw') PAGES.raw($('dtBody'));
 };
 

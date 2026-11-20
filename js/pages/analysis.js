@@ -4,13 +4,13 @@
 PAGES.analysis = function () {
   const q0 = sessionStorage.getItem('lacakQ') || S.lacakQ || ''; sessionStorage.removeItem('lacakQ');
   // Filter: plant (checkbox) dan rentang tanggal. Tanggal dipakai untuk kejadian/dokumen (tanggal dokumen, kebutuhan, GI); stok MB52 adalah posisi terkini, jadi tidak ikut difilter tanggal.
-  const F = (S.lf = S.lf || { plant: new Set(), from: '', to: '' });
+  const F = (S.lf = S.lf || { plant: new Set(), from: null, to: null });
   const plants = [...new Set([...(S.mb52 ? S.mb52.items.map((i) => i.plant) : []), ...(S.mrpRes ? [...S.mrpRes.values()].map((r) => r.plant) : []), ...(S.me2n ? S.me2n.lines.map((l) => l.plant) : []), ...(S.mb51 ? S.mb51.moves.map((m) => m.plant) : [])].filter(Boolean))].sort();
   const pOk = (p) => !F.plant.size || F.plant.has(p);
-  const inRange = (d) => { if (!F.from && !F.to) return true; if (!(d instanceof Date)) return false; const t = +d; return (!F.from || t >= +new Date(F.from + 'T00:00:00')) && (!F.to || t <= +new Date(F.to + 'T23:59:59')); };
+  const inRange = (d) => { if (!F.from && !F.to) return true; return d instanceof Date && (!F.from || d >= F.from) && (!F.to || d <= F.to); };
   const have = [['ME2N', S.me2n], ['MB51', S.mb51], ['MB25', S.mb25], ['MB52', S.mb52], ['MRP', S.mrpRes]];
-  $('view').innerHTML = `<section class="panel lc-search"><div class="lacak-bar"><label class="dt-search lc-in">${UI.I.search}<input id="lq" type="search" aria-label="Kata kunci" placeholder="Kode material, No. PO/RO, No. PR, No. OA, atau No. reservasi" value="${esc(q0)}"></label><button class="btn primary" id="lgo">Lacak</button></div>
-    <div class="seg-bar"><span id="lPl"></span><label class="chk">Dari tanggal <input type="date" id="lFrom" value="${esc(F.from)}"></label><label class="chk">Sampai <input type="date" id="lTo" value="${esc(F.to)}"></label><button class="btn ghost" id="lClr">Reset filter</button></div>
+  $('view').innerHTML = `<section class="panel lc-search"><div class="lacak-bar"><label class="dt-search lc-in">${UI.I.search}<input id="lq" type="search" aria-label="Kata kunci" placeholder="Nama atau kode material, No. PO/RO, PR, OA, atau reservasi. Contoh: laker, flange 3" value="${esc(q0)}"></label><button class="btn primary" id="lgo">Lacak</button></div>
+    <div class="gt-filters" id="lFilters" style="margin-top:10px"></div>
     <p class="lc-src"><span class="muted small">Data dimuat:</span> ${have.map(([n, v]) => pill(n, v ? 'ok' : 'mute')).join(' ')}<span class="muted small">Abu-abu = file belum dimuat, jejaknya tidak lengkap.</span></p></section><div id="lres"></div>`;
   const go = () => {
     const q = $('lq').value.trim(); S.lacakQ = q; if (!q) { $('lres').innerHTML = ''; return; }
@@ -38,7 +38,14 @@ PAGES.analysis = function () {
     // 2) material
     const isMat = (S.mb52 && S.mb52.items.some((i) => i.material === q)) || (S.mrpRes && [...S.mrpRes.values()].some((r) => r.material === q)) || (S.me2n && S.me2n.lines.some((l) => l.material === q)) || (S.mb51 && S.mb51.moves.some((m) => m.material === q));
     if (isMat) mats = new Set([q + '|']);
-    if (!out.length && !isMat) { $('lres').innerHTML = `<div class="panel empty">Tidak ditemukan di data yang dimuat.</div>`; return; }
+    if (!out.length && !isMat) { // bukan kode/dokumen: cari nama (sinonim ikut), klik hasil untuk melihat jejaknya
+      const cand = window.matIndex ? [...matIndex().map.values()].filter((o) => hit(o.material + ' ' + o.desc, expand(q))) : [];
+      if (!cand.length) { $('lres').innerHTML = `<div class="panel empty">Tidak ditemukan di data yang dimuat.</div>`; return; }
+      const d = G.fromObjs(cand.slice(0, 500), [['Material', (o) => o.material], ['Deskripsi', (o) => o.desc], ['Satuan', (o) => o.uom], ['Aging', (o) => o.aging || ''], ['Stok', (o) => o.total], ['Plant', (o) => o.stock.size], ['Status', (o) => o.status || '']]);
+      $('lres').innerHTML = `<div class="panel"><h3>${fmt(cand.length, 0)} material cocok dengan "${esc(q)}"${cand.length > 500 ? ' (500 teratas)' : ''}</h3><div id="lCand"></div></div>`;
+      G.table($('lCand'), { head: d.head, rows: d.rows, name: 'Hasil_cari_material', plantCol: -1, compact: true, autoHeight: d.rows.length <= 14, types: { Material: 'text' }, rowClick: (o) => { $('lq').value = o.material; go(); } });
+      return;
+    }
     const evs = [];
     for (const key of mats) {
       const [mat, plant] = key.split('|');
@@ -66,9 +73,17 @@ PAGES.analysis = function () {
     ] }));
     document.querySelectorAll('#lres .lm').forEach((a) => (a.onclick = (e) => { e.preventDefault(); $('lq').value = a.dataset.m; go(); }));
   };
-  UI.multi($('lPl'), { label: 'Plant', options: plants.map((p) => ({ value: p, label: plantLabel(p) })), selected: F.plant, onChange: () => go() });
-  $('lFrom').onchange = (e) => { F.from = e.target.value; go(); };
-  $('lTo').onchange = (e) => { F.to = e.target.value; go(); };
-  $('lClr').onclick = () => { F.plant.clear(); F.from = F.to = ''; PAGES.analysis(); };
+  const fb = $('lFilters'), iso = (d, end) => { const x = new Date(d); end ? x.setHours(23, 59, 59, 999) : x.setHours(0, 0, 0, 0); return x; };
+  const pb = document.createElement('button'); pb.type = 'button'; pb.className = 'fchip';
+  const paintP = () => { pb.innerHTML = `<span>Plant</span><b>${esc(F.plant.size ? (F.plant.size === 1 ? [...F.plant][0] : F.plant.size + ' dipilih') : 'Semua')}</b>`; pb.classList.toggle('on', F.plant.size > 0); };
+  paintP(); pb.onclick = () => UI.checklist(UI.openPop(pb, '', 280), plants.map((p) => ({ value: p, label: plantLabel(p) })), F.plant, () => { paintP(); go(); });
+  const dw = document.createElement('label'); dw.className = 'fchip fdate'; dw.innerHTML = '<span>Tanggal</span><input readonly placeholder="Semua tanggal" aria-label="Tanggal"><button type="button" class="fx" title="Hapus" aria-label="Hapus filter tanggal" hidden>&times;</button>';
+  const dx = dw.querySelector('.fx'), fp = flatpickr(dw.querySelector('input'), { mode: 'range', dateFormat: 'd/m/Y', locale: 'id', allowInput: false, defaultDate: F.from ? [F.from, F.to] : null,
+    onClose: (d) => { if (d.length === 1) fp.setDate([d[0], d[0]], true); }, onChange: (d) => { if (d.length === 2) { F.from = iso(d[0]); F.to = iso(d[1], true); dx.hidden = false; dw.classList.add('on'); go(); } } });
+  if (F.from) { dx.hidden = false; dw.classList.add('on'); }
+  dx.onclick = (e) => { e.preventDefault(); fp.clear(); F.from = F.to = null; dx.hidden = true; dw.classList.remove('on'); go(); };
+  const rb = document.createElement('button'); rb.type = 'button'; rb.className = 'btn ghost'; rb.textContent = 'Reset filter'; rb.onclick = () => { F.plant.clear(); F.from = F.to = null; PAGES.analysis(); };
+  fb.append(pb, dw, rb);
+  let qt; $('lq').oninput = () => { clearTimeout(qt); qt = setTimeout(go, 350); };
   $('lgo').onclick = go; $('lq').onkeydown = (e) => { if (e.key === 'Enter') go(); }; go();
 };

@@ -99,128 +99,11 @@
     host.innerHTML = `<div class="mx-bar">${wks.length > 1 ? '<span id="wkSeg"></span>' : ''}<div class="mx-leg-wrap">${mrpLegend()}</div></div><div id="mx"></div>`;
     if (wks.length > 1) UI.seg($('wkSeg'), [['all', 'Semua WK']].concat(wks.map((w) => [w, `WK ${w}`])), S.cariWK, (v) => { S.cariWK = v; store.set('cariWK', v); route(); });
     UI.table($('mx'), { id: 'cari-mx3-' + S.cariWK, rows, cols, name: 'Overview Material', match: (o, q) => hit(o.material + ' ' + o.desc, expand(q)), sort: { i: cols.findIndex((c) => c.label === 'Pakai'), dir: -1 },
-      placeholder: 'Cari deskripsi atau kode material… (mis. packer 7, laker)', rowKey: (o) => o.material, onRow: (m) => (window.MP ? MP.detail(m) : openMaterial(m)) });
+      placeholder: 'Cari deskripsi atau kode material… (mis. packer 7, laker)', rowKey: (o) => o.material, onRow: (m) => MP.detail(m) });
   };
 
-  // ---------- Analisis Material (panel) ----------
-  // ---------- Panel analisis material: MB52, ME2N, MRP, MB51 dengan filter zona / plant / periode ----------
-  // opt.calc = plant yang langsung dibuka penjelasan hitungan MRP-nya
-  const PERIODS = [[3, '3 bulan'], [6, '6 bulan'], [12, '12 bulan'], [24, '24 bulan'], [0, 'Semua data']];
-  const TABS_M = [['ringkas', 'Ringkasan'], ['stok', 'Stok'], ['mrp', 'MRP'], ['pakai', 'Pemakaian'], ['kontrak', 'Kontrak'], ['po', 'PR/PO/RO'], ['resv', 'Reservasi'], ['gerak', 'Transaksi MB51']];
-  function openMaterial(m, opt = {}) {
-    const mi = matIndex(), o = mi.map.get(m);
-    if (!o) { UI.drawer(`<div class="d-head"><h2>${esc(m)}</h2></div><div class="d-sec">Material tidak ada di MB52 maupun file MRP yang dimuat.</div>`); return; }
-    const F = (S.matF = Object.assign({ zona: '', plant: null, months: 12, tab: 'ringkas', full: false }, S.matF || {}));
-    if (opt.calc) { F.plant = opt.calc; F.zona = ''; F.tab = 'mrp'; }
-    let calcPlant = opt.calc || '';
-    const uom = o.uom || '';
-    // semua plant yang punya data untuk material ini
-    const allPlants = [...new Set([...o.items.map((i) => i.plant), ...o.mrp.keys(),
-      ...(S.me2n ? S.me2n.lines.filter((l) => l.material === m).map((l) => l.plant) : []),
-      ...(S.mb51 ? S.mb51.moves.filter((x) => x.material === m).map((x) => x.plant) : [])])].filter(Boolean).sort();
-    const body = UI.drawer('', { label: 'Analisis material', wide: true });
-    // terikat ke satu plant: bawaan = plant MRP yang punya stok (atau data pertama); '' = semua plant (dipilih sendiri)
-    if (F.plant == null || (F.plant && !allPlants.includes(F.plant))) F.plant = homePlants().find((p) => allPlants.includes(p) && (o.stock.get(p) || 0) > 0) || allPlants.find((p) => (o.stock.get(p) || 0) > 0) || allPlants[0] || '';
-    F.zona = '';
-    const aside = body.closest('.drawer');
-    const render = () => {
-      aside.classList.toggle('full', !!F.full);
-      const okP = (p) => (!F.zona || zonaOf(p) === F.zona) && (!F.plant || p === F.plant);
-      const since = F.months ? new Date(new Date().getFullYear(), new Date().getMonth() - F.months + 1, 1) : null;
-      const okD = (d) => !since || (d && d >= since);
-      const zonas = [...new Set(allPlants.map(zonaOf))].sort();
-      const items = o.items.filter((i) => okP(i.plant)).sort((a, b) => b.soh - a.soh);
-      const mrpRows = [...o.mrp.values()].filter((r) => okP(r.plant)).sort((a, b) => a.plant.localeCompare(b.plant));
-      const nrm = (i) => (i.sohNormal != null ? i.sohNormal : i.soh);
-      const stockN = items.reduce((a, i) => a + nrm(i), 0), stockO = items.reduce((a, i) => a + (i.soh - nrm(i)), 0), stockT = items.reduce((a, i) => a + (i.transit || 0), 0);
-      const valIDR = items.reduce((a, i) => a + toIDRv(i.value, stockCur(i.plant)), 0);
-      const amu = mrpRows.filter((r) => S.mrpPlants.has(r.plant)).reduce((a, r) => a + (r.amu || 0), 0);
-      const toOrder = mrpRows.filter((r) => S.mrpPlants.has(r.plant)).reduce((a, r) => a + (r.toOrder || 0), 0);
-      const cover = amu > 0 ? stockN / amu : null;
-      const kItems = S.me3n ? S.me3n.items.filter((i) => i.material === m) : [];
-      const po = S.me2n ? S.me2n.lines.filter((l) => l.material === m && !l.deleted && okP(l.plant) && (l.openQty > 0 || okD(l.docDate))).sort((a, b) => (b.docDate || 0) - (a.docDate || 0)) : [];
-      const resvAll = S.mb25 ? S.mb25.lines.filter((l) => l.material === m && okP(l.plant)).sort((a, b) => (b.reqDate || 0) - (a.reqDate || 0)) : [], resv = resvAll.filter(resvOpen), resvArc = resvAll.filter((l) => !resvOpen(l));
-      const takenBy = new Map(); if (S.mb51) S.mb51.moves.forEach((x) => { if (x.resv && x.material === m) takenBy.set(x.resv, (takenBy.get(x.resv) || 0) - x.qty); });
-      const mv = S.mb51 ? S.mb51.moves.filter((x) => x.material === m && okP(x.plant) && okD(x.date)).sort((a, b) => (b.date || 0) - (a.date || 0)) : [];
-      const lp = S.me2n && S.me2n.lastPrice.get(m);
-      // Analisa MB51: rekap per tahun + pemakaian GI 24 bulan (GI = Own Use + GI proyek/network, gerakan keluar)
-      const mvAll = S.mb51 ? S.mb51.moves.filter((x) => x.material === m && okP(x.plant) && x.date) : [];
-      const isGI = (x) => Number(x.qty) < 0 && (x.cat === 'Own Use' || OUT_MT.has(String(x.mt)));
-      const yrMap = new Map(); mvAll.forEach((x) => { const g = yrMap.get(x.date.getFullYear()) || yrMap.set(x.date.getFullYear(), { y: x.date.getFullYear(), in: 0, out: 0, gi: 0, n: 0 }).get(x.date.getFullYear());
-        if (x.qty > 0) g.in += x.qty; else g.out -= x.qty; if (isGI(x)) g.gi -= x.qty; g.n++; });
-      const yrs = [...yrMap.values()].sort((a, b) => b.y - a.y), rng = S.mb51 && S.mb51.range;
-      const endYM = rng ? rng[1].getFullYear() * 12 + rng[1].getMonth() : new Date().getFullYear() * 12 + new Date().getMonth();
-      const gi24 = new Array(24).fill(0); mvAll.forEach((x) => { const i = x.date.getFullYear() * 12 + x.date.getMonth() - (endYM - 23); if (i >= 0 && i < 24 && isGI(x)) gi24[i] -= x.qty; });
-      const lbl24 = gi24.map((_, i) => { const ym = endYM - 23 + i; return MON[ym % 12] + ' ' + Math.floor(ym / 12); });
-      // pemakaian bulanan per WK dari baris MRP plant terpilih
-      const useWK = {};
-      mrpRows.forEach((r) => { const L = mi.labels[r.wk] || []; if (!L.length) return; const u = useWK[r.wk] || (useWK[r.wk] = new Array(L.length).fill(0)); (r.usageAll || []).forEach((v, k) => (u[k] += Math.abs(v || 0))); });
-      // rekomendasi (plant terpilih)
-      const reco = [];
-      mrpRows.filter((r) => S.mrpPlants.has(r.plant) && r.toOrder > 0).forEach((r) => {
-        const sameWK = (p) => wkOfPlant(p) === wkOfPlant(r.plant);
-        const otherWK = [...o.stock].filter(([p, q]) => !sameWK(p) && q > 0);
-        const donors = [...o.stock].filter(([p, q]) => p !== r.plant && q > 0 && sameWK(p)).map(([p, q]) => { const rr = o.mrp.get(p); const spare = rr && S.mrpPlants.has(p) && rr.max2 != null ? Math.max(0, q - Math.max(rr.max2, rr.min2 || 0)) : q; return { p, spare, mrp: !!rr }; }).filter((d) => d.spare > 0);
-        let t = `<b>${esc(plantLabel(r.plant))}</b> perlu ${fmt(r.toOrder)} ${esc(uom)} (stok ${fmt(r.stock)}, PO berjalan ${fmt(r.ospo)}, Min ${fmt(r.min2)}).`;
-        if (donors.length) t += ` Cek dulu stok di ${donors.map((d) => `${esc(plantLabel(d.p))} (${fmt(d.spare)}${d.mrp ? ' di atas Max' : ''})`).join(', ')} untuk transfer.`;
-        if (otherWK.length) t += ` Ada juga stok di WK lain (${otherWK.map(([p, q]) => `${esc(p)} ${fmt(q)}`).join(', ')}), tapi beda company code, jadi harus lewat MTA.`;
-        t += r.contract ? ` Kalau tidak bisa ditransfer, terbitkan RO lewat OA ${esc(r.contract.doc)} (${esc(r.contract.vendor)}, ${money(r.contract.price, r.contract.currency)}/unit).` : ` Belum ada kontrak aktif, jadi buat PR + OE${lp ? ` (harga PO terakhir ${money(lp.price, lp.currency)})` : ''}.`;
-        reco.push([donors.length ? 'warn' : 'bad', t]);
-        if (r.contract && r.contract.sisaHari != null && r.contract.sisaHari <= 90) reco.push(['warn', `Kontrak OA ${esc(r.contract.doc)} habis dalam ${fmt(r.contract.sisaHari, 0)} hari. Siapkan perpanjangan atau amandemen.`]);
-      });
-      mrpRows.filter((r) => r.berlebih && r.stock > 0).forEach((r) => reco.push(['warn', `<b>${esc(plantLabel(r.plant))}</b> berlebih: stok ${fmt(r.stock)} ${esc(uom)} setara ${fmt(r.cover, 1)} bulan pemakaian. Tawarkan ke plant yang membutuhkan, jangan dipesan dulu.`]));
-      mrpRows.filter((r) => r.aging === 'DS' && r.stock > 0 && !r.histShort).forEach((r) => reco.push(['bad', `<b>${esc(plantLabel(r.plant))}</b>: tidak ada pemakaian (termasuk pemakaian proyek) lebih dari 5 tahun. Kandidat dead stock, cek prospek pemakaian dan peralatan induknya.`]));
-      if (stockO > 0) reco.push(['', `Ada ${fmt(stockO)} ${esc(uom)} dengan valuation type selain ZNORMAL (ex-terminasi, surplus, atau damage). Stok ini tidak dihitung di MRP; cek apakah bisa dipakai sebelum memesan.`]);
-      if (!o.mrp.size) reco.push(['', 'Material ini tidak ada di file MRP, jadi Min/Max belum dihitung. Kalau rutin dipakai, ajukan jadi stock item.']);
-      if (!reco.length) reco.push(['ok', 'Tidak ada tindakan: stok di plant yang dipantau MRP masih di antara Min dan Max.']);
-      const sel = (id, list, v, lbl) => `<label class="chk">${lbl} <select id="${id}" aria-label="${lbl}">${list.map(([k, t]) => `<option value="${esc(k)}"${String(v) === String(k) ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></label>`;
-      const vt = (i) => Object.entries(i.byVal || {}).map(([k, q]) => `${k} ${fmt(q)}`).join(', ');
-      const calcR = calcPlant ? o.mrp.get(calcPlant) : null;
-      body.innerHTML = `
-      <div class="d-head"><h2>${esc(o.desc || m)}</h2><div class="meta"><span>${esc(m)}</span><span>${esc(uom)}</span>${o.mg ? `<span>MG ${esc(o.mg.mg)} ${esc(o.mg.mgName)}</span>` : `<span>${esc(o.kel)}</span>`}${o.wk.size ? `<span>WK ${esc([...o.wk].join(', '))}</span>` : ''}${o.aging ? agingPill(o.aging) : ''}${pill(o.status, statusCls(o.status))}</div></div>
-      <div class="filters"><span id="mfP"></span>${sel('mfM', PERIODS, F.months, 'Periode')}<button type="button" class="btn ghost small" id="dExp">${F.full ? 'Perkecil' : 'Perluas'}</button></div>
-      <div id="mfT"></div>
-      <p class="muted small">${F.plant ? esc(plantLabel(F.plant)) : 'Semua plant'}. Periode berlaku untuk ME2N (tanggal dokumen; PO/RO yang masih berjalan selalu tampil) dan MB51 (tanggal posting). MB52 dan MRP adalah kondisi terakhir.</p>
-      ${F.tab === 'ringkas' ? `      <div class="kv"><div><span>Stok ZNORMAL</span><b>${fmt(stockN)}</b></div><div><span>Val. type lain</span><b>${fmt(stockO)}</b></div><div><span>In transit</span><b>${fmt(stockT)}</b></div><div><span>Nilai stok</span><b>${money(valIDR, 'IDR')}</b></div>
-        <div><span>AMU (plant MRP)</span><b>${fmt(amu, 1)}</b></div><div><span>Cakupan stok</span><b>${cover == null ? '–' : fmt(cover, 1) + ' bln'}</b></div><div><span>Perlu order</span><b>${fmt(toOrder)}</b></div></div>` : ''}
-      ${F.tab === 'ringkas' ? `      <section class="d-sec"><h3>Rekomendasi</h3><ul class="reco">${reco.map(([c, t]) => `<li class="${c}"><span>${brief(t)}</span></li>`).join('')}</ul></section>` : ''}
-      ${F.tab === 'stok' ? `      <section class="d-sec"><h3>Stok per plant <small>MB52</small></h3>${items.length ? plainTable(items, [['Plant', (i) => esc(plantLabel(i.plant))], ['Zona', (i) => esc(zonaOf(i.plant))], ['Val. type', (i) => esc(vt(i))],
-        ['Unrestricted', (i) => fmt(nrm(i)) + ' ' + esc(i.uom), 'num'], ['Val. type lain', (i) => (i.soh - nrm(i) ? fmt(i.soh - nrm(i)) : ''), 'num'], ['In transit', (i) => (i.transit ? fmt(i.transit) : ''), 'num'], ['Lokasi', (i) => esc(i.locs.map((l) => l.sloc).filter((x, k, a) => a.indexOf(x) === k).join(', '))], ['Nilai', (i) => money(i.value, stockCur(i.plant)), 'num']]) : '<p class="muted">Tidak ada stok di plant terpilih.</p>'}</section>` : ''}
-      ${F.tab === 'mrp' ? `      ${mrpRows.length ? `<section class="d-sec"><h3>MRP <small>metode ${esc(S.set.method === 'tko' ? 'TKO/Pedoman' : 'Excel lama')} · klik "Cara hitung" untuk melihat rumusnya</small></h3>${plainTable(mrpRows, [['Plant', (r) => esc(r.plant) + (S.mrpPlants.has(r.plant) ? '' : ' <span class="muted small">tidak dipantau</span>')], ['Aging', (r) => agingPill(r.aging) + (r.agingMRP && r.agingMRP !== r.aging ? ` <span class="muted small" title="Aging bawaan MRP (hanya pemakaian Own Use)">MRP: ${esc(r.agingMRP)}</span>` : '')],
-        ['MRO/Project', (r) => esc(r.kelasMat || '')], ['Kelas', (r) => esc(r.cls || '')], ['AMU', (r) => fmt(r.amu, 2), 'num'], ['LT', (r) => (r.tEff != null ? fmt(r.tEff, 1) : fmt(r.lt, 1)), 'num'], ['SS', (r) => fmt(r.ss), 'num'], ['Min', (r) => fmt(r.min2), 'num'], ['Max', (r) => fmt(r.max2), 'num'],
-        ['Stok ZNORMAL', (r) => fmt(r.stock), 'num'], ['Stok lain', stokLain, 'num'],
-        ['OS PO', (r) => fmt(r.ospo), 'num'], ['Reservasi', (r) => fmt(r.mb25), 'num'], ['To Order', (r) => (r.toOrder ? `<b>${fmt(r.toOrder)}</b>` : '0'), 'num'],
-        ['', (r) => `<a href="#" class="calcLink" data-p="${esc(r.plant)}">${calcPlant === r.plant ? 'Tutup' : 'Cara hitung'}</a>`]])}
-        ${calcR ? `<div class="calc" id="mrpCalc">${explainMRP(calcR)}</div>` : ''}</section>` : ''}` : ''}
-      ${F.tab === 'pakai' ? `      ${Object.keys(useWK).map((w) => `<section class="d-sec"><h3>Pemakaian bulanan WK ${w} <small>${F.months ? F.months + ' bulan terakhir' : 'semua histori'}, ${w === 'PEP' ? 'dari file MRP' : 'dari MB51 (Own Use + Return)'}</small></h3><div class="dUse" data-w="${w}"></div></section>`).join('')}` : ''}
-      ${F.tab === 'kontrak' ? `      ${kItems.length ? `<section class="d-sec"><h3>Kontrak <small>ME3N</small></h3>${plainTable(kItems, [['OA', (i) => `<a href="#" class="oalink" data-oa="${esc(i.doc)}">${esc(i.doc)}</a>${o.contract && o.contract.doc === i.doc ? ' <span class="pill info">dipakai</span>' : ''}`], ['Vendor', (i) => esc(i.k.vendor)],
-        ['Harga', (i) => money(i.price, i.k.currency), 'num'], ['Terpakai qty', (i) => fmt(i.releasedQty), 'num'], ['Sisa qty', (i) => fmt(i.openQty), 'num'], ['Berakhir', (i) => dstr(i.k.end)], ['Sisa hari', (i) => fmt(i.k.sisaHari, 0), 'num'], ['Sisa nilai', (i) => money(i.k.sisa, i.k.currency), 'num']])}</section>` : ''}` : ''}
-      ${F.tab === 'po' ? `      <section class="d-sec"><h3>PR, PO/RO, dan OA <small>ME2N · ${fmt(po.length, 0)} baris</small></h3>${po.length ? plainTable(po, [['PR', (l) => esc(l.pr || '-')], ['PO/RO', (l) => `${esc(l.doc)} ${pill(l.type, l.type === 'RO' ? 'info' : 'mute')}`], ['OA', (l) => (l.oa ? `<a href="#" class="oalink" data-oa="${esc(l.oa)}">${esc(l.oa)}</a>` : '-')], ['Plant', (l) => esc(l.plant)],
-        ['Tgl dokumen', (l) => dstr(l.docDate)], ['Qty', (l) => fmt(l.qty), 'num'], ['Sisa kirim', (l) => fmt(l.openQty), 'num'], ['Jadwal', (l) => dstr(l.delivery)], ['Vendor', (l) => esc(l.vendor)],
-        ['Status', (l) => (l.openQty <= 0 ? pill('Selesai', 'ok') : l.lateDays ? pill('Terlambat ' + l.lateDays + ' hari', 'low') : pill('Dalam pengiriman', 'info'))]]) : '<p class="muted">Tidak ada PO/RO di plant dan periode ini.</p>'}</section>` : ''}
-      ${F.tab === 'resv' ? `<section class="d-sec"><h3>Reservasi terbuka <small>MB25 · dipakai di hitungan MRP dan timeline</small></h3>${resv.length ? plainTable(resv, [['Reservasi', (l) => esc(l.resv + (l.item ? '/' + l.item : ''))], ['Plant', (l) => esc(l.plant)], ['Butuh', (l) => dstr(l.reqDate) + (l.reqDate && l.reqDate < new Date() ? ' ' + pill('lewat', 'low') : '')], ['Diminta', (l) => fmt(l.reqQty), 'num'], ['Diambil (MB51)', (l) => fmt(takenBy.get(l.resv) || l.removed || 0), 'num'], ['Sisa', (l) => `<b>${fmt(l.diff)}</b>`, 'num'], ['Penerima', (l) => esc(l.recipient || l.costCenter || l.wbs || l.network)]]) : '<p class="muted">Tidak ada reservasi terbuka di plant ini.</p>'}</section>
-      ${resvArc.length ? `<details class="d-sec arc"><summary>Arsip: ${fmt(resvArc.length, 0)} reservasi selesai/ditutup <small class="muted">(hanya catatan, tidak dihitung)</small></summary>${plainTable(resvArc.slice(0, 100), [['Reservasi', (l) => esc(l.resv + (l.item ? '/' + l.item : ''))], ['Plant', (l) => esc(l.plant)], ['Butuh', (l) => dstr(l.reqDate)], ['Diminta', (l) => fmt(l.reqQty), 'num'], ['Diambil', (l) => fmt(takenBy.get(l.resv) || l.removed || 0), 'num'], ['Status', (l) => pill(l.deleted ? 'Dihapus' : l.finalIssue ? 'Final issue' : 'Terpenuhi', 'mute')], ['Penerima', (l) => esc(l.recipient || l.costCenter || l.wbs || l.network)]])}</details>` : ''}` : ''}
-      ${F.tab === 'gerak' ? `${!S.mb51 ? '<p class="muted">MB51 belum dimuat.</p>' : `<p class="muted small">Detail transaksi MB51 ${rng ? esc(dstr(rng[0])) + ' s/d ' + esc(dstr(rng[1])) : ''} · ${F.plant ? esc(plantLabel(F.plant)) : 'semua plant'}</p>
-      <div class="mv-grid"><section class="d-sec mv-card"><h3>Pemakaian (GI) per bulan <small>24 bulan · total ${fmt(gi24.reduce((a, b) => a + b, 0))} ${esc(uom)}</small></h3><div id="dGI"></div></section>
-        <section class="d-sec mv-card"><h3>Rekap per tahun <small>semua data</small></h3>${yrs.length ? `<div class="mv-yr">${plainTable(yrs, [['Tahun', (g) => String(g.y)], ['Masuk', (g) => fmt(g.in), 'num'], ['Keluar', (g) => fmt(g.out), 'num'], ['Pemakaian GI', (g) => `<b>${fmt(g.gi)}</b>`, 'num'], ['Trx', (g) => fmt(g.n, 0), 'num']])}</div>` : '<p class="muted">Tidak ada transaksi.</p>'}</section></div>
-      <section class="d-sec"><h3>Transaksi <small>${fmt(mv.length, 0)} baris di periode ini${mv.length > 300 ? ', 300 terbaru tampil' : ''}</small></h3>${mv.length ? `<div class="mv-tx">${plainTable(mv.slice(0, 300), [['Posting date', (x) => dstr(x.date)], ['Plant', (x) => `<b class="mono">${esc(x.plant)}</b><small class="muted d-block">${esc(plantLabel(x.plant))}</small>`], ['SLoc', (x) => esc(x.sloc)],
-        ['Mvt', (x) => `<b class="mono">${esc(x.mt)}</b><small class="muted d-block">${esc(x.mtText)}</small>`], ['Qty', (x) => `<b class="${x.qty < 0 ? 'neg' : 'pos-q'}">${x.qty > 0 ? '+' : ''}${fmt(x.qty)}</b>`, 'num'], ['Nilai', (x) => money(x.amount, x.cur || stockCur(x.plant)), 'num'],
-        ['Material doc', (x) => `<span class="mono">${esc(x.matDoc)}</span>`], ['Reservasi', (x) => `<span class="mono">${esc(x.resv || '')}</span>`], ['Header text', (x) => esc(x.header)], ['User', (x) => esc(x.user)], ['PO', (x) => `<span class="mono">${esc(x.po || '')}</span>`]])}</div>` : '<p class="muted">Tidak ada gerakan di plant dan periode ini.</p>'}</section>`}` : ''}
-      <div><a class="btn" href="#/analysis" id="dTrace">Lihat jejak lengkap</a></div>`;
-      const gEl = body.querySelector('#dGI'); if (gEl) UI.columns(gEl, lbl24, gi24, (v) => fmt(v, 1) + ' ' + uom);
-      body.querySelectorAll('.dUse').forEach((el) => { const w = el.dataset.w, L = mi.labels[w], n = F.months || L.length;
-        UI.columns(el, L.slice(-n).map((l) => { const [y, mm] = l.split('-'); return ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'][+mm - 1] + ' 20' + y; }), useWK[w].slice(-n), (v) => fmt(v, 1) + ' ' + uom); });
-      UI.seg(body.querySelector('#mfP'), [['', 'Semua plant']].concat(allPlants.map((p) => [p, plantLabel(p)])), F.plant, (v) => { F.plant = v; render(); });
-      UI.seg(body.querySelector('#mfT'), TABS_M, F.tab, (v) => { F.tab = v; render(); });
-      body.querySelector('#dExp').onclick = () => { F.full = !F.full; render(); };
-      body.querySelector('#mfM').onchange = (e) => { F.months = +e.target.value; render(); };
-      body.querySelectorAll('.calcLink').forEach((a) => (a.onclick = (e) => { e.preventDefault(); calcPlant = calcPlant === a.dataset.p ? '' : a.dataset.p; render(); const c = body.querySelector('#mrpCalc'); if (c) c.scrollIntoView({ block: 'nearest' }); }));
-      body.querySelector('#dTrace').onclick = () => { sessionStorage.setItem('lacakQ', m); UI.closeDrawer(); };
-      body.querySelectorAll('.oalink').forEach((a) => (a.onclick = (e) => { e.preventDefault(); openContract(a.dataset.oa); }));
-    };
-    render();
-    if (opt.calc) { const c = body.querySelector('#mrpCalc'); if (c) setTimeout(() => c.scrollIntoView({ block: 'start' }), 60); }
-  }
+  // Satu pop-up material untuk seluruh web = MP.detail (js/pages/mplan.js). opt.calc = plant yang langsung dibuka hitungan MRP-nya.
+  const openMaterial = (m, opt = {}) => MP.detail(m, opt.calc || null, opt);
 
   // ---------- Penjelasan hitungan MRP per material+plant (langkah demi langkah, dengan angka) ----------
   const otherStock = (r) => (r.transit || r.stockOther ? `<p class="small"><b>Stok lain (tidak dihitung di atas):</b> in transit ${fmt(r.transit || 0)}${r.stockOther ? `, valuation type lain ${fmt(r.stockOther)} (${esc(r.otherVal)})` : ''}. Pertimbangkan sebelum memesan: barang transit akan masuk, ex-terminasi/surplus mungkin bisa dipakai.</p>` : '');
@@ -284,83 +167,6 @@
     return head + `<ol class="calc-steps">${L.join('')}</ol>${otherStock(r)}${r.note ? `<p class="muted small">${esc(r.note)}</p>` : ''}`;
   }
 
-  // ---------- Kontrak: kartu ----------
-  PAGES.kartuKontrak = function (host) { // tampilan Kartu di halaman Kontrak (cexp.js); host = elemen tujuan
-    if (!S.me3n) { host.innerHTML = needFile('file kontrak ME3N', 'Tambahkan download ME3N (WK PEP dan PHE), dan ME2N untuk PO/RO, di Data SAP atau di folder data.'); return; }
-    // bawaan: utamakan kontrak Zona 1 (PG X07) dan Regional 1 Zona 1&4 (PG X02); PG lain bisa ditambah lewat filter
-    const F = S.kf || (S.kf = { q: '', st: new Set(), pg: new Set(store.get('kPg') || ['X07', 'X02']), wk: new Set(), kel: new Set(), sort: 'hari', n: 60 });
-    const usedBy = new Map(); if (S.mrpRes) for (const r of S.mrpRes.values()) if (r.contract) usedBy.set(r.contract.doc, (usedBy.get(r.contract.doc) || 0) + 1);
-    const stOf = (d) => { const a = []; if (d.sisaHari != null && d.sisaHari < 0) a.push('Berakhir'); else if (d.sisaHari != null && d.sisaHari <= 90) a.push('Habis ≤ 90 hari'); else if (d.sisaHari != null && d.sisaHari <= 180) a.push('Habis ≤ 180 hari'); if (d.pctSisa < 0.2) a.push('Sisa nilai < 20%'); return a.length ? a : ['Aman']; };
-    const all = [...S.me3n.docs.values()];
-    host.innerHTML = `<div class="filters"><label class="dt-search">${UI.I.search}<input type="search" id="kq" placeholder="Cari No. OA, vendor, atau material…" value="${esc(F.q)}"></label>
-        <span id="kKelF"></span><span id="kSt"></span><span id="kPg"></span><span id="kWk"></span>
-        <label class="select"><span class="select-k">Urut</span><select id="kSort" class="bare">${[['hari', 'Sisa hari'], ['nilai', 'Sisa nilai (%)'], ['pakai', 'Dipakai MRP'], ['oa', 'No. OA']].map(([v, l]) => `<option value="${v}" ${F.sort === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
-      <p class="source" id="kCount"></p><div class="oa-grid" id="kGrid"></div><div class="more" id="kMore"></div>`;
-    // ringkasan per kelompok barang (kontrak dihitung pada kelompok utamanya)
-    const kelRows = (() => {
-      const m = new Map();
-      all.forEach((d) => { const k = d.kel || 'Lainnya'; const g = m.get(k) || m.set(k, { kel: k, n: 0, aktif: 0, soon: 0, items: 0, sisa: {}, end: null, used: 0 }).get(k);
-        g.n++; g.items += d.items || 0; g.used += usedBy.get(d.doc) || 0; const act = d.sisaHari == null || d.sisaHari >= 0; if (act) { g.aktif++; g.sisa[d.currency || 'IDR'] = (g.sisa[d.currency || 'IDR'] || 0) + (d.sisa || 0); }
-        if (d.sisaHari != null && d.sisaHari >= 0 && d.sisaHari <= 90) g.soon++; if (act && d.end && (!g.end || d.end < g.end)) g.end = d.end; });
-      return [...m.values()].sort((a, b) => (a.kel === 'Lainnya') - (b.kel === 'Lainnya') || b.n - a.n);
-    })();
-    const kelMulti = () => UI.multi($('kKelF'), { label: 'Kelompok', options: kelRows.map((g) => ({ value: g.kel, label: g.kel })), selected: F.kel, onChange: () => { F.n = 60; draw(); } });
-    const draw = () => {
-      const g = expand(F.q);
-      let list = all.filter((d) => (!F.kel.size || F.kel.has(d.kel)) && (!F.pg.size || F.pg.has(d.pg)) && (!F.wk.size || F.wk.has(d.wk)) && (!F.st.size || stOf(d).some((x) => F.st.has(x))) &&
-        (!F.q.trim() || hit(d.doc + ' ' + d.vendor + ' ' + d.pic, g) || S.me3n.items.some((i) => i.doc === d.doc && hit(i.material + ' ' + i.desc, g))));
-      const srt = { hari: (a, b) => (a.sisaHari ?? 1e9) - (b.sisaHari ?? 1e9), nilai: (a, b) => a.pctSisa - b.pctSisa, pakai: (a, b) => (usedBy.get(b.doc) || 0) - (usedBy.get(a.doc) || 0), oa: (a, b) => a.doc.localeCompare(b.doc) }[F.sort];
-      list.sort(srt);
-      $('kCount').textContent = `${fmt(list.length, 0)} dari ${fmt(all.length, 0)} kontrak`;
-      $('kGrid').innerHTML = list.slice(0, F.n).map((d) => {
-        const st = stOf(d), used = d.target ? Math.min(100, Math.max(0, (1 - d.sisa / d.target) * 100)) : 0;
-        const badge = d.sisaHari == null ? '' : d.sisaHari < 0 ? pill('Berakhir', 'low') : pill(`Aktif, ${fmt(d.sisaHari, 0)} hari`, d.sisaHari <= 90 ? 'low' : d.sisaHari <= 180 ? 'warn' : 'ok');
-        return `<button type="button" class="oa-card" data-oa="${esc(d.doc)}"><div class="oa-top"><span class="oa-no">${esc(d.doc)}</span><span class="muted small">WK ${esc(d.wk || '')}</span>${badge}</div>
-          <div class="oa-vendor">${esc(d.vendor)}</div>
-          <div class="oa-kel">${esc(d.kel || 'Lainnya')}${(d.kels || []).length > 1 ? `<span class="muted"> dan ${d.kels.length - 1} kelompok lain</span>` : ''}</div>
-          <div class="oa-meta"><span><b>${fmt(d.items, 0)}</b> item</span><span><b>${fmt(usedBy.get(d.doc) || 0, 0)}</b> dipakai MRP</span><span>PG <b>${esc(d.pg)}</b></span><span>s.d. <b>${dstr(d.end)}</b></span></div>
-          <div class="oa-meta"><span>Sisa nilai <b>${money(d.sisa, d.currency)}</b> dari ${money(d.target, d.currency)}</span></div>
-          <div class="progress ${d.pctSisa < 0.05 ? 'bad' : d.pctSisa < 0.2 ? 'warn' : ''}" title="Terpakai ${fmt(used, 0)}%"><i style="width:${used.toFixed(1)}%"></i></div>
-          <div class="oa-foot">${st[0] !== 'Aman' && st.some((x) => x.startsWith('Sisa')) ? `<span class="small" style="color:var(--warn)">Sisa nilai di bawah 20%</span>` : '<span></span>'}${d.sisaHari == null || d.sisaHari >= 0 ? `<span class="oa-sim" data-sim="${esc(d.doc)}" role="button" tabindex="0" title="Rencanakan Call RO dari kontrak ini">Simulasi RO</span>` : ''}</div></button>`;
-      }).join('') || '<div class="panel empty"><h3>Tidak ada kontrak yang cocok</h3><p>Ubah kata kunci atau filter.</p></div>';
-      $('kMore').innerHTML = list.length > F.n ? `<button class="btn" id="kMoreB">Tampilkan ${Math.min(60, list.length - F.n)} lagi</button>` : '';
-      if ($('kMoreB')) $('kMoreB').onclick = () => { F.n += 60; draw(); };
-      document.querySelectorAll('.oa-card').forEach((c) => (c.onclick = (e) => (e.target.closest('.oa-sim') || !window.KX ? openContract(c.dataset.oa, e.target.closest('.oa-sim') ? 'sim' : undefined) : KX.contract(c.dataset.oa))));
-    };
-    let t; $('kq').oninput = (e) => { clearTimeout(t); t = setTimeout(() => { F.q = e.target.value; F.n = 60; draw(); }, 200); };
-    $('kSort').onchange = (e) => { F.sort = e.target.value; draw(); };
-    const later = () => { F.n = 60; draw(); };
-    kelMulti();
-    UI.multi($('kSt'), { label: 'Status', options: ['Aman', 'Habis ≤ 90 hari', 'Habis ≤ 180 hari', 'Sisa nilai < 20%', 'Berakhir'].map((v) => ({ value: v, label: v })), selected: F.st, onChange: later });
-    UI.multi($('kPg'), { label: 'Purch. group', options: [...new Set(all.map((d) => d.pg))].sort().map((v) => ({ value: v, label: `${v} ${Contract.PIC[v] || ''}`.trim() })), selected: F.pg, onChange: () => { store.set('kPg', [...F.pg]); later(); } });
-    UI.multi($('kWk'), { label: 'WK', options: [...new Set(all.map((d) => d.wk))].sort().map((v) => ({ value: v, label: 'WK ' + v })), selected: F.wk, onChange: later });
-    draw();
-  };
-
-  // ---------- Pop-up kontrak: pemakaian kontrak, qty terpakai & sisa per item, history RO sampai pemakaian ----------
-  const USE_CATS = new Set(['Own Use', 'BAU Iss', 'MTA Iss', 'Trf Iss']);
-  function roTrail(lines) {
-    // Per baris RO: barang diterima (MB51 101/103 lalu rilis 105 ke stok, dengan No. PO ini), lalu pemakaian material itu di plant penerima
-    // sesudah tanggal terima, diambil berurutan (FIFO) sampai qty terima habis. Ini perkiraan, bukan link langsung di SAP.
-    const moves = S.mb51 ? S.mb51.moves : [];
-    const usedBy = new Map(); // moves yang sudah "dipakai" oleh RO lain (supaya tidak dobel)
-    const out = [];
-    lines.slice().sort((a, b) => (a.docDate || 0) - (b.docDate || 0)).forEach((l) => {
-      const g = S.mb51 && S.mb51.gr ? S.mb51.gr.get(l.doc + '|' + String(+l.item || l.item)) : null;
-      const grQty = g ? g.relQty || 0 : 0, grDate = g ? g.lastRel || g.firstIn : null; // qty yang sudah dirilis ke stok
-      const uses = [];
-      if (grQty > 0 && grDate) {
-        let left = grQty;
-        moves.filter((x) => x.material === l.material && x.plant === l.plant && x.date && x.date >= grDate && USE_CATS.has(x.cat) && x.qty < 0)
-          .sort((a, b) => a.date - b.date).forEach((x) => {
-            if (left <= 0) return; const taken = usedBy.get(x) || 0, free = Math.abs(x.qty) - taken; if (free <= 0) return;
-            const q = Math.min(free, left); left -= q; usedBy.set(x, taken + q); uses.push({ x, q });
-          });
-      }
-      out.push({ l, grQty, grDate, uses, usedQty: uses.reduce((a, u) => a + u.q, 0) });
-    });
-    return out.sort((a, b) => (b.l.docDate || 0) - (a.l.docDate || 0));
-  }
   function openContract(doc, tab) {
     const d = S.me3n && S.me3n.docs.get(doc);
     const lines = S.me2n ? S.me2n.lines.filter((l) => l.oa === doc && !l.deleted) : [];
@@ -485,10 +291,9 @@
     const a = e.target.closest('.mlink, .oalink, .calclink'); if (!a || a.closest('.drawer')) return; e.preventDefault();
     if (a.classList.contains('oalink')) { if (!a.dataset.tab && window.KX && S.me3n && S.me3n.docs.has(a.dataset.oa)) KX.contract(a.dataset.oa); else openContract(a.dataset.oa, a.dataset.tab); }
     else if (a.classList.contains('calclink')) openMaterial(a.dataset.mat, { calc: a.dataset.p });
-    else if (window.MP) MP.detail(a.dataset.mat, a.dataset.p);
-    else openMaterial(a.dataset.mat);
+    else MP.detail(a.dataset.mat, a.dataset.p);
   });
-  window.openMaterial = openMaterial; window.openContract = openContract; window.explainMRP = explainMRP;
+  window.openMaterial = openMaterial; window.matIndex = matIndex; window.openContract = openContract; window.explainMRP = explainMRP;
 })();
 
 // ============ Pergerakan Material (MB51): klasifikasi Mvt, alur dari → ke, rekap bulanan ============
@@ -532,42 +337,22 @@
     cache.set(S.mb51, { v: S.me2n ? S.me2n.lines.length : 0, d }); return d;
   }
 
-  // Keluar-Masuk Barang = pembaca MB51: satu tabel semua baris, setiap kolom bisa difilter, diurutkan, dan dicari
+  // Keluar-Masuk Barang: kartu ringkas + cari + tabel sederhana (kolom detail SAP disembunyikan, bisa diunduh lewat Excel).
   PAGES.gerak = function () {
     if (!S.mb51) { $('view').innerHTML = needFile('file MB51', 'Pergerakan material dibaca dari MB51. Taruh semua file MB51 (misalnya per bulan) di folder data: web menggabungkannya dan membuang baris yang dobel.'); return; }
-    const D = prep();
-    const F = S.gf || (S.gf = { from: '', to: '', wk: new Set(), plant: new Set(), ni: false });
-    if (!D.months.includes(F.to)) F.to = D.months[D.months.length - 1] || '';
-    if (!D.months.includes(F.from)) F.from = D.months[Math.max(0, D.months.indexOf(F.to) - 11)] || ''; // bawaan: 12 bulan terakhir
-    const plants = [...new Set(D.moves.map((x) => x.m.plant))].sort();
-    const unk = new Map(); D.moves.forEach((x) => { if (!x.cat) unk.set(x.m.mkey, (unk.get(x.m.mkey) || 0) + 1); });
-    const opt = (v, sel) => `<option value="${v}"${v === sel ? ' selected' : ''}>${ymLabel(v)}</option>`;
-    $('view').innerHTML = `
-      ${unk.size ? `<div class="banner warn"><span>Ada ${fmt([...unk.values()].reduce((a, b) => a + b, 0), 0)} gerakan dengan kunci Mvt yang belum ada di tabel referensi: ${esc([...unk].sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k, n]) => `${k} (${n})`).join(', '))}. Kirim kategorinya supaya bisa ditambahkan.</span></div>` : ''}
-      <div class="filters"><label class="select"><span>Dari</span><select class="bare" id="gFrom">${D.months.map((m) => opt(m, F.from)).join('')}</select></label>
-        <label class="select"><span>Sampai</span><select class="bare" id="gTo">${D.months.map((m) => opt(m, F.to)).join('')}</select></label>
-        <span id="gWK"></span><span id="gPl"></span>
-        <label class="chk"><input type="checkbox" id="gNI"${F.ni ? ' checked' : ''}> Tampilkan juga gerakan yang tidak dihitung</label></div>
-      <div id="gBody"></div>`;
-    const redraw = () => reader(D);
-    $('gFrom').onchange = (e) => { F.from = e.target.value; if (F.to < F.from) F.to = F.from; redraw(); };
-    $('gTo').onchange = (e) => { F.to = e.target.value; if (F.from > F.to) F.from = F.to; redraw(); };
-    $('gNI').onchange = (e) => { F.ni = e.target.checked; redraw(); };
-    const wks = [...new Set(D.moves.map((x) => x.m.wk))].sort();
-    if (wks.length > 1) UI.multi($('gWK'), { label: 'WK', options: wks.map((w) => ({ value: w, label: 'WK ' + w })), selected: F.wk, onChange: redraw });
-    UI.multi($('gPl'), { label: 'Plant', options: plants.map((p) => ({ value: p, label: plantLabel(p) })), selected: F.plant, onChange: redraw });
-    redraw();
+    const D = prep(), per = S.gPer == null ? 12 : S.gPer, all = !!S.gAll, last = D.months[D.months.length - 1];
+    const since = per && last ? new Date(+last.slice(0, 4), +last.slice(5) - per, 1) : null;
+    const rows = D.moves.filter((x) => x.m.date && (!since || x.m.date >= since) && (all || x.cat !== 'Not Included')).sort((a, b) => b.m.date - a.m.date);
+    const inn = rows.filter((x) => x.m.qty > 0 && x.cat !== 'Not Included'), out = rows.filter((x) => x.m.qty < 0 && x.cat !== 'Not Included'), use = rows.filter((x) => x.cat === 'Own Use');
+    const v = (l) => money(l.reduce((a, x) => a + x.idr, 0), 'IDR');
+    G.listPage({ key: 'gQ', ph: 'Cari material, dokumen, atau keterangan. Contoh: laker, 4900012345', rows, name: 'Keluar_Masuk_Barang', text: (x) => [x.m.material, x.m.desc, x.m.matDoc, x.m.po, x.m.resv, x.m.header].join(' '),
+      top: '<div class="seg-bar"><span id="gPer"></span><span id="gAll"></span></div>',
+      tiles: [['Gerakan', fmt(rows.length, 0), per ? per + ' bulan terakhir' : 'semua data'], ['Barang masuk', v(inn), fmt(inn.length, 0) + ' gerakan'], ['Barang keluar', v(out), fmt(out.length, 0) + ' gerakan'], ['Pemakaian (Own Use)', v(use), fmt(use.length, 0) + ' gerakan']],
+      cols: [['Tanggal', (x) => x.m.date], ['Plant', (x) => x.m.plant], ['Material', (x) => x.m.material], ['Deskripsi', (x) => x.m.desc], ['Kategori', (x) => catName(x.cat)], ['Qty', (x) => x.m.qty], ['Satuan', (x) => x.m.uom], ['Nilai', (x) => x.m.amount], ['Mata uang', (x) => x.cur],
+        ['Dari', (x) => x.from], ['Ke', (x) => x.to], ['Mvt', (x) => x.m.mt], ['Dok. material', (x) => x.m.matDoc], ['PO/RO', (x) => x.m.po], ['Reservasi', (x) => x.m.resv], ['Keterangan', (x) => x.m.header], ['User', (x) => x.m.user]],
+      opts: { plantCol: 1, types: { Material: 'text', Mvt: 'text', 'Dok. material': 'text', 'PO/RO': 'text', Reservasi: 'text' }, hide: ['Satuan', 'Mata uang', 'Dari', 'Ke', 'Mvt', 'Dok. material', 'PO/RO', 'Reservasi', 'Keterangan', 'User'], rowClick: (x) => MP.detail(x.m.material, x.m.plant) } });
+    UI.seg($('gPer'), [[3, '3 bulan'], [12, '12 bulan'], [0, 'Semua']], per, (k) => { S.gPer = +k; PAGES.gerak(); });
+    UI.seg($('gAll'), [['', 'Dihitung'], ['1', 'Termasuk tidak dihitung']], all ? '1' : '', (k) => { S.gAll = !!k; PAGES.gerak(); });
   };
-
-  function reader(D) {
-    const F = S.gf;
-    const rows = D.moves.filter((x) => x.month >= F.from && x.month <= F.to && (!F.wk.size || F.wk.has(x.m.wk)) && (!F.plant.size || F.plant.has(x.m.plant))
-      && (F.ni || x.cat !== 'Not Included')).sort((a, b) => (b.m.date || 0) - (a.m.date || 0));
-    const d = G.fromObjs(rows, [['Tanggal', (x) => x.m.date], ['Plant', (x) => x.m.plant], ['SLoc', (x) => x.m.sloc], ['Mvt', (x) => x.m.mt], ['Teks Mvt', (x) => x.m.mtText], ['Kategori', (x) => catName(x.cat)], ['Material', (x) => x.m.material], ['Deskripsi', (x) => x.m.desc], ['Qty', (x) => x.m.qty], ['UoM', (x) => x.m.uom],
-      ['Nilai', (x) => x.m.amount], ['Mata uang', (x) => x.cur], ['PO/RO', (x) => x.m.po], ['Item', (x) => x.m.poItem], ['Dari', (x) => x.from], ['Ke', (x) => x.to], ['Header text', (x) => x.m.header], ['Mat. Doc', (x) => x.m.matDoc], ['Val. type', (x) => x.m.batch], ['Reservasi', (x) => x.m.resv], ['User', (x) => x.m.user], ['Reference', (x) => x.m.ref], ['WK', (x) => x.m.wk]]);
-    G.table($('gBody'), { head: d.head, rows: d.rows, name: 'MB51_' + F.from + '_sd_' + F.to, plantCol: 1, types: { Mvt: 'text', Material: 'text', 'PO/RO': 'text', Item: 'text', Reservasi: 'text', 'Mat. Doc': 'text' },
-      hide: ['Teks Mvt', 'Item', 'Mat. Doc', 'Val. type', 'Reservasi', 'User', 'Reference', 'WK'], rowClick: (x) => MP.detail(x.m.material, x.m.plant),
-      source: 'Sumber: MB51 (semua file digabung, baris dobel dibuang). Nilai dalam mata uang client (IDR atau USD), tidak dijumlahkan lintas mata uang. Kategori = aturan MvT di referensi. Klik baris untuk detail material.' });
-  }
 
 })();
