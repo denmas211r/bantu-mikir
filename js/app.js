@@ -18,38 +18,28 @@ const ICON = {
 };
 const svg = (k) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICON[k]}</svg>`;
 
-// Menu: [grup, [[route, label, icon, sub-judul, catatan (halaman belum jadi)]]]
-// 5 grup (Kantor 2.0). Fase 6 (K-213): halaman lama digabung; route lama yang dihapus diarahkan lewat REDIR di route().
+// Menu: [grup, [[route, label, icon]]]. Penjelasan fitur tidak ditaruh di menu; arti warna/tanda ada di tombol Info (kanan atas).
 const MENU = [
-  ['', [['beranda', 'Beranda', 'home', 'Gambaran cepat dari stok sampai laporan']]],
+  ['', [['beranda', 'Beranda', 'home']]],
   ['Material Planning', [
-    ['lacak', 'Lacak Material', 'route', 'Jejak satu material atau dokumen (PR, PO/RO, OA, reservasi) dari permintaan sampai dipakai'],
-    ['overview', 'Overview Material', 'gauge', 'Overview = matriks stok plant x material dengan warna MRP; Detail = hasil MRP per plant. Klik baris untuk detail material'],
-    ['rencana', 'Perencanaan', 'chart', 'Timeline RKM per plant dan bulan, MRP & stok level, dan data RKM'],
-    ['rkmx', 'RKM', 'list', 'RKM per material: pemenuhan stok + PO, perbandingan dengan MRP, dan data tanpa KIMAP'],
-    ['order', 'Perlu Dipesan', 'cart', 'Barang yang harus dipesan: lewat kontrak (RO) atau permintaan pembelian baru (PR)'],
+    ['analysis', 'Material Analysis', 'route'],
+    ['control', 'Material Control', 'gauge'],
   ]],
   ['Contract & Expediting', [
-    ['kontrak', 'Kontrak', 'doc', 'Kontrak (ME3N) dalam tampilan Kartu, List Kontrak, atau Item Kontrak; klik untuk List Item dan Histori Pemanfaatan'],
-    ['po', 'Pesanan', 'truck', 'PO, RO (ME2N: due date, telat kirim, sisa kirim), dan Reservasi (MB25 dengan GI di MB51)'],
-    ['gerak', 'Keluar-Masuk Barang', 'flow', 'Pergerakan MB51 per movement type, plant, material, dengan arah dari-ke'],
+    ['kontrak', 'Kontrak', 'doc'],
+    ['po', 'Pesanan', 'truck'],
+    ['gerak', 'Keluar-Masuk Barang', 'flow'],
   ]],
   ['Performance & Reporting', [
-    ['gudang', 'Analisis Warehouse', 'gauge', 'Nilai persediaan, ABC, dan material terbesar per warehouse'],
-    ['optim', 'Deadstock & BAU', 'recycle', 'Optimasi deadstock vs target, daftar DS, dan laporan BAU'],
+    ['gudang', 'Analisis Warehouse', 'gauge'],
+    ['optim', 'Deadstock & BAU', 'recycle'],
   ]],
-  ['Governance', [
-    ['tko', 'TKO', 'book', 'Pembaca dokumen TKO/TKI: daftar, penampil per halaman, cari teks'],
-    ['regulasi', 'Regulasi', 'book', 'Pembaca Pedoman dan Regulasi: daftar, penampil per halaman, cari teks'],
-  ]],
-  ['SAP Raw Data', [
-    ['raw', 'Data SAP', 'db', 'MB52, MB51, ME2N, ME3N apa adanya dari file tarikan'],
-    ['data', 'Sumber Data', 'db', 'Folder dan file SAP yang dibaca web ini'],
-  ]],
-  ['Bantuan', [['pengaturan', 'Pengaturan', 'gear', 'Plant, zona, kurs, dan parameter MRP']]],
+  ['Governance', [['aturan', 'Dokumen Aturan', 'book']]],
+  ['Data', [['data', 'Sumber Data', 'db']]],
+  ['Bantuan', [['pengaturan', 'Pengaturan', 'gear']]],
 ];
 // route lama (bookmark) -> route pengganti; opsi tab diset lewat fungsi
-const REDIR = { cari: 'lacak', carilama: 'overview', horizon: ['rencana', () => (S.renTab = 'tl')], kontraklama: 'kontrak', resv: ['po', () => (S.psTab = 'resv')], resvlama: ['po', () => (S.psTab = 'resv')], expediting: 'po', geraklama: 'gerak', gudanglama: 'gudang', optimlama: 'optim', dsbau: 'optim', regulasilama: 'regulasi' };
+const REDIR = { cari: 'analysis', lacak: 'analysis', carilama: 'control', overview: 'control', raw: ['data', () => (S.dataTab = 'raw')], tko: 'aturan', regulasi: 'aturan', regulasilama: 'aturan', kontraklama: 'kontrak', resv: ['po', () => (S.psTab = 'resv')], resvlama: ['po', () => (S.psTab = 'resv')], expediting: 'po', geraklama: 'gerak', gudanglama: 'gudang', optimlama: 'optim', dsbau: 'optim' };
 const ROUTES = Object.fromEntries(MENU.flatMap(([, items]) => items.map((i) => [i[0], i])));
 const DEFAULT_MRP_PLANTS = ['W101', 'W102', 'W802', 'W803'];
 const DEFAULT_ZONA = Object.assign({}, CFG.PLANT_ZONA,
@@ -61,12 +51,11 @@ const PLANT_NAME = Object.assign({}, CFG.PLANT_NAME,
   Object.fromEntries(Object.entries(Master.PHE_PLANT).map(([p, [n]]) => [p, n])));
 const METHOD = { tko: 'Metode TKO / Pedoman (disarankan)', excel: 'Metode Excel lama (untuk validasi)' };
 const TKO_FIELDS = [['amuMonths', 'AMU dari berapa bulan terakhir', 'bln'], ['nonContractLT', 'Tambahan lead time pengadaan bila tanpa kontrak', 'bln'], ['roqMonths', 'Reorder quantity (Max = ROP + n × AMU)', 'bln'], ['ssCapMonths', 'Batas safety stock maintenance/slow', 'bln × AMU'], ['chemSSMonths', 'Safety stock chemical/catalyst', 'bln × AMU'], ['chemP', 'Periode review chemical (P)', 'bln'], ['excessGeneral', 'Batas berlebih (umum)', 'bln'], ['excessChem', 'Batas berlebih (chemical)', 'bln']];
-const BASIS = { hist: 'Histori saja (sama dengan Excel)', max: 'Terbesar antara histori dan RKM', 'rkm-new': 'RKM hanya untuk item tanpa histori' };
 
 let S = null; // sesi
 const $ = (id) => document.getElementById(id);
 const esc = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const fmt = (n, d = 2) => (typeof n === 'number' && isFinite(n) ? n.toLocaleString('id-ID', { maximumFractionDigits: d }) : '-');
+const fmt = (n, d = 2) => (typeof n === 'number' && isFinite(n) ? n.toLocaleString(I18N.loc(), { maximumFractionDigits: d }) : '-');
 const rp = (n) => (n >= 1e9 ? fmt(n / 1e9, 2) + ' M' : n >= 1e6 ? fmt(n / 1e6, 1) + ' jt' : fmt(n, 0));
 const plantLabel = (p) => (PLANT_NAME[p] ? `${p} ${PLANT_NAME[p]}` : p || '-');
 const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
@@ -78,9 +67,9 @@ const SESS = 'mimSession';
 async function startSession(user, role, key, raw) {
   await Cache.init(raw);
   const data = await Vault.decryptJSON(key, await (await fetch('data/data.enc.json', { cache: 'no-store' })).json());
-  S = { role, data, user, mb52: null, mrpWB: null, rkmFiles: [], mrpRes: null, rkmMatched: [], mrp: null,
-    mrpPlants: new Set(store.get('mrpPlants') || DEFAULT_MRP_PLANTS), set: Object.assign({ basis: 'hist', lliLT: 6, method: 'tko', tko: {}, kurs: 18150, zona: {}, wkCur: { PEP: 'IDR', PHE: 'USD' }, pheLT: 3 }, store.get('settings') || {}), mrpWK: store.get('mrpWK') || 'PEP', rkmTab: 'mrp', src: {}, raw: {}, dash: { cur: 'IDR', wh: new Set(), zona: new Set(), wk: new Set(), open: new Set() }, gd: { cur: 'IDR', wh: new Set(), zona: new Set(), wk: new Set() }, cariView: store.get('cariView') || 'matriks', cariWK: store.get('cariWK') || 'all', kView: store.get('kView') || 'kartu' };
-  $('login').hidden = true; $('app').hidden = false;
+  S = { role, data, user, mb52: null, mrpWB: null, mrpRes: null, mrp: null,
+    mrpPlants: new Set(store.get('mrpPlants') || DEFAULT_MRP_PLANTS), set: Object.assign({ lang: 'id', method: 'tko', tko: {}, kurs: 18150, zona: {}, wkCur: { PEP: 'IDR', PHE: 'USD' }, pheLT: 3 }, store.get('settings') || {}), mrpWK: store.get('mrpWK') || 'PEP', src: {}, raw: {}, dash: { cur: 'IDR', wh: new Set(), zona: new Set(), wk: new Set(), open: new Set() }, gd: { cur: 'IDR', wh: new Set(), zona: new Set(), wk: new Set() }, cariView: store.get('cariView') || 'matriks', cariWK: store.get('cariWK') || 'all', kView: store.get('kView') || 'kartu' };
+  I18N.set(S.set.lang); $('login').hidden = true; $('app').hidden = false;
   $('whoName').textContent = S.user; $('whoRole').textContent = role; $('avatar').textContent = S.user[0].toUpperCase();
   buildNav(); route(); initFolder();
 }
@@ -133,12 +122,10 @@ function buildZona() {
 function sideData() {}
 function route() {
   const k = (location.hash.match(/#\/([\w-]+)/) || [, 'beranda'])[1];
-  const OLD = { rkmtl: 'tl', rkm: 'mrp', rkm27: 'data' }; // menu lama → sub-fitur Perencanaan
-  if (OLD[k]) { S.renTab = OLD[k]; location.hash = '#/rencana'; return; }
   if (REDIR[k]) { const [to, fn] = [].concat(REDIR[k]); if (fn) fn(); location.hash = '#/' + to; return; }
   const r = ROUTES[k] || ROUTES.beranda;
   document.querySelectorAll('#nav a, #sideHelp a').forEach((a) => a.classList.toggle('on', a.dataset.k === r[0]));
-  $('pageTitle').textContent = r[1]; $('pageSub').textContent = r[3] || ''; $('pageActions').innerHTML = ''; document.title = r[1] + ' · MIM Inventory Analyst';
+  $('pageTitle').textContent = r[1]; $('pageSub').textContent = r[3] || ''; $('pageActions').innerHTML = ''; document.title = I18N.t(r[1]) + ' · MIM Inventory Analyst';
   $('sidebar').classList.remove('open'); UI.closePop(); UI.closeDrawer();
   if (S.rawG) { S.rawG.destroy(); S.rawG = null; S.rawTok = (S.rawTok || 0) + 1; }
   G.cleanup(); if (window.MP) MP.zonaHook = null;
@@ -146,7 +133,7 @@ function route() {
   mountTables(); G.cleanup();
 }
 
-// ---------- Hitung ulang semua (MB52 + MRP + RKM + pengaturan) ----------
+// ---------- Hitung ulang semua (MB52 + MRP + pengaturan) ----------
 // MRP per WK: PEP dari file MRP; PHE dihitung dari MB52 + MB51 client 180 (sementara, sampai file MRP PHE dibuat)
 function recompute() {
   S.ver = (S.ver || 0) + 1;
@@ -154,15 +141,8 @@ function recompute() {
   const stockMap = S.mb52 ? new Map(S.mb52.items.map((i) => [i.material + '|' + i.plant, i.sohNormal != null ? i.sohNormal : i.soh])) : null;
   const pickOf = (wk) => (S.me3n ? (S.me3n.pickWK && S.me3n.pickWK[wk]) || new Map() : null);
   const common = { stockMap, tko: S.set.tko, ospoMap: S.me2n ? S.me2n.ospo : null, mb25Map: S.mb25 ? S.mb25.open : null, chemFn: Master.isChemMG };
-  const res = new Map(); S.rkmMatched = []; S.mrpWB_PHE = null;
-  // RKM: rekap semua file dulu (yang dobel tidak dihitung), baru dicocokkan ke MRP
-  S.rkmCons = RKM.consolidate(S.rkmFiles, new Set(store.get('rkmKeep') || []));
-  if (S.mrpWB) {
-    const o = Object.assign({}, common, { method: S.set.method, contractPick: pickOf('PEP') });
-    const base = MRP.run(S.mrpWB, o);
-    S.rkmMatched = RKM.match(S.rkmCons.kept, base, S.mrpWB);
-    MRP.run(S.mrpWB, Object.assign({}, o, { rkmMap: RKM.totals(S.rkmMatched), basis: S.set.basis })).forEach((v, k) => res.set(k, v));
-  }
+  const res = new Map(); S.mrpWB_PHE = null;
+  if (S.mrpWB) MRP.run(S.mrpWB, Object.assign({}, common, { method: S.set.method, contractPick: pickOf('PEP') })).forEach((v, k) => res.set(k, v));
   const pheStock = S.raw.mb52 && S.raw.mb52.PHE;
   if (pheStock) {
     const wb = (S.mrpWB_PHE = MRP.fromMoves({ items: pheStock.items, moves: (S.raw.mb51 && S.raw.mb51.PHE && S.raw.mb51.PHE.moves) || [], ltMaster: S.mrpWB ? S.mrpWB.lt : null,
@@ -242,33 +222,8 @@ const stokLainN = (r) => (r.transit || 0) + (r.stockOther || 0);
 const stokLain = (r) => { const n = stokLainN(r); if (!n) return ''; const t = [r.transit ? 'In transit ' + fmt(r.transit) : '', r.stockOther ? r.otherVal || 'Val. type lain ' + fmt(r.stockOther) : ''].filter(Boolean).join(' · ');
   return `<span class="tip-u" title="${esc(t)}">${fmt(n)}</span>`; };
 const STOK_LAIN_COL = ['Stok lain', stokLain, 'num', stokLainN];
-// Tombol di atas halaman MRP: metode (TKO / Excel / Bandingkan) dan kebutuhan (Histori / Histori + RKM sebagai pembanding)
-function mrpView() {
-  const V = { cmp: !!store.get('mrpCmp'), rkm: !!store.get('mrpRkm') };
-  $('pageActions').insertAdjacentHTML('beforeend', '<span id="mMeth" title="Metode hitung Min/Max. Bandingkan = TKO dan Excel berdampingan"></span><span id="mRkm" title="Histori tetap dasar hitungan; RKM ditampilkan sebagai pembanding"></span>');
-  UI.seg($('mMeth'), [['tko', 'TKO'], ['excel', 'Excel'], ['cmp', 'Bandingkan']], V.cmp ? 'cmp' : S.set.method, (v) => {
-    store.set('mrpCmp', v === 'cmp');
-    if (v !== 'cmp' && S.set.method !== v) { S.set.method = v; store.set('settings', S.set); recompute(); }
-    route(); });
-  UI.seg($('mRkm'), [['h', 'Histori'], ['r', 'Histori + RKM']], V.rkm ? 'r' : 'h', (v) => { store.set('mrpRkm', v === 'r'); route(); });
-  return V;
-}
-// Long Lead Item dari RKM: bulan pesan paling lambat = bulan butuh − lead time
+// Nama bulan (dipakai grafik 24 bulan di views.js)
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-const mLabel = (idx) => MON[((idx % 12) + 12) % 12] + ' ' + Math.floor(idx / 12);
-function lliRows() {
-  const today = new Date(), nowIdx = today.getFullYear() * 12 + today.getMonth();
-  const lt = (x) => (x.key && S.mrpRes.get(x.key) ? S.mrpRes.get(x.key).lt : x.master ? x.master.lt : null);
-  const needMonth = (x) => { const i = x.months.findIndex((v) => v > 0); return i < 0 ? { i: 0, known: false } : { i, known: true }; };
-  return (S.rkmMatched || []).map((x) => ({ x, lt: lt(x), r: x.key ? S.mrpRes.get(x.key) : null })).filter((o) => o.lt != null && o.lt >= S.set.lliLT).map((o) => {
-    const nm = needMonth(o.x); const need = 2027 * 12 + nm.i; const due = need - Math.ceil(o.lt);
-    const cover = o.r ? o.r.stock + o.r.ospo : 0; const ok = cover >= o.x.total;
-    const st = ok ? ['Tercukupi stok/PO', 'ok'] : due < nowIdx ? ['Terlambat pesan', 'low'] : due - nowIdx <= 1 ? ['Pesan bulan ini', 'warn'] : ['Terjadwal', 'info'];
-    return Object.assign(o, { nm, due, cover, st });
-  }).sort((a, b) => a.due - b.due);
-}
-// Sumber kebutuhan order: Program/On Demand dihitung dari RKM + reservasi, sisanya dari Min/Max histori
-const orderSrc = (r) => (/^(Program|On Demand)/.test(r.cls || '') ? 'RKM + reservasi' : 'Min/Max histori');
 const mrpRows = () => (S.mrpRes ? [...S.mrpRes.values()].filter((r) => r.wk === S.mrpWK && S.mrpPlants.has(r.plant)) : []);
 const mrpNote = () => { if (S.mrpWK !== 'PHE' || !S.mrpWB_PHE) return ''; const w = S.mrpWB_PHE;
   return `<div class="banner warn"><span>MRP WK PHE sementara dihitung dari MB52 + MB51 client 180 (histori ${esc(w.window[0])} s.d. ${esc(w.window[1])}, ${fmt(w.monthsSpan, 1)} bulan). ${w.histShort ? 'Histori masih pendek, jadi AMU dan aging belum bisa diandalkan. ' : ''}Lead time dari master MRP PEP kalau kode materialnya sama, selain itu ${fmt(S.set.pheLT || 3, 1)} bulan (atur di <a href="#/pengaturan">Pengaturan</a>).</span></div>`; };
@@ -341,12 +296,7 @@ async function loadSAP(k, file) {
 const loadMB52 = (f) => loadSAP('mb52', f), loadME3N = (f) => loadSAP('me3n', f), loadME2N = (f) => loadSAP('me2n', f), loadMB51 = (f) => loadSAP('mb51', f), loadMB25 = (f) => loadSAP('mb25', f);
 async function loadDS(file) { S.ds = await parseFile('ds', file, (b) => DS.parseDS(XLSX, b)); S.ver = (S.ver || 0) + 1; srcMark('ds', file); }
 async function loadMRP(file) { S.mrpWB = await parseFile('mrp', file, (b) => MRP.parseWorkbook(XLSX, b)); S.mrpName = file.name; srcMark('mrp', file, 'PEP'); }
-function srcMark(k, file, wk = '') { S.src[k] = S.src[k] || {}; const key = k === 'rkm' ? file.name : k === 'mb51' ? wk + '|' + file.name : wk || '-'; if (k === 'rkm') wk = file.name; S.src[k][key] = { name: file.name, at: new Date(), wk }; }
-async function loadRKM(file, name) {
-  const f = Object.assign({}, await parseFile('rkm', file, (b) => RKM.parseFile(XLSX, b, name || file.name)), { mtime: file.lastModified || 0 });
-  const saved = (store.get('rkmPlant') || {})[f.fileName]; if (saved) f.plant = saved;
-  S.rkmFiles = S.rkmFiles.filter((x) => x.fileName !== f.fileName).concat(f); srcMark('rkm', file);
-}
+function srcMark(k, file, wk = '') { S.src[k] = S.src[k] || {}; const key = k === 'mb51' ? wk + '|' + file.name : wk || '-'; S.src[k][key] = { name: file.name, at: new Date(), wk }; }
 const wkOfPlant = (p) => (S.plantWK && S.plantWK.get(p)) || (Master.PHE_PLANT[p] ? 'PHE' : DEFAULT_ZONA[p] ? 'PEP' : '');
 const stockCur = (p) => ((S.set.wkCur || {})[wkOfPlant(p)] || 'IDR');
 
@@ -361,7 +311,7 @@ async function initFolder() {
 }
 async function refreshData() {
   const h = Folder.supported() ? await Folder.loadHandle() : null;
-  if (!h) { banner('Belum ada folder data. Pilih folder dulu di halaman Data SAP.', 'warn'); location.hash = '#/data'; return; }
+  if (!h) { banner('Belum ada folder data. Pilih folder dulu di halaman Sumber Data.', 'warn'); location.hash = '#/data'; return; }
   if (await Folder.permission(h, true)) await loadFolder(h);
 }
 async function loadFolder(h) {
@@ -374,12 +324,10 @@ async function loadFolder(h) {
     if (c.mrp) { await tick(); await loadMRP(c.mrp.file); log.push(c.mrp.name); }
     if (c.ds) { await tick(); try { await loadDS(c.ds.file); log.push(c.ds.name); } catch (e) { log.push('Gagal: ' + c.ds.name + ' (' + e.message + ')'); } }
     if (c.regulasi) { S.regulasi = { name: c.regulasi.name, text: await c.regulasi.file.text() }; log.push(c.regulasi.name); }
-    S.rkmFiles = []; S.rkmFail = []; S.rkmSkip = (c.rkmSkip || []).map((f) => f.name);
-    for (const r of c.rkm) { await tick(); try { await loadRKM(r.file, r.name); log.push(r.name); } catch (e) { S.rkmFail.push({ name: r.name, why: e.message }); log.push('Gagal: ' + r.name + ' (' + e.message + ')'); } }
     recompute(); route();
     S.folderLoadedAt = new Date(); Cache.prune();
     const how = loadStat.read ? `${loadStat.read} dibaca ulang, ${loadStat.hit} dari cache` : 'semua dari cache';
-    banner(log.length ? `Data dimuat dari folder <b>${esc(h.name)}</b>: ${log.length} file (${how}, ${fmt((performance.now() - t0) / 1000, 1)} detik). <a href="#/data">Lihat detail</a> <button class="icon-btn" id="bx" aria-label="Tutup">${UI.I.x}</button>` : `Folder <b>${esc(h.name)}</b> tidak berisi file yang dikenali. Nama file harus memuat MB52, MRP, ME3N, ME2N, MB51, MB25, atau RKM. <button class="icon-btn" id="bx" aria-label="Tutup">${UI.I.x}</button>`, log.length ? 'ok' : 'warn');
+    banner(log.length ? `Data dimuat dari folder <b>${esc(h.name)}</b>: ${log.length} file (${how}, ${fmt((performance.now() - t0) / 1000, 1)} detik). <a href="#/data">Lihat detail</a> <button class="icon-btn" id="bx" aria-label="Tutup">${UI.I.x}</button>` : `Folder <b>${esc(h.name)}</b> tidak berisi file yang dikenali. Nama file harus memuat MB52, MRP, ME3N, ME2N, MB51, atau MB25. <button class="icon-btn" id="bx" aria-label="Tutup">${UI.I.x}</button>`, log.length ? 'ok' : 'warn');
   } catch (e) { banner('Gagal membaca folder: ' + esc(e.message) + ` <button class="icon-btn" id="bx" aria-label="Tutup">${UI.I.x}</button>`, 'bad'); }
   const bx = $('bx'); if (bx) bx.onclick = () => banner('');
 }
@@ -388,7 +336,7 @@ async function loadFolder(h) {
 const expand = (q) => q.toLowerCase().split(/\s+/).filter(Boolean).map((x) => S.data.synonyms.find((s) => s.includes(x)) || [x]);
 const hit = (text, groups) => groups.every((g) => g.some((t) => text.toLowerCase().includes(t)));
 let timer; const debounce = (fn) => { clearTimeout(timer); timer = setTimeout(fn, 200); };
-const SRC_LABEL = { ds: 'DS', mb52: 'MB52', mrp: 'MRP', me3n: 'ME3N', me2n: 'ME2N', mb51: 'MB51', mb25: 'MB25', rkm: 'RKM' };
+const SRC_LABEL = { ds: 'DS', mb52: 'MB52', mrp: 'MRP', me3n: 'ME3N', me2n: 'ME2N', mb51: 'MB51', mb25: 'MB25' };
 const srcFiles = (k) => (S.src[k] ? Object.values(S.src[k]) : []);
 // teks panjang diringkas: kalimat pertama tampil, teks lengkap di ikon ⓘ (tooltip)
 const infoI = (full) => `<span class="info-i" tabindex="0" title="${esc(UI.strip(full))}" aria-label="${esc(UI.strip(full))}">ⓘ</span>`;
@@ -398,7 +346,6 @@ const agingPill = (a) => pill(a || '-', a === 'FS' ? 'ok' : a === 'MD' ? 'info' 
 // cols lama: [judul, fn(row)->html, kelas ('num'), fn(row)->nilai mentah, filter?]
 const HIDE = {};
 Object.assign(HIDE, {
-  'rkmTab:rkm': ['Cocok via', 'Remarks', 'Di master LeadTime?'], 'rkmTab:mrp': ['Catatan TKO'],
   'kTab:list': ['Terpakai', 'Item', 'PIC'], 'kTab:renew': ['Terpakai', 'Item', 'Target'], 'kTab:open': ['Jenis'], 'kTab:late': ['Jenis'],
   'oTab:ro': ['Mata uang', 'PIC', 'Sisa hari', 'UoM', 'Harga kontrak'], 'oTab:pr': ['Mata uang', 'Kelas', 'Sumber harga'], 'oTab:kandidat': ['Sumber harga'], 'eTab:resv': ['Mvt'],
 });
@@ -434,7 +381,7 @@ const GLOSSARY = [
     ['PO', 'Purchase Order: pesanan resmi ke vendor.'], ['GR', 'Goods Receipt: barang sudah diterima gudang.'], ['GI', 'Goods Issue: barang dikeluarkan dari gudang untuk dipakai.'], ['Expediting', 'Memantau dan menagih pesanan supaya datang tepat waktu.']]],
   ['Perencanaan stok', [['Min / ROP', 'Batas bawah stok. Kalau stok + pesanan berjalan di bawah ini, saatnya pesan.'], ['Max', 'Batas atas stok. Pesan secukupnya sampai angka ini.'],
     ['AMU', 'Average Monthly Usage: rata-rata pemakaian per bulan.'], ['LT', 'Lead time: lama waktu dari pesan sampai barang datang.'], ['SS', 'Safety stock: stok cadangan untuk jaga-jaga.'],
-    ['RKM', 'Rencana Kebutuhan Material dari user untuk tahun depan.'], ['Berlebih', 'Stok lebih dari 12 bulan pemakaian (chemical 5 bulan). Jangan dipesan lagi.'], ['One Gate Ordering', 'Cek dulu stok di gudang lain, ex-proyek, atau KKKS lain sebelum membeli.']]],
+    ['Berlebih', 'Stok lebih dari 12 bulan pemakaian (chemical 5 bulan). Jangan dipesan lagi.'], ['One Gate Ordering', 'Cek dulu stok di gudang lain, ex-proyek, atau KKKS lain sebelum membeli.']]],
   ['Pergerakan & deadstock', [['FS / MD / SP / DS', 'Kelas pergerakan: Fast (dipakai ≤ 1 tahun), Moderate (≤ 2 tahun), Slow (≤ 5 tahun), Dead stock (lebih dari 5 tahun tidak dipakai).'],
     ['Internal Usage / Own Use', 'Barang dipakai sendiri oleh lapangan (WO, cost center, proyek).'], ['BAU', 'Barang dikirim ke gudang/plant lain lewat STO.'], ['MTA', 'Material Transfer Agreement: barang dipindah ke KKKS lain.'],
     ['STO', 'Stock Transport Order: dokumen pindah barang antar plant (nomor berawalan 42).'], ['Mvt', 'Movement type: kode SAP jenis gerakan barang, mis. 291 = dipakai, 351 = dikirim ke plant lain.'],
@@ -442,8 +389,14 @@ const GLOSSARY = [
   ['Organisasi', [['WK PEP / PHE', 'Dua wilayah kerja di SAP: client 100 = PEP (nilai IDR), client 180 = PHE (nilai USD).'], ['Zona', 'Kelompok lapangan. Zona 1 = Rantau, P. Susu, Jambi, Lirik, PHE NSO & JM. Zona 4 = Prabumulih, Pendopo, Limau, Adera, Ramba, PHE OK & RT.'],
     ['Plant', 'Kode gudang di SAP, mis. W101 = Rantau.'], ['KIMAP', 'Kode material (10 atau 12 karakter).']]],
 ];
+// Info = arti warna/tanda (satu-satunya penjelasan di web) + kamus singkatan
+const LEGEND = [
+  ['Status', [['low', 'Perlu order', 'Merah: perlu tindakan segera.'], ['warn', 'Berlebih', 'Kuning: perhatian.'], ['ok', 'Cukup', 'Hijau: aman.'], ['mute', '-', 'Abu-abu: netral atau belum ada data.']]],
+  ['Pergerakan (aging)', [['ok', 'FS', 'Fast: dipakai dalam 1 tahun terakhir'], ['info', 'MD', 'Moderate: dipakai 1 sampai 2 tahun lalu'], ['warn', 'SP', 'Slow: dipakai 2 sampai 5 tahun lalu'], ['mute', 'DS', 'Dead stock: lebih dari 5 tahun tidak dipakai'], ['info', 'PJ', 'Project: material proyek yang belum pernah dipakai']]],
+];
 function openGlossary() {
-  UI.drawer(`<div class="d-head"><h2>Kamus istilah</h2><p class="muted">Singkatan yang sering muncul di web ini.</p></div>${GLOSSARY.map(([g, xs]) => `<section class="d-sec"><h3>${g}</h3><dl class="gloss">${xs.map(([t, d]) => `<dt>${t}</dt><dd>${d}</dd>`).join('')}</dl></section>`).join('')}`, { label: 'Kamus istilah' });
+  const legend = `<section class="d-sec"><h3>Warna dan tanda</h3><h4 class="sub-h">Matriks stok (Material Control)</h4>${window.mrpLegend ? mrpLegend() : ''}${LEGEND.map(([g, xs]) => `<h4 class="sub-h">${g}</h4>${xs.map(([c, p, t]) => `<p><span class="pill ${c}">${p}</span> <span>${t}</span></p>`).join('')}`).join('')}</section>`;
+  UI.drawer(`<div class="d-head"><h2>Info</h2></div>${legend}<h3 class="sub-h" style="margin:16px 0 0">Kamus istilah</h3>${GLOSSARY.map(([g, xs]) => `<section class="d-sec"><h3>${g}</h3><dl class="gloss">${xs.map(([t, d]) => `<dt>${t}</dt><dd>${d}</dd>`).join('')}</dl></section>`).join('')}`, { label: 'Info' });
 }
 
 // Catatan panjang diringkas jadi satu baris + tombol "Selengkapnya"; panel analisis bisa dilipat
@@ -468,7 +421,7 @@ const tidyObs = new MutationObserver(() => { tidyObs.disconnect(); try { tidy($(
 tidyObs.observe($('view'), { childList: true, subtree: true });
 $('glossBtn').onclick = openGlossary;
 
-// ---------- Tab generik (dipakai halaman Kontrak & Order) ----------
+// ---------- Tab generik (dipakai halaman Kontrak) ----------
 function tabbed(state, TABS, extraTop = '') {
   if (!TABS[S[state]]) S[state] = Object.keys(TABS)[0];
   const key = S[state], [title, rows, cols, text, note, onRender, minWidth] = TABS[key];
@@ -477,11 +430,11 @@ function tabbed(state, TABS, extraTop = '') {
   UI.table($('res'), { id: state + ':' + key, rows, cols: convCols(cols, HIDE[state + ':' + key] || []), name: title, match: text ? (r, q) => hit(text(r), expand(q)) : undefined, onRender, minWidth });
   document.querySelectorAll('.tab').forEach((b) => (b.onclick = () => { S[state] = b.dataset.t; route(); }));
 }
-const dstr = (d) => (d ? d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '-');
+const dstr = (d) => (d ? d.toLocaleDateString(I18N.loc(), { day: '2-digit', month: 'short', year: 'numeric' }) : '-');
 const money = (v, cur = 'IDR') => { if (v == null || v === '' || !isFinite(v)) return ''; cur = cur || 'IDR'; const a = Math.abs(v);
   return cur + ' ' + (a >= 1e9 ? fmt(v / 1e9, 2) + ' M' : a >= 1e6 ? fmt(v / 1e6, 2) + ' jt' : fmt(v, cur === 'IDR' ? 0 : 2)); };
 const toIDRv = (v, cur) => (cur === 'USD' ? v * (S.set.kurs || 18150) : v || 0);
-const needFile = (what, hint) => `<div class="panel empty"><h3>Butuh ${what}</h3><p>${hint}</p><a class="btn primary" href="#/data">Buka Data SAP</a></div>`;
+const needFile = (what, hint) => `<div class="panel empty"><h3>Butuh ${what}</h3><p>${hint}</p><a class="btn primary" href="#/data">Buka Sumber Data</a></div>`;
 
 // ---------- Lacak material ----------
 // To Order yang bisa diklik → panel material langsung membuka penjelasan hitungan MRP plant tsb

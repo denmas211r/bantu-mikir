@@ -1,4 +1,4 @@
-// ============ SAP Raw Data: MB52, MB51, ME2N, ME3N ============
+// ============ Data Mentah SAP (tab di Sumber Data): MB52, MB51, ME2N, ME3N ============
 // Isi file tarikan SAP apa adanya (nama dan urutan kolom ikut Excel). Hanya ditambah kolom "Client" (dari nama file)
 // dan file sejenis digabung. File dibaca langsung di browser dari folder lokal; tidak disalin ke mana pun.
 (function () {
@@ -45,16 +45,16 @@
   const rng = (c, name) => { const j = c.head.indexOf(name); if (j < 0) return ''; let lo = null, hi = null; for (const r of c.rows) { const v = r[j]; if (v instanceof Date) { if (!lo || v < lo) lo = v; if (!hi || v > hi) hi = v; } } return lo ? `Periode ${G.fDate(lo)} s.d. ${G.fDate(hi)}. ` : ''; };
 
   PAGES.raw_compile = compile; // dipakai tools/test-raw.js
-  PAGES.raw = async function () {
+  PAGES.raw = async function (host) { // host = elemen tujuan (tab Data Mentah di Sumber Data)
     S.rawTab = S.rawTab || 'mb52';
     const kind = S.rawTab, tok = (S.rawTok = (S.rawTok || 0) + 1);
-    $('view').innerHTML = `<div class="tabs" role="tablist">${TABS.map(([k, t, d]) => `<button class="tab ${k === kind ? 'on' : ''}" role="tab" aria-selected="${k === kind}" data-t="${k}" title="${d}">${t}</button>`).join('')}</div><div id="rawBody" class="raw-body"></div>`;
-    document.querySelectorAll('.tab').forEach((b) => (b.onclick = () => { S.rawTab = b.dataset.t; PAGES.raw(); }));
+    host.innerHTML = `<div class="tabs" role="tablist">${TABS.map(([k, t, d]) => `<button class="tab ${k === kind ? 'on' : ''}" role="tab" aria-selected="${k === kind}" data-t="${k}" title="${d}">${t}</button>`).join('')}</div><div id="rawBody" class="raw-body"></div>`;
+    host.querySelectorAll('.tab').forEach((b) => (b.onclick = () => { S.rawTab = b.dataset.t; PAGES.raw(host); }));
     const body = $('rawBody'), status = (h) => { if (tok === S.rawTok) body.innerHTML = `<p class="muted pad">${h}</p>`; };
     let c;
     try { c = await load(kind, status); } catch (e) { return status('Gagal membaca file: ' + esc(e.message)); }
     if (tok !== S.rawTok) return;
-    if (!c) return status(`Belum ada file ${kind.toUpperCase()}. Pilih folder data di <a href="#/data">Sumber Data</a>; nama file harus memuat ${kind.toUpperCase()}.`);
+    if (!c) return status(`Belum ada file ${kind.toUpperCase()}. Pilih folder data di tab Sumber; nama file harus memuat ${kind.toUpperCase()}.`);
     const f = c.files, src = `Sumber: ${f.map((x) => `${esc(x.name)} (client ${x.client})`).join(', ')}. ${rng(c, 'Posting Date')}Tarikan ${[...new Set(f.map((x) => G.fDate(x.at)))].join(', ')}. Client 100 = IDR (WK PEP), client 180 = USD (WK PHE); angka tidak dijumlahkan lintas client. Kolom Client ditambahkan, kolom lain apa adanya.`;
     S.rawG = G.table(body, { head: c.head, rows: c.rows, name: 'SAP_' + kind.toUpperCase(), plantCol: c.head.indexOf('Plant'), source: src });
   };

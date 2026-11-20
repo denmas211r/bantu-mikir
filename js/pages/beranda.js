@@ -3,7 +3,7 @@
 
 PAGES.beranda = function () {
   if (!S.mb52 && !S.mrpRes && !S.me2n) {
-    $('view').innerHTML = `<div class="panel empty"><h3>Belum ada data</h3><p>Pilih folder yang berisi file download SAP (MB52, MRP, ME3N, ME2N, MB51, MB25) dan RKM. Dashboard akan terisi otomatis.</p><a class="btn primary" href="#/data">Buka Data SAP</a></div>`;
+    $('view').innerHTML = `<div class="panel empty"><h3>Belum ada data</h3><p>Pilih folder yang berisi file download SAP (MB52, MRP, ME3N, ME2N, MB51, MB25). Dashboard akan terisi otomatis.</p><a class="btn primary" href="#/data">Buka Sumber Data</a></div>`;
     return;
   }
   const X = stockCtx(S.dash), { cmoney, toIDR, items, inSel, selTxt } = X, today = new Date();
@@ -15,32 +15,20 @@ PAGES.beranda = function () {
     const late = ex.filter((e) => e.status === 'Terlambat').sort((a, b) => b.lateDays - a.lateDays).slice(0, 5);
     exHTML = `<div class="kv"><div><span>PO/RO aktif</span><b>${fmt(ex.length, 0)}</b></div><div><span>Dikirim</span><b>${fmt(c('Dalam pengiriman') + c('Diterima sebagian'), 0)}</b></div>
       <div><span>Terlambat</span><b class="${late.length ? 'neg' : ''}">${fmt(c('Terlambat'), 0)}</b></div><div><span>Sisa kirim</span><b>${cmoney(ex.reduce((a, e) => a + toIDR(e.openValue, e.currency), 0))}</b></div></div>
-      <h4 class="sub-h">Paling lama terlambat</h4>${plainTable(late, [['PO/RO', (e) => `<a class="mono" href="#/lacak" data-q="${esc(e.doc)}">${esc(e.doc)}</a>`], ['Deskripsi', (e) => esc(e.desc)], ['Lapangan', (e) => esc(PLANT_NAME[e.plant] || e.plant)], ['Hari', (e) => fmt(e.lateDays, 0), 'num']])}`;
-  }
-  // Perlu order
-  let toHTML = '<p class="muted small">Tambahkan file MRP untuk menghitung material yang perlu dipesan.</p>';
-  if (S.mrpRes) {
-    const mbPrice = new Map(items.filter((i) => i.soh > 0).map((i) => [i.material + '|' + i.plant, toIDR(i.price, stockCur(i.plant))]));
-    const ord = [...S.mrpRes.values()].filter((r) => S.mrpPlants.has(r.plant) && (!S.mb52 || inSel(r.plant)) && r.toOrder > 0)
-      .map((r) => ({ r, v: r.contract ? r.toOrder * toIDR(r.contract.price, r.contract.currency) : r.toOrder * (mbPrice.get(r.key) || 0) })).sort((a, b) => b.v - a.v);
-    const ro = ord.filter((o) => o.r.contract), pr = ord.filter((o) => !o.r.contract);
-    toHTML = `<div class="kv"><div><span>Perlu order</span><b>${fmt(ord.length, 0)}</b></div><div><span>Lewat RO</span><b>${fmt(ro.length, 0)}</b></div>
-      <div><span>Lewat PR + OE</span><b>${fmt(pr.length, 0)}</b></div><div><span>Estimasi nilai</span><b>${cmoney(ord.reduce((a, o) => a + o.v, 0))}</b></div></div>
-      <h4 class="sub-h">Nilai terbesar</h4>${plainTable(ord.slice(0, 5), [['Material', (o) => `<a class="mono mlink" href="#" data-mat="${esc(o.r.material)}">${esc(o.r.material)}</a>`], ['Deskripsi', (o) => esc(o.r.desc)], ['Plant', (o) => esc(o.r.plant)], ['Qty', (o) => fmt(o.r.toOrder), 'num'], ['Estimasi', (o) => (o.v ? cmoney(o.v) : '-'), 'num']])}`;
+      <h4 class="sub-h">Paling lama terlambat</h4>${plainTable(late, [['PO/RO', (e) => `<a class="mono" href="#/analysis" data-q="${esc(e.doc)}">${esc(e.doc)}</a>`], ['Deskripsi', (e) => esc(e.desc)], ['Lapangan', (e) => esc(PLANT_NAME[e.plant] || e.plant)], ['Hari', (e) => fmt(e.lateDays, 0), 'num']])}`;
   }
   $('view').innerHTML = `${stockFilters('d', S.dash, X)}
     <div class="grid-3">
-      <section class="panel"><div class="panel-h"><h2>Nilai stok</h2><span class="sub">Klik zona untuk melihat warehouse-nya</span></div><div id="dZB"></div></section>
+      <section class="panel"><div class="panel-h"><h2>Nilai stok</h2></div><div id="dZB"></div></section>
       <section class="panel"><div class="panel-h"><h2>Pantau pesanan</h2><span class="sub">${esc(selTxt)}</span><span class="right"><a href="#/expediting">Buka</a></span></div>${exHTML}</section>
-    </div>
-    <section class="panel"><div class="panel-h"><h2>Material perlu order</h2><span class="sub">${esc(selTxt)}</span><span class="right"><a href="#/order">Buka</a></span></div>${toHTML}</section>`;
+    </div>`;
   bindStockFilters('d', S.dash, X);
   if (items.length) zonaBars($('dZB'), X, S.dash); else $('dZB').innerHTML = '<p class="muted small">Tambahkan MB52 untuk melihat nilai stok.</p>';
   document.querySelectorAll('a[data-q]').forEach((a) => (a.onclick = () => sessionStorage.setItem('lacakQ', a.dataset.q)));
 };
 
 PAGES.gudang = function () {
-  if (!S.mb52) { $('view').innerHTML = `<div class="panel empty"><h3>Butuh MB52</h3><p>Analisis warehouse dihitung dari stok MB52 (dan MRP untuk pergerakan).</p><a class="btn primary" href="#/data">Buka Data SAP</a></div>`; return; }
+  if (!S.mb52) { $('view').innerHTML = `<div class="panel empty"><h3>Butuh MB52</h3><p>Analisis warehouse dihitung dari stok MB52 (dan MRP untuk pergerakan).</p><a class="btn primary" href="#/data">Buka Sumber Data</a></div>`; return; }
   const X = stockCtx(S.gd), { cmoney, idrOf, items, inSel, selTxt } = X;
   const pool = items.filter((i) => inSel(i.plant) && i.value > 0).sort((a, b) => idrOf(b) - idrOf(a));
   const tot = pool.reduce((a, i) => a + idrOf(i), 0); let cum = 0, nA = 0;

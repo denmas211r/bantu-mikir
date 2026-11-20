@@ -64,8 +64,7 @@
     const pct = (a, b) => (b ? fmt((a / b) * 100, 1) + '%' : '–');
     const plants = new Map(); rows.forEach((r) => { const k = r.wk + '|' + r.plant; const g = plants.get(k) || plants.set(k, { wk: r.wk, plant: r.plant, n: 0, ds: 0, iu: 0, bau: 0, mta: 0, k309: 0, sisa: 0, habis: 0, sebagian: 0, diam: 0 }).get(k);
       g.n++; g.ds += r.total; g.iu += r.iuUsd; g.bau += r.bauUsd; g.mta += r.mtaUsd; g.k309 += r.k309Usd; g.sisa += r.sisaUsd; g[r.status === 'Habis' ? 'habis' : r.status === 'Sebagian' ? 'sebagian' : 'diam']++; });
-    el.innerHTML = `<p class="tab-note">DS per ${dstr(S.ds.asOf)}, gerakan MB51 mulai ${dstr(R.ds.cutoff)}${o.until ? ' sampai akhir ' + ymLabel(o.until) : ' sampai data terbaru'}. Nilai memakai harga satuan USD di daftar DS. BAU sudah termasuk MTA antar KKKS (Mvt 963/964). Target, MTA, dan FUPP diambil dari sheet Summary file DS dan bisa diubah di sini (tersimpan di browser ini).</p>
-      <div class="plain-wrap"><table class="plain opt-z"><tr><th>Zona</th><th class="num">Target</th><th class="num">Internal Usage (DS)</th><th class="num">BAU (DS)</th>${o.include309 ? '<th class="num">Ganti kode 309 (DS)</th>' : ''}<th class="num">MTA (diisi Tim AWO)</th><th class="num">FUPP (input)</th><th class="num">Total optimasi</th><th class="num">Capaian</th></tr>
+    el.innerHTML = `      <div class="plain-wrap"><table class="plain opt-z"><tr><th>Zona</th><th class="num">Target</th><th class="num">Internal Usage (DS)</th><th class="num">BAU (DS)</th>${o.include309 ? '<th class="num">Ganti kode 309 (DS)</th>' : ''}<th class="num">MTA (diisi Tim AWO)</th><th class="num">FUPP (input)</th><th class="num">Total optimasi</th><th class="num">Capaian</th></tr>
       ${z.concat([tot]).map((x) => `<tr class="${x.zn === 'Total' ? 'tot' : ''}"><th>${x.zn}</th><td class="num">${inp(x.zn, 'target', x.target)}</td><td class="num">${usd(x.iu)}</td><td class="num">${usd(x.bau)}</td>${o.include309 ? `<td class="num">${usd(x.k309)}</td>` : ''}
         <td class="num">${inp(x.zn, 'mta', x.mtaIn)}</td><td class="num">${inp(x.zn, 'fupp', x.fuppIn)}</td><td class="num"><b>${usd(x.tot)}</b></td><td class="num"><b class="${x.target && x.tot >= x.target ? 'pos' : ''}">${pct(x.tot, x.target)}</b></td></tr>`).join('')}</table></div>
       <h4 class="sub-h">Per plant</h4><div id="oPl"></div>`;
@@ -86,7 +85,7 @@
   // ---------- Daftar DS per material ----------
   function daftar(R, el) {
     const o = O(), rows = R.ds.rows.filter((r) => inWK(r.wk));
-    el.innerHTML = `<p class="tab-note">Satu baris per Plant×Material di daftar DS (baris dobel di file digabung). Kuota DS dipakai berurutan oleh gerakan sesudah tanggal DS. Klik baris untuk analisis material.</p><div id="oDs"></div>`;
+    el.innerHTML = `<div id="oDs"></div>`;
     UI.table($('oDs'), { id: 'opt-ds' + (o.include309 ? '-309' : ''), rows, name: 'Daftar DS dan pemakaiannya', rowKey: (r) => r.material, onRow: (k) => openMaterial(k), sort: { i: 9, dir: -1 },
       match: (r, q) => hit(r.material + ' ' + r.desc + ' ' + r.plant, expand(q)), placeholder: 'Cari material, deskripsi, atau plant…', cols: [
       { label: 'WK', get: (r) => r.wk, hide: true }, { label: 'Zona', get: (r) => zonaOf(r.plant), hide: true }, { label: 'Plant', get: (r) => r.plant },
@@ -120,8 +119,7 @@
       const r = rows.get(k) || rows.set(k, { key: k, zona: zonaOf(d.plant), plant: d.plant, material: d.material, desc: d.desc, uom: d.uom, m: {}, total: 0, n: 0 }).get(k);
       const v = val(x); r.m[x.mo] = (r.m[x.mo] || 0) + v; r.total += v; r.n++; tm[x.mo] = (tm[x.mo] || 0) + v; tt += v; });
     const lbl = { zona: 'zona', plant: 'plant', material: 'material' }[P.by];
-    el.innerHTML = `<p class="tab-note">Nilai DS yang terpakai per ${lbl} dan bulan (${P.unit === 'usd' ? 'USD, harga satuan DS' : 'qty sesuai satuan material'}). Ganti pilihan di bawah untuk melihat per zona, plant, atau material. Klik satu baris untuk melihat semua pergerakan MB51 di balik angkanya.</p>
-      <div class="filters"><span id="pvBy"></span><span id="pvGrp"></span>${P.by === 'material' ? '<span id="pvUnit"></span>' : ''}</div>
+    el.innerHTML = `      <div class="filters"><span id="pvBy"></span><span id="pvGrp"></span>${P.by === 'material' ? '<span id="pvUnit"></span>' : ''}</div>
       <div class="kv">${months.map((k) => `<div><span>${ymLabel(k)}</span><b>${show(tm[k] || 0)}</b></div>`).join('')}<div><span>Total</span><b>${show(tt)}</b></div></div>
       <div id="pvTab"></div>`;
     UI.seg($('pvBy'), [['zona', 'Per zona'], ['plant', 'Per plant'], ['material', 'Per material']], P.by, (v) => { P.by = v; route(); });
@@ -161,8 +159,7 @@
     const nUnknown = all.filter((m) => m._bau && !m._bau.dest).length;
     el.innerHTML = `<div class="filters"><span id="oValid"></span><span id="oMon"></span></div>
       ${nUnknown ? `<p class="tab-note"><b>${fmt(nUnknown, 0)} baris tujuannya tidak ada di MB51</b> (penerimaan di luar data), tetap dihitung BAU. Isi kolom Ke kalau tujuannya diketahui.</p>` : ''}
-      <p class="tab-note">BAU = kirim barang ke plant lain lewat STO (Mvt 351) dan keluar ke KKKS lain (Mvt 963), dikurangi pembatalannya (352/964). BAU lintas zona selalu dihitung. BAU sesama zona mengikuti pilihan di atas. Tujuan dibaca dari isian manual, lalu baris pasangan di Material Document yang sama, lalu kata kunci di header text; kalau tidak ketemu, dianggap diterima di luar MB51 dan dihitung BAU. Nilai USD dari MB51 (IDR ÷ kurs ${fmt(kursDS(), 0)}). "Klaim DS" = bagian yang memakai kuota deadstock.</p>
-      <h4 class="sub-h">Rekap per bulan</h4><div id="oSum"></div><h4 class="sub-h">Detail per material</h4><div id="oDet"></div>`;
+            <h4 class="sub-h">Rekap per bulan</h4><div id="oSum"></div><h4 class="sub-h">Detail per material</h4><div id="oDet"></div>`;
     UI.seg($('oValid'), [['sah', 'Dihitung'], ['belum', 'Tidak dihitung'], ['semua', 'Semua']], o.valid, (v) => { o.valid = v; route(); });
     UI.multi($('oMon'), { label: 'Bulan', options: months.map((x) => ({ value: x, label: ymLabel(x) })), selected: o.months, onChange: () => route() });
     // rekap

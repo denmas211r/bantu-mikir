@@ -10,10 +10,10 @@ Ide dan logika meniru https://github.com/StackGeefer/Warehouse-SCM. Kode ditulis
 - Publish data lewat GitHub API memakai token yang disimpan Owner di browser (jangan pernah commit token).
 - Library di `vendor/` (semua lokal, tanpa CDN, tanpa build step): SheetJS, AG Grid Community 32.3.3, Apache ECharts 5.5.1, Flatpickr 4.6.13.
 - Tabel baru pakai `G.table` di `js/grid.js` (filter checkbox, date range, ekspor Excel). Warna dan ukuran ikut `css/kantor.css`. Gaya: padat, netral, ala SAP Fiori/ALV; tanpa emoji, gradien, atau teks penjelas panjang. Semua filter = checkbox multi-select, filter waktu = kalender range.
-- Menu 5 grup: Material Planning, Contract & Expediting, Performance & Reporting, Governance, SAP Raw Data (`MENU` di `js/app.js`). Chatbot Governance ditunda (data TKO tidak boleh keluar).
+- Menu: Material Planning (Material Analysis, Material Control), Contract & Expediting, Performance & Reporting, Governance (Dokumen Aturan), Data (Sumber Data), Pengaturan (`MENU` di `js/app.js`). Tanpa teks penjelasan fitur; arti warna/tanda di tombol Info. Bahasa ID/EN: `js/i18n.js`, pilihan di Pengaturan. RKM dihapus (2026-11-20). Chatbot Governance ditunda (data TKO tidak boleh keluar).
 - Filter Zona global: pemetaan plant ke zona hanya di `js/config.js`.
 - Tes: `node tools/test-raw.js`.
-- Struktur folder: `index.html`, `css/style.css`, `js/` (app = inti: login, routing, muat data, fungsi bersama; `js/pages/` = satu file per menu (raw.js = SAP Raw Data); grid = komponen tabel AG Grid; views/optim = matriks, pop-up, deadstock; cache = hasil baca Excel terenkripsi di browser), `data/`, `tools/init-data.js`, `vendor/`, `.nojekyll`.
+- Struktur folder: `index.html`, `css/style.css`, `js/` (app = inti: login, routing, muat data, fungsi bersama; `js/pages/` = satu file per menu (raw.js = tab Data Mentah di Sumber Data); grid = komponen tabel AG Grid; views/optim = matriks, pop-up, deadstock; cache = hasil baca Excel terenkripsi di browser), `data/`, `tools/init-data.js`, `vendor/`, `.nojekyll`.
 
 ## ATURAN DATA (penting)
 - Repo ini PUBLIK. Selama pengembangan pakai DATA DUMMY saja.

@@ -10,7 +10,6 @@
     DOK_JENIS: [['TKI', /(^|[\/_\s.-])tki([\/_\s.-]|$)/i], ['TKO', /(^|[\/_\s.-])tko([\/_\s.-]|$)|(^|[\/_\s.-])[BC]\d{1,2}[-_ ]\d{3}/i], ['Pedoman', /pedoman|(^|[\/_\s.-])A\d{1,2}[-_ ]\d{3}|ptk[-_ ]?\d/i], ['Regulasi', /regulasi|peraturan|permen|undang|(^|[\/_\s.-])uu[\/_\s.-]|keputusan/i]],
     DOK_LAINNYA: 'Lainnya',
     DOK_KEKUATAN: ['Pedoman', 'TKO', 'TKI'], // urutan kekuatan aturan: kiri paling kuat
-    DOK_TAB: { tko: ['TKO', 'TKI'], regulasi: ['Pedoman', 'Regulasi', 'Lainnya'] },
     PLANT_NAME: { W101: 'Rantau', W102: 'Pangkalan Susu', W802: 'Jambi', W803: 'Lirik', W105: 'Prabumulih', W106: 'Pendopo', W801: 'Limau', W809: 'Adera', W811: 'Ramba' },
   };
 })(window);

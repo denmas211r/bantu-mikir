@@ -5,7 +5,7 @@
 // UI.bars    : grafik batang horizontal yang bisa diklik (multi-pilih)
 (function (root) {
   const esc = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const nf = (n, d = 0) => (typeof n === 'number' && isFinite(n) ? n.toLocaleString('id-ID', { maximumFractionDigits: d }) : '');
+  const nf = (n, d = 0) => (typeof n === 'number' && isFinite(n) ? n.toLocaleString(I18N.loc(), { maximumFractionDigits: d }) : '');
   const strip = (h) => String(h == null ? '' : h).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
   const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
   const I = {
@@ -57,7 +57,7 @@
   // ---------- Tabel ----------
   const states = {};
   const keyOf = (v) => (v instanceof Date ? v.toISOString().slice(0, 10) : v == null || v === '' ? '' : String(v));
-  const labelOf = (v) => (v instanceof Date ? v.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : v == null || v === '' ? '(kosong)' : typeof v === 'number' ? nf(v, 2) : String(v));
+  const labelOf = (v) => (v instanceof Date ? v.toLocaleDateString(I18N.loc(), { day: '2-digit', month: 'short', year: 'numeric' }) : v == null || v === '' ? '(kosong)' : typeof v === 'number' ? nf(v, 2) : String(v));
   const cmp = (a, b) => {
     if (a == null || a === '') return b == null || b === '' ? 0 : 1; if (b == null || b === '') return -1;
     if (a instanceof Date || b instanceof Date) return (+a || 0) - (+b || 0);

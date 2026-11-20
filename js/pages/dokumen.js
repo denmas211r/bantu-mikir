@@ -1,4 +1,4 @@
-// ============ Governance: TKO Reader dan Regulasi Reader (satu komponen) ============
+// ============ Governance: Dokumen Aturan (Pedoman, TKO, TKI, Regulasi dalam satu daftar; filter Jenis di tabel) ============
 // Dokumen PDF dibaca dari folder lokal pilihan user (Folder.docs, terpisah dari folder data SAP). Tidak ada file/teks yang disalin ke repo atau dikirim keluar.
 // Daftar dokumen = tabel; viewer per halaman = penampil PDF bawaan browser; pencarian teks = indeks di browser (pdf.js di vendor/, cache IndexedDB lokal).
 // Pembagian jenis (Pedoman/TKO/TKI/Regulasi) dan urutan kekuatan aturan ada di js/config.js.
@@ -50,14 +50,14 @@
 
   // ---------- halaman ----------
   async function loadFrom(h) { DOCR.setFiles(await Folder.docs.listPdf(h), h.name); }
-  function render(kind) {
-    const tab = S.dkTab || 'list', tabJ = CFG.DOK_TAB[kind], title = kind === 'tko' ? 'TKO' : 'Regulasi';
-    $('view').innerHTML = `<div class="seg-bar"><span id="dkSeg"></span><span id="dkFold"></span><span class="note">Urutan kekuatan aturan: ${CFG.DOK_KEKUATAN.map((x, i) => `<b>${i + 1}. ${x}</b>`).join(' &gt; ')} (yang lebih kuat menang kalau bertentangan). Dokumen hanya dibaca di browser ini.</span></div><div id="dkBody"></div>`;
-    UI.seg($('dkSeg'), [['list', 'Daftar dokumen'], ['cari', 'Cari teks']], tab, (v) => { S.dkTab = v; render(kind); });
+  function render() {
+    const tab = S.dkTab || 'list';
+    $('view').innerHTML = `<div class="seg-bar"><span id="dkSeg"></span><span id="dkFold"></span></div><div id="dkBody"></div>`;
+    UI.seg($('dkSeg'), [['list', 'Daftar dokumen'], ['cari', 'Cari teks']], tab, (v) => { S.dkTab = v; render(); });
     const fold = $('dkFold'); fold.innerHTML = Folder.supported() ? `<button class="btn" id="dkPick">Pilih folder dokumen</button> <button class="btn" id="dkLoad" hidden></button> <span class="note" id="dkInfo"></span>` : '<span class="note">Browser ini tidak mendukung pemilih folder (pakai Chrome/Edge desktop).</span>';
     const info = () => { if ($('dkInfo')) $('dkInfo').textContent = DOCR.rows.length ? `Folder ${DOCR.folder}: ${DOCR.rows.length} PDF` : 'Belum ada folder dokumen.'; };
     const body = $('dkBody');
-    const draw = () => { info(); tab === 'list' ? drawList(body, kind, tabJ, title) : drawSearch(body, kind); };
+    const draw = () => { info(); tab === 'list' ? drawList(body) : drawSearch(body); };
     if ($('dkPick')) {
       $('dkPick').onclick = async () => { try { const h = await Folder.docs.pick(); await loadFrom(h); draw(); } catch (e) { if (e.name !== 'AbortError') body.innerHTML = `<p class="muted pad">Gagal membuka folder: ${esc(e.message)}</p>`; } };
       Folder.docs.load().then(async (h) => {
@@ -67,13 +67,13 @@
     }
     draw();
   }
-  function drawList(body, kind, tabJ, title) {
-    const rows = DOCR.rows.filter((r) => tabJ.includes(r.jenis));
-    if (!rows.length) { body.innerHTML = `<p class="muted pad">${DOCR.rows.length ? `Tidak ada dokumen berjenis ${tabJ.join('/')} di folder ini.` : 'Pilih folder yang berisi dokumen PDF (boleh bersubfolder).'} Jenis ditentukan dari nama folder dan nama file (aturan di js/config.js).</p>`; return; }
+  function drawList(body) {
+    const rows = DOCR.rows;
+    if (!rows.length) { body.innerHTML = '<p class="muted pad">Pilih folder yang berisi dokumen PDF (boleh bersubfolder).</p>'; return; }
     const d = G.fromObjs(rows, [['Jenis', (r) => r.jenis], ['Kekuatan aturan', (r) => r.rank || null], ['Nomor', (r) => r.nomor], ['Judul', (r) => r.judul], ['Tahun (dari nama)', (r) => r.tahun], ['Tanggal dokumen', (r) => { const v = DOCR.idx.get(r.key); return v && v.date; }], ['Folder', (r) => r.folder], ['Ukuran (KB)', (r) => r.kb], ['Tgl ubah file', (r) => r.mod]]);
-    G.table(body, { head: d.head, rows: d.rows, name: 'Daftar_' + title, plantCol: -1, types: { Nomor: 'text', 'Tahun (dari nama)': 'text' }, hide: ['Folder'], rowClick: (r) => openViewer(r, 1), source: 'Klik baris untuk membuka dokumen. Tanggal dokumen terisi setelah indeks teks dibangun (dari metadata PDF); Tahun dibaca dari nama file.' });
+    G.table(body, { head: d.head, rows: d.rows, name: 'Daftar_Dokumen_Aturan', plantCol: -1, types: { Nomor: 'text', 'Tahun (dari nama)': 'text' }, hide: ['Folder'], rowClick: (r) => openViewer(r, 1) });
   }
-  function drawSearch(body, kind) {
+  function drawSearch(body) {
     body.innerHTML = `<div class="seg-bar"><input type="search" id="dsQ" placeholder="Cari kata di semua dokumen" aria-label="Cari teks" style="width:320px"><button class="btn primary" id="dsGo">Cari</button><button class="btn" id="dsIdx">Bangun / perbarui indeks</button><span class="note" id="dsSt"></span></div><div id="dsRes"></div>`;
     const st = (t) => ($('dsSt').textContent = t), have = () => DOCR.rows.filter((r) => DOCR.idx.has(r.key)).length;
     st(DOCR.rows.length ? `${have()} dari ${DOCR.rows.length} dokumen sudah diindeks.` : 'Pilih folder dokumen dulu.');
@@ -92,7 +92,5 @@
     };
     $('dsGo').onclick = go; $('dsQ').onkeydown = (e) => { if (e.key === 'Enter') go(); };
   }
-  PAGES.regulasilama = PAGES.regulasi;
-  PAGES.tko = () => render('tko');
-  PAGES.regulasi = () => render('regulasi');
+  PAGES.aturan = render;
 })();

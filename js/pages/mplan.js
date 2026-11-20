@@ -1,7 +1,7 @@
-// ============ Material Planning: Overview Material (matriks + Detail MRP), detail material, RKM ============
-// Memakai data yang sudah dimuat mesin lama (S.mb52, S.mrpRes, S.me2n, S.mb25, S.me3n, S.rkmCons). Rumus MRP tidak diubah.
+// ============ Material Planning: Material Control (Overview = matriks, Detail = MRP per plant) dan panel detail material ============
+// Memakai data yang sudah dimuat mesin lama (S.mb52, S.mrpRes, S.me2n, S.mb25, S.me3n). Rumus MRP tidak diubah.
 // Angka di sini fakta dari file SAP/MRP; tidak ada aturan "transfer vs RO" (belum diputuskan Digi).
-// Fase 6 (K-213): Cari Material baru dan Timeline & Horizon dihapus. Overview tab Overview = matriks lama (PAGES.matriks di views.js).
+// Sub-fitur Overview memakai PAGES.matriks (views.js).
 (function () {
   const MP = (window.MP = { zonaHook: null });
   document.addEventListener('zonachange', () => { if (MP.zonaHook) MP.zonaHook(); });
@@ -69,17 +69,17 @@
     show(cur);
   };
 
-  // ---------- Overview Material per Zona (Overview | Detail MRP per plant) ----------
+  // ---------- Material Control per Zona (Overview | Detail MRP per plant) ----------
   function dtRows() {
     const X = idx(), res = S.mrpRes ? [...S.mrpRes.values()].filter((r) => ok(r.plant)) : [];
     return res.map((r) => { const o = (X.it.get(r.material) || []).filter((i) => ok(i.plant) && i.plant !== r.plant), mo = (X.mr.get(r.material) || []).filter((x) => ok(x.plant) && x.plant !== r.plant);
       return { r, oStock: sum(o, nrm) || (mo.length ? sum(mo, (x) => x.stock) : 0), oSur: sum(mo, (x) => x.surplus), oN: uniq([...o.map((i) => i.plant), ...mo.map((x) => x.plant)]).length }; });
   }
-  PAGES.overview = function () {
-    if (!S.mb52 && !S.mrpRes) { $('view').innerHTML = needFile('MB52 atau MRP', 'Overview Material membaca stok (MB52), OS PO (ME2N), reservasi (MB25), kontrak (ME3N), dan hasil MRP.'); return; }
-    const mode = S.ovMode || 'ov'; MP.zonaHook = () => PAGES.overview();
-    $('view').innerHTML = `<div class="seg-bar"><span id="ovSeg"></span><span class="note">Zona terpilih di kanan atas. Overview = matriks stok plant x material; Detail = hasil MRP per plant. Warna mengikuti SS, Min, dan Max dari mesin MRP.</span></div><div id="ovBody"></div>`;
-    UI.seg($('ovSeg'), [['ov', 'Overview'], ['dt', 'Detail (MRP per plant)']], mode, (v) => { S.ovMode = v; PAGES.overview(); });
+  PAGES.control = function () {
+    if (!S.mb52 && !S.mrpRes) { $('view').innerHTML = needFile('MB52 atau MRP', 'Material Control membaca stok (MB52), OS PO (ME2N), reservasi (MB25), kontrak (ME3N), dan hasil MRP.'); return; }
+    const mode = S.ovMode || 'ov'; MP.zonaHook = () => PAGES.control();
+    $('view').innerHTML = `<div class="seg-bar"><span id="ovSeg"></span></div><div id="ovBody"></div>`;
+    UI.seg($('ovSeg'), [['ov', 'Overview'], ['dt', 'Detail']], mode, (v) => { S.ovMode = v; PAGES.control(); });
     const src = `Sumber: ${['MB52', 'MRP', 'ME2N (OS PO/RO)', 'MB25 (reservasi terbuka)', 'ME3N (kontrak aktif)'].filter((x, i) => [S.mb52, S.mrpRes, S.me2n, S.mb25, S.me3n][i]).join(', ')}. `;
     if (mode === 'ov') {
       PAGES.matriks($('ovBody'));
@@ -93,31 +93,6 @@
       $('ovBody').innerHTML = `<div class="mx-bar"><div class="mx-leg-wrap">${mrpLegend()}</div></div><div id="dtT"></div>`;
       G.table($('dtT'), { head: d.head, rows: d.rows, name: 'MRP_per_Plant', plantCol: 0, types: { Material: 'text', KIMAP: 'text' }, hide: ['KIMAP', 'Satuan', 'Cover (bln)', 'Catatan'], pin: ['Plant', 'Material'], cellClass: { Status: stCls, 'Posisi stok': posCls }, rowClick: (o) => MP.detail(o.r.material, o.r.plant),
         source: src + 'Min/Max/SS/AMU/To Order = hasil mesin MRP (metode ' + esc(S.set.method) + '). Stok dan surplus plant lain dalam zona terpilih = fakta pembanding, bukan rekomendasi transfer.' });
-    }
-  };
-
-  // ---------- RKM ----------
-  PAGES.rkmx = function () {
-    if (!S.rkmFiles.length || !S.rkmCons) { $('view').innerHTML = `<div class="panel empty"><h3>Belum ada file RKM</h3><p>Taruh file RKM tiap lapangan di folder data (boleh di subfolder, mis. RKM 2027/Rantau/), lalu muat ulang.</p><a class="btn primary" href="#/data">Buka Sumber Data</a></div>`; return; }
-    const tab = S.rkmxTab || 'mat', D = rkmData(), now = D.nowIdx;
-    $('view').innerHTML = `<div class="seg-bar"><span id="rxSeg"></span><span class="note" id="rxSum"></span></div><div id="rxBody"></div>`;
-    UI.seg($('rxSeg'), [['mat', 'Per material'], ['row', 'Baris RKM']], tab, (v) => { S.rkmxTab = v; PAGES.rkmx(); });
-    if (tab === 'mat') {
-      const R = D.rows, noK = R.filter((o) => !o.kimap).length, noM = R.filter((o) => !o.r).length, kur = R.filter((o) => o.f.shortTotal > 0).length;
-      $('rxSum').textContent = `${fmt(R.length, 0)} material-plant, ${fmt(noK, 0)} tanpa KIMAP, ${fmt(noM, 0)} tidak cocok ke MRP, ${fmt(kur, 0)} belum tertutup stok + PO/RO.`;
-      const mo = Array.from({ length: 12 }, (_, i) => 'RKM ' + MON[i] + ' ' + RKM_YEAR);
-      const d = G.fromObjs(R, [['Plant', (o) => o.plant], ['KIMAP', (o) => o.kimap], ['Material MRP', (o) => o.material], ['Deskripsi', (o) => o.desc], ['Satuan', (o) => o.unit], ['PIC', (o) => uniq(o.pics.map((p) => p.pic || p.fungsi).filter(Boolean)).join(', ')], ['File', (o) => o.files.size],
-        ['Total RKM', (o) => o.total], ['Stok', (o) => o.stock], ['OS PO/RO', (o) => o.ospo], ['Tertutup', (o) => o.total - o.f.shortTotal], ['Kurang', (o) => o.f.shortTotal || null], ['Mulai kurang', (o) => (o.shortIdx != null ? mLabel(o.shortIdx) : '')], ['LT (bln)', (o) => o.lt],
-        ['Pesan paling lambat', (o) => (o.due != null ? mLabel(o.due) : '')], ['Jalur', (o) => o.lewat], ['Status', (o) => o.st[0]], ['Cocok ke MRP', (o) => (!o.r ? 'Tidak cocok' : o.r.material === o.kimap || o.r.kimap === o.kimap ? 'KIMAP' : 'Deskripsi')], ['Tanpa KIMAP', (o) => (o.kimap ? 'Tidak' : 'Ya')],
-        ['Min', (o) => (o.r ? fin(o.r.min2) : null)], ['Max', (o) => (o.r ? fin(o.r.max2) : null)], ['To Order MRP', (o) => (o.r ? o.r.toOrder : null)], ['Sumber stok', (o) => o.src], ...mo.map((h, i) => [h, (o) => o.need[i] || null])]);
-      G.table($('rxBody'), { head: d.head, rows: d.rows, name: 'RKM_per_Material', plantCol: 0, types: { KIMAP: 'text', 'Material MRP': 'text' }, hide: ['Satuan', 'File', 'Sumber stok', ...mo], pin: ['Plant', 'KIMAP'], cellClass: { Status: stCls, Kurang: (v) => (v > 0 ? 'st-low' : ''), 'Cocok ke MRP': (v) => (v === 'Tidak cocok' ? 'st-warn' : ''), 'Tanpa KIMAP': (v) => (v === 'Ya' ? 'st-warn' : '') },
-        rowClick: (o) => { const m = o.material || o.kimap; if (m) MP.detail(m, o.plant); },
-        source: `RKM ${RKM_YEAR} dari file lapangan (baris dobel antar file tidak dihitung). Pemenuhan = stok ZNORMAL + OS PO/RO dianggap tersedia awal ${RKM_YEAR}, dipakai berurutan menurut bulan kebutuhan. Pesan paling lambat = bulan mulai kurang − lead time. Cocok ke MRP: KIMAP dulu, lalu deskripsi.` });
-    } else {
-      const C = S.rkmCons; $('rxSum').textContent = `${fmt(C.kept.length, 0)} baris dipakai, ${fmt(C.dups.length, 0)} baris dobel antar file tidak dihitung.`;
-      const d = G.fromObjs(C.rows, [['File', (r) => r.file], ['Sheet', (r) => r.sheet], ['Plant', (r) => r.plant], ['PIC', (r) => r.pic], ['Fungsi', (r) => r.fungsi], ['KIMAP', (r) => r.kimap], ['Deskripsi', (r) => r.desc], ['Satuan', (r) => r.unit], ['Total', (r) => r.total], ['Rincian bulan', (r) => (r.monthsKnown ? 'Ada' : 'Tidak ada')],
-        ['Status baris', (r) => (r.dup ? 'Dobel, tidak dihitung' : 'Dipakai')], ['Alasan dobel', (r) => (r.dup ? r.dup.reason : '')], ['Catatan', (r) => r.cek || '']]);
-      G.table($('rxBody'), { head: d.head, rows: d.rows, name: 'RKM_Baris', plantCol: 2, types: { KIMAP: 'text' }, cellClass: { 'Status baris': (v) => (v === 'Dipakai' ? 'st-ok' : 'st-warn') }, source: 'Satu baris = satu baris di file RKM. File hasil rekap (Integrated, Rekap, Format SHU) tidak dibaca.' });
     }
   };
 })();

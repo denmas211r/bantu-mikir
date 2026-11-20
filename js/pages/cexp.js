@@ -16,7 +16,7 @@
     if (!S.me3n) return empty('file kontrak ME3N', 'Upload ME3N (dan ME2N untuk histori pemanfaatan) di Sumber Data, atau taruh di folder data.');
     if (!['kartu', 'doc', 'item'].includes(S.kMode)) S.kMode = store.get('kMode3') || 'kartu';
     const mode = S.kMode, scope = S.kScope || 'on';
-    $('view').innerHTML = `<div class="seg-bar"><span id="kSeg"></span>${mode === 'kartu' ? '' : '<span id="kSc"></span>'}<span class="note">Kontrak tidak punya plant, jadi filter Zona tidak berlaku. Nilai per mata uang kontrak, tidak dijumlahkan.</span></div><div id="kBody"></div>`;
+    $('view').innerHTML = `<div class="seg-bar"><span id="kSeg"></span>${mode === 'kartu' ? '' : '<span id="kSc"></span>'}</div><div id="kBody"></div>`;
     seg('kSeg', [['kartu', 'Kartu'], ['doc', 'List Kontrak'], ['item', 'Item Kontrak']], mode, (v) => { S.kMode = v; store.set('kMode3', v); PAGES.kontrak(); });
     if (mode === 'kartu') return PAGES.kartuKontrak($('kBody'));
     seg('kSc', [['on', 'Ongoing'], ['all', 'Semua']], scope, (v) => { S.kScope = v; PAGES.kontrak(); });

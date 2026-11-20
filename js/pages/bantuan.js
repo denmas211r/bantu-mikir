@@ -1,7 +1,7 @@
-// ============ Halaman Bantuan: Data SAP, Pengaturan, Panduan & Aturan ============
+// ============ Halaman Bantuan: Sumber Data (+ Data Mentah SAP), Pengaturan ============
 // Bagian dari web MIM. Dimuat sesudah js/app.js (fungsi bersama ada di sana) dan sebelum js/views.js.
 
-PAGES.data = function () {
+function dataSources() {
   const wkSplit = (k, n) => { const r = S.raw[k] ? byWK(S.raw[k]) : []; return r.length > 1 ? ' (' + r.map(([w, p]) => `${w} ${fmt(n(p), 0)}`).join(', ') + ')' : r.length === 1 ? ` (WK ${r[0][0]})` : ''; };
   const fs = Folder.supported(), t = (d) => (d ? d.toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
   $('pageActions').innerHTML = fs ? `<button class="btn primary" id="tbRefresh">${UI.I.dl.replace('M12 4v11m0 0-4-4m4 4 4-4M5 20h14', 'M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3M18 3v4h-4M6 21v-4h4')}<span>Muat ulang data</span></button>` : '';
@@ -14,44 +14,48 @@ PAGES.data = function () {
     ['me2n', 'ME2N', 'PO dan RO', S.me2n && `${fmt(S.me2n.lines.length, 0)} baris`, S.me2n && `${fmt(new Set(S.me2n.lines.map((l) => l.doc)).size, 0)} dokumen` + wkSplit('me2n', (p) => p.lines.length)],
     ['mb51', 'MB51', 'Pergerakan material (GR, GI, transfer)', S.mb51 && `${fmt(S.mb51.moves.length, 0)} gerakan`, S.mb51 && S.mb51.range && `${dstr(S.mb51.range[0])} s.d. ${dstr(S.mb51.range[1])}` + wkSplit('mb51', (p) => p.moves.length)],
     ['mb25', 'MB25', 'Reservasi material', S.mb25 && `${fmt(S.mb25.lines.length, 0)} baris`, S.mb25 && `${fmt(S.mb25.open.size, 0)} material masih direservasi` + wkSplit('mb25', (p) => p.lines.length)],
-    ['rkm', 'RKM', 'Rencana kebutuhan material per lapangan', S.rkmFiles.length && `${S.rkmFiles.length} file`, S.rkmFiles.length && `${fmt(S.rkmFiles.reduce((a, f) => a + f.items.length, 0), 0)} baris`],
     ['ds', 'DS', 'Daftar deadstock akhir tahun (form MA-01, sheet DS PEP/PHE) sebagai dasar optimasi DS. Nama file memuat "Deadstock" atau "DS"', S.ds && `${fmt(S.ds.rows.length, 0)} material×plant`,
       S.ds && `per ${dstr(S.ds.asOf)}, ${S.ds.sheets.map((x) => `${x.name} ${fmt(x.rows, 0)}`).join(', ')}${S.ds.kurs ? `, kurs IDR ${fmt(S.ds.kurs, 0)}/USD` : ''}`],
   ];
   $('view').innerHTML = `<section class="panel"><div class="panel-h"><h2>Folder data</h2>
       <span class="right">${fs ? `<button class="btn" id="fp1">Pilih folder</button><button class="btn ghost" id="fp2">Lupakan folder</button>` : ''}</span></div>
-      <p class="muted">${fs ? `Web membaca file terbaru di folder ini setiap login; file hanya dibaca di browser ini. ${infoI(`Web membaca file terbaru di folder ini setiap login, untuk setiap client SAP: _100_ = WK PEP, _180_ = WK PHE. Khusus MB51, semua file dibaca dan digabung (cocok untuk upload berkala), baris yang sama di beberapa file dihitung sekali. Nama file harus memuat MB52, MRP, ME3N, ME2N, MB51, MB25, atau RKM. File hanya dibaca di browser ini dan tidak dikirim ke mana pun.`)}` : 'Browser ini tidak mendukung akses folder. Pakai Chrome atau Edge di laptop, atau upload file satu per satu di tabel bawah.'}</p>
+      <p class="muted">${fs ? `Web membaca file terbaru di folder ini setiap login; file hanya dibaca di browser ini. ${infoI(`Web membaca file terbaru di folder ini setiap login, untuk setiap client SAP: _100_ = WK PEP, _180_ = WK PHE. Khusus MB51, semua file dibaca dan digabung (cocok untuk upload berkala), baris yang sama di beberapa file dihitung sekali. Nama file harus memuat MB52, MRP, ME3N, ME2N, MB51, MB25, atau DS. File hanya dibaca di browser ini dan tidak dikirim ke mana pun.`)}` : 'Browser ini tidak mendukung akses folder. Pakai Chrome atau Edge di laptop, atau upload file satu per satu di tabel bawah.'}</p>
       ${S.folderName ? `<p class="source" style="margin-top:8px">Folder <b>${esc(S.folderName)}</b>, terakhir dimuat ${esc(t(S.folderLoadedAt))}</p>` : ''}
       <p class="source" style="margin-top:4px"><span id="cacheInfo">Cache browser: menghitung…</span> <button class="btn ghost" id="cacheClr" title="Hapus hasil baca yang tersimpan di browser ini. Login berikutnya membaca ulang semua Excel.">Hapus cache</button></p></section>
-    <section class="panel"><div class="panel-h"><h2>Sumber data</h2><span class="sub">Semua angka di web berasal dari file ini</span></div>
-      ${plainTable(SRC, [['Data', (r) => `<b>${r[1]}</b>`], ['Isi', (r) => esc(r[2])], ['File', (r) => srcFiles(r[0]).map((f) => (f.wk && r[0] !== 'rkm' && r[0] !== 'mrp' ? `<b>WK ${esc(f.wk)}</b> ` : '') + esc(f.name)).join('<br>') || '<span class="muted">Belum dimuat</span>', 'wide'],
+    <section class="panel"><div class="panel-h"><h2>Sumber data</h2></div>
+      ${plainTable(SRC, [['Data', (r) => `<b>${r[1]}</b>`], ['Isi', (r) => esc(r[2])], ['File', (r) => srcFiles(r[0]).map((f) => (f.wk && r[0] !== 'mrp' ? `<b>WK ${esc(f.wk)}</b> ` : '') + esc(f.name)).join('<br>') || '<span class="muted">Belum dimuat</span>', 'wide'],
         ['Jumlah', (r) => esc(r[3] || ''), 'num'], ['Keterangan', (r) => esc(r[4] || '')], ['Dimuat', (r) => esc(srcFiles(r[0]).length ? t(srcFiles(r[0]).map((f) => f.at).sort((a, b) => b - a)[0]) : '')],
-        ['', (r) => `<label class="btn ghost">Upload<input type="file" class="up" data-k="${r[0]}" accept=".xlsx,.xlsm,.xls" ${r[0] === 'rkm' ? 'multiple' : ''} hidden></label>`]])}
-      <p class="muted small" id="upMsg" style="margin-top:8px"></p></section>
-    ${S.rkmFiles.length ? `<section class="panel"><div class="panel-h"><h2>File RKM</h2><span class="sub">Pastikan plant setiap file benar</span></div>
-      ${plainTable(S.rkmFiles.map((f, i) => ({ f, i })), [['File', (o) => esc(o.f.fileName)], ['Asset', (o) => esc(o.f.asset)], ['Baris', (o) => fmt(o.f.items.length, 0), 'num'],
-        ['Plant', (o) => `<select data-i="${o.i}" class="rp" aria-label="Plant"><option value="">Pilih plant</option>${DEFAULT_MRP_PLANTS.map((p) => `<option value="${p}" ${o.f.plant === p ? 'selected' : ''}>${plantLabel(p)}</option>`).join('')}</select>`],
-        ['Cocok ke MRP', (o) => { const m = S.rkmMatched.filter((x) => x.file === o.f.fileName); return `${fmt(m.filter((x) => x.key).length, 0)} dari ${fmt(m.length, 0)}`; }, 'num'],
-        ['', (o) => `<button class="btn ghost rx" data-i="${o.i}">Hapus</button>`]])}</section>` : ''}`;
+        ['', (r) => `<label class="btn ghost">Upload<input type="file" class="up" data-k="${r[0]}" accept=".xlsx,.xlsm,.xls" hidden></label>`]])}
+      <p class="muted small" id="upMsg" style="margin-top:8px"></p></section>`;
   if (fs) {
     $('fp1').onclick = async () => { try { const h = await Folder.pick(); await loadFolder(h); } catch (e) { if (e.name !== 'AbortError') banner('Gagal: ' + esc(e.message), 'bad'); } };
     $('fp2').onclick = async () => { await Folder.forget(); S.folderName = null; banner('Folder dilupakan. Data yang sudah dimuat tetap ada sampai halaman ditutup.', 'warn'); route(); };
   }
   Cache.info().then((c) => { if ($('cacheInfo')) $('cacheInfo').textContent = c.files ? `Cache browser: ${c.files} file, ${fmt(c.bytes / 1048576, 1)} MB, terenkripsi. File yang tidak berubah tidak dibaca ulang saat login.` : 'Cache browser: kosong.'; });
   $('cacheClr').onclick = async () => { await Cache.clear(); route(); };
-  const LOAD = { mb52: loadMB52, mrp: loadMRP, me3n: loadME3N, me2n: loadME2N, mb51: loadMB51, mb25: loadMB25, rkm: (f) => loadRKM(f), ds: loadDS };
+  const LOAD = { mb52: loadMB52, mrp: loadMRP, me3n: loadME3N, me2n: loadME2N, mb51: loadMB51, mb25: loadMB25, ds: loadDS };
   document.querySelectorAll('.up').forEach((inp) => (inp.onchange = async (e) => {
     const files = [...e.target.files]; if (!files.length) return; $('upMsg').textContent = 'Memproses ' + files.map((f) => f.name).join(', ') + '…'; await tick();
     try { for (const f of files) await LOAD[inp.dataset.k](f); recompute(); route(); } catch (err) { $('upMsg').textContent = 'Gagal membaca file: ' + err.message; $('upMsg').className = 'small neg'; }
   }));
-  document.querySelectorAll('.rp').forEach((sl) => (sl.onchange = () => { const f = S.rkmFiles[sl.dataset.i]; f.plant = sl.value; const m = store.get('rkmPlant') || {}; m[f.fileName] = sl.value; store.set('rkmPlant', m); recompute(); route(); }));
-  document.querySelectorAll('.rx').forEach((b) => (b.onclick = () => { S.rkmFiles.splice(+b.dataset.i, 1); recompute(); route(); }));
+}
+
+// Sumber Data = 2 sub-fitur: Sumber (folder + file) dan Data Mentah (isi tarikan SAP apa adanya, dulu menu Data SAP)
+PAGES.data = function () {
+  const tab = S.dataTab === 'raw' ? 'raw' : 'src';
+  if (S.rawG) { S.rawG.destroy(); S.rawG = null; }
+  if (tab === 'src') dataSources(); else $('view').innerHTML = '<div id="dtBody"></div>';
+  $('view').insertAdjacentHTML('afterbegin', '<div class="seg-bar"><span id="dtSeg"></span></div>');
+  UI.seg($('dtSeg'), [['src', 'Sumber'], ['raw', 'Data Mentah']], tab, (v) => { S.dataTab = v; PAGES.data(); });
+  if (tab === 'raw') PAGES.raw($('dtBody'));
 };
 
 PAGES.pengaturan = function () {
   const all = [...new Set([...(S.mb52 ? S.mb52.plants : []), ...(S.mrp ? S.mrp.plants : []), ...Object.keys(DEFAULT_ZONA), ...S.mrpPlants])].sort();
   const P = (k) => (S.set.tko[k] != null ? S.set.tko[k] : MRP.TKO_DEFAULT[k]);
-  $('view').innerHTML = `<section class="panel"><div class="panel-h"><h2>Plant dan zona</h2><span class="sub">Zona dipakai di dashboard. Min/Max hanya dihitung untuk plant yang dipantau MRP.</span></div>
+  $('view').innerHTML = `<section class="panel"><div class="panel-h"><h2>Bahasa</h2></div>
+      <div class="radios">${[['id', 'Bahasa Indonesia'], ['en', 'English']].map(([k, t]) => `<label class="radio"><input type="radio" name="lang" value="${k}" ${(S.set.lang || 'id') === k ? 'checked' : ''}>${t}</label>`).join('')}</div></section>
+    <section class="panel"><div class="panel-h"><h2>Plant dan zona</h2></div>
       ${plainTable(all, [['Plant', (p) => `<b>${esc(p)}</b>`], ['Nama', (p) => esc(PLANT_NAME[p] || '')],
         ['Zona', (p) => `<select class="zn" data-p="${esc(p)}" aria-label="Zona ${esc(p)}">${ZONA_LIST.map((z) => `<option ${zonaOf(p) === z ? 'selected' : ''}>${z}</option>`).join('')}</select>`],
         ['Dipantau MRP', (p) => `<input type="checkbox" class="mp" value="${esc(p)}" ${S.mrpPlants.has(p) ? 'checked' : ''} aria-label="Pantau ${esc(p)}">`]])}</section>
@@ -65,14 +69,11 @@ PAGES.pengaturan = function () {
         <label>Rumus Max untuk maintenance<span><select data-s="maxFormula">${[['A', 'A: 2 × AMU × T + SS'], ['B', 'B: AMU × T + 2 × SS'], ['C', 'C: ROP + n × AMU'], ['BC', 'B untuk kontrak, C tanpa kontrak']].map(([v, t]) => `<option value="${v}" ${P('maxFormula') === v ? 'selected' : ''}>${t}</option>`).join('')}</select></span></label>
         <label>Moderate (MD) dihitung sebagai FS<span><select data-s="mdAsFS"><option value="1" ${P('mdAsFS') ? 'selected' : ''}>Ya, perlu konfirmasi user</option><option value="0" ${P('mdAsFS') ? '' : 'selected'}>Tidak, Min = Max = SS</option></select></span></label>
         <label>Service level non-critical<span><select data-z="z">${[[1.282, '90%'], [1.645, '95%'], [2.054, '98%'], [2.326, '99%']].map(([z, t]) => `<option value="${z}" ${P('z') == z ? 'selected' : ''}>${t}</option>`).join('')}</select></span></label></div>
-        <p class="muted small" style="margin-top:8px">Dokumen aturan ada di <a href="#/regulasi">Regulasi</a> dan <a href="#/tko">TKO</a>. <a href="#" id="tkoReset">Kembalikan default</a></p>` : ''}</section>
-    <section class="panel"><div class="panel-h"><h2>MRP WK PHE</h2><span class="sub">Sementara, sampai file MRP PHE dibuat</span></div>
+        <p class="muted small" style="margin-top:8px">Dokumen aturan ada di <a href="#/aturan">Dokumen Aturan</a>. <a href="#" id="tkoReset">Kembalikan default</a></p>` : ''}</section>
+    <section class="panel"><div class="panel-h"><h2>MRP WK PHE</h2></div>
       <div class="params"><label>Lead time default bila material tidak ada di master MRP PEP<span><input type="number" id="pheLT" min="0.5" max="36" step="0.5" value="${S.set.pheLT || 3}"></span></label></div>
-      <p class="muted small" style="margin-top:8px">Pemakaian dari MB51 client 180 (Own Use + Return, tanpa network/proyek). ${infoI('Pemakaian diambil dari MB51 client 180: Mvt kategori Own Use dan Return, tanpa GI ke network/proyek (221, 222, 949, 950). Aturan ini sama dengan file MRP PEP (dicek Oktober 2026, cocok 363 dari 364 material×plant).')}</p></section>
-    <section class="panel"><div class="panel-h"><h2>Basis kebutuhan</h2><span class="sub">Angka AMU yang dipakai mesin MRP</span></div>
-      <div class="radios">${Object.entries(BASIS).map(([k, t]) => `<label class="radio"><input type="radio" name="basis" value="${k}" ${S.set.basis === k ? 'checked' : ''}>${esc(t)}</label>`).join('')}</div></section>
-    <section class="panel"><div class="panel-h"><h2>Long lead item</h2></div>
-      <div class="params"><label>Lead time minimal (bulan)<span><input type="number" id="lli" min="1" max="36" value="${S.set.lliLT}"></span></label></div></section>`;
+      <p class="muted small" style="margin-top:8px">Pemakaian dari MB51 client 180 (Own Use + Return, tanpa network/proyek). ${infoI('Pemakaian diambil dari MB51 client 180: Mvt kategori Own Use dan Return, tanpa GI ke network/proyek (221, 222, 949, 950). Aturan ini sama dengan file MRP PEP (dicek Oktober 2026, cocok 363 dari 364 material×plant).')}</p></section>`;
+  document.querySelectorAll('input[name=lang]').forEach((r) => (r.onchange = () => { S.set.lang = r.value; store.set('settings', S.set); I18N.set(r.value); buildNav(); route(); }));
   const saveSet = () => { store.set('settings', S.set); recompute(); };
   document.querySelectorAll('.zn').forEach((sl) => (sl.onchange = () => { S.set.zona = Object.assign({}, S.set.zona || {}, { [sl.dataset.p]: sl.value }); saveSet(); }));
   document.querySelectorAll('.mp').forEach((c) => (c.onchange = () => { c.checked ? S.mrpPlants.add(c.value) : S.mrpPlants.delete(c.value); store.set('mrpPlants', [...S.mrpPlants]); }));
@@ -83,9 +84,7 @@ PAGES.pengaturan = function () {
   document.querySelectorAll('.params select[data-s]').forEach((i) => (i.onchange = () => { S.set.tko[i.dataset.s] = i.dataset.s === 'mdAsFS' ? i.value === '1' : i.value; saveSet(); }));
   document.querySelectorAll('.params select[data-z]').forEach((i) => (i.onchange = () => { S.set.tko.z = parseFloat(i.value); saveSet(); }));
   if ($('tkoReset')) $('tkoReset').onclick = (e) => { e.preventDefault(); S.set.tko = {}; saveSet(); route(); };
-  document.querySelectorAll('input[name=basis]').forEach((r) => (r.onchange = () => { S.set.basis = r.value; saveSet(); }));
   $('pheLT').onchange = () => { const v = parseFloat($('pheLT').value); if (v > 0) { S.set.pheLT = v; saveSet(); } };
-  $('lli').onchange = () => { S.set.lliLT = Math.max(1, Math.min(36, +$('lli').value || 6)); saveSet(); };
 };
 
 // Markdown sederhana → HTML (teks di-escape dulu, aman)

@@ -8,7 +8,7 @@
   const esc = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const pad = (n) => String(n).padStart(2, '0');
   const fDate = (d) => (d instanceof Date && !isNaN(d) ? pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear() : '');
-  const fNum = (v) => (typeof v === 'number' ? v.toLocaleString('id-ID', { maximumFractionDigits: 3 }) : v == null ? '' : String(v));
+  const fNum = (v) => (typeof v === 'number' ? v.toLocaleString(I18N.loc(), { maximumFractionDigits: 3 }) : v == null ? '' : String(v));
   const key = (v) => (v == null ? '' : String(v));
   const MAX_CAT = 100;
   const G = { fDate, fNum, zonaOk: () => true };
@@ -40,7 +40,7 @@
     const plantCol = o.plantCol >= 0 ? o.plantCol : -1;
     el.innerHTML = `<div class="gt${o.autoHeight ? ' gt-auto' : ''}"><div class="gt-bar"><label class="gt-search"><input type="search" placeholder="Cari di semua kolom" aria-label="Cari di semua kolom"></label>
         <span class="gt-count" role="status"></span><span class="gt-tools"><button class="btn" data-a="cols">Kolom</button><button class="btn" data-a="fit">Lebarkan</button><button class="btn" data-a="reset">Reset filter</button><button class="btn primary" data-a="xls">Unduh Excel</button></span></div>
-      <div class="gt-filters"></div><div class="gt-grid ag-theme-quartz"></div><div class="gt-foot">${o.source || ''}</div></div>`;
+      <div class="gt-filters"></div><div class="gt-grid ag-theme-quartz"></div><div class="gt-foot"></div></div>`;
     const $q = (s) => el.querySelector(s), fbar = $q('.gt-filters');
     const colDefs = cols.map((c, j) => ({
       colId: 'c' + j, headerName: c.name, valueGetter: (p) => p.data[j], width: widthOf(c),
@@ -65,7 +65,7 @@
       defaultColDef: { sortable: true, resizable: true, minWidth: 70 }, tooltipShowDelay: 600, domLayout: o.autoHeight ? 'autoHeight' : 'normal',
       onRowClicked: o.rowClick ? (e) => o.rowClick(e.data.o, e.data) : undefined, rowClass: o.rowClick ? 'gt-click' : undefined,
       isExternalFilterPresent: () => active(), doesExternalFilterPass: (node) => pass(node.data),
-      onModelUpdated: () => { clearTimeout(ft); ft = setTimeout(() => o.onFilter && api && !api.isDestroyed() && o.onFilter(api), 120); const sh = api.getDisplayedRowCount(); $q('.gt-count').textContent = `${sh.toLocaleString('id-ID')} dari ${rows.length.toLocaleString('id-ID')} baris`; },
+      onModelUpdated: () => { clearTimeout(ft); ft = setTimeout(() => o.onFilter && api && !api.isDestroyed() && o.onFilter(api), 120); const sh = api.getDisplayedRowCount(); $q('.gt-count').textContent = `${sh.toLocaleString(I18N.loc())} dari ${rows.length.toLocaleString(I18N.loc())} baris`; },
     });
 
     // ---- filter bar ----

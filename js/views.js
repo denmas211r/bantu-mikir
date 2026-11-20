@@ -96,7 +96,7 @@
       { label: 'Status', nowrap: true, w: 1.35, get: (o) => st.get(o), html: (o) => `<span class="st ${statusCls(st.get(o))}">${esc(st.get(o))}</span>` },
       { label: 'WK', get: (o) => [...o.wk].join(', '), hide: true },
     ];
-    host.innerHTML = `<div class="mx-bar">${wks.length > 1 ? '<span id="wkSeg"></span>' : ''}<div class="mx-leg-wrap"><span class="legend-line"><span>Angka = stok per plant (MB52, unrestricted). Klik baris untuk detail material.</span></span>${mrpLegend()}</div></div><div id="mx"></div>`;
+    host.innerHTML = `<div class="mx-bar">${wks.length > 1 ? '<span id="wkSeg"></span>' : ''}<div class="mx-leg-wrap">${mrpLegend()}</div></div><div id="mx"></div>`;
     if (wks.length > 1) UI.seg($('wkSeg'), [['all', 'Semua WK']].concat(wks.map((w) => [w, `WK ${w}`])), S.cariWK, (v) => { S.cariWK = v; store.set('cariWK', v); route(); });
     UI.table($('mx'), { id: 'cari-mx3-' + S.cariWK, rows, cols, name: 'Overview Material', match: (o, q) => hit(o.material + ' ' + o.desc, expand(q)), sort: { i: cols.findIndex((c) => c.label === 'Pakai'), dir: -1 },
       placeholder: 'Cari deskripsi atau kode material… (mis. packer 7, laker)', rowKey: (o) => o.material, onRow: (m) => (window.MP ? MP.detail(m) : openMaterial(m)) });
@@ -206,7 +206,7 @@
       <section class="d-sec"><h3>Transaksi <small>${fmt(mv.length, 0)} baris di periode ini${mv.length > 300 ? ', 300 terbaru tampil' : ''}</small></h3>${mv.length ? `<div class="mv-tx">${plainTable(mv.slice(0, 300), [['Posting date', (x) => dstr(x.date)], ['Plant', (x) => `<b class="mono">${esc(x.plant)}</b><small class="muted d-block">${esc(plantLabel(x.plant))}</small>`], ['SLoc', (x) => esc(x.sloc)],
         ['Mvt', (x) => `<b class="mono">${esc(x.mt)}</b><small class="muted d-block">${esc(x.mtText)}</small>`], ['Qty', (x) => `<b class="${x.qty < 0 ? 'neg' : 'pos-q'}">${x.qty > 0 ? '+' : ''}${fmt(x.qty)}</b>`, 'num'], ['Nilai', (x) => money(x.amount, x.cur || stockCur(x.plant)), 'num'],
         ['Material doc', (x) => `<span class="mono">${esc(x.matDoc)}</span>`], ['Reservasi', (x) => `<span class="mono">${esc(x.resv || '')}</span>`], ['Header text', (x) => esc(x.header)], ['User', (x) => esc(x.user)], ['PO', (x) => `<span class="mono">${esc(x.po || '')}</span>`]])}</div>` : '<p class="muted">Tidak ada gerakan di plant dan periode ini.</p>'}</section>`}` : ''}
-      <div><a class="btn" href="#/lacak" id="dTrace">Lihat jejak lengkap</a></div>`;
+      <div><a class="btn" href="#/analysis" id="dTrace">Lihat jejak lengkap</a></div>`;
       const gEl = body.querySelector('#dGI'); if (gEl) UI.columns(gEl, lbl24, gi24, (v) => fmt(v, 1) + ' ' + uom);
       body.querySelectorAll('.dUse').forEach((el) => { const w = el.dataset.w, L = mi.labels[w], n = F.months || L.length;
         UI.columns(el, L.slice(-n).map((l) => { const [y, mm] = l.split('-'); return ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'][+mm - 1] + ' 20' + y; }), useWK[w].slice(-n), (v) => fmt(v, 1) + ' ' + uom); });
@@ -233,7 +233,7 @@
     const stokNote = 'Stok = unrestricted valuation type ZNORMAL dari MB52 (ex-terminasi, surplus, damage, dan in transit tidak dihitung).';
     if (r.method === 'excel') {
       const yes = r.hasContract === 'Yes', u = (r.alt && r.alt.excel) || r;
-      L.push(step('AMU (rata-rata pemakaian per bulan)', 'Total pemakaian 36 bulan ÷ 36', f1(r.amu), r.basis === 'RKM' ? 'memakai RKM ÷ 12 karena lebih besar' : ''));
+      L.push(step('AMU (rata-rata pemakaian per bulan)', 'Total pemakaian 36 bulan ÷ 36', f1(r.amu)));
       L.push(step('Aging', `Frekuensi = bulan ada pemakaian ÷ 3 = ${f1(u.freq3)} → FS ≥ 1, MD ≥ 0,5, SP ≥ 0,2, selain itu DS`, esc(r.aging)));
       if (r.lt == null) return head + '<p class="muted">Lead time tidak ada di master, jadi Min/Max tidak dihitung.</p>';
       if (r.agingUsed === 'SP' || r.agingUsed === 'DS') {
@@ -252,11 +252,11 @@
     const u = (r.usageAll || []).map((v) => Math.abs(v || 0)), n = r.wk === 'PHE' ? u.length : Math.min(P.amuMonths, u.length), win = u.slice(-n), sum = win.reduce((a, b) => a + b, 0);
     const div = r.amuHist > 0 ? sum / r.amuHist : n;
     L.push(step('AMU (rata-rata pemakaian per bulan)', `Total pemakaian ${n} bulan terakhir ÷ ${fmt(div, 1)} = ${fmt(sum)} ÷ ${fmt(div, 1)}`, f1(r.amuHist),
-      r.basis === 'RKM' ? `dipakai RKM ÷ 12 = ${f1(r.amu)} karena lebih besar` : r.wk === 'PHE' ? 'WK PHE: histori dari MB51, dibagi lama periode data' : ''));
+      r.wk === 'PHE' ? 'WK PHE: histori dari MB51, dibagi lama periode data' : ''));
     L.push(step('Aging', r.since === Infinity ? 'Tidak ada pemakaian di histori' : `Pemakaian terakhir ${fmt(r.since, 0)} bulan lalu → FS < 12, MD < 24, SP < 60, selain itu DS`, esc(r.aging), r.agingUsed !== r.aging ? `dihitung sebagai ${r.agingUsed}${r.aging === 'MD' ? ' (MD dianggap FS, konfirmasi user)' : ''}` : ''));
     L.push(step('Kelas', 'Project → Program · FS → rutin (chemical / maintenance) · MD → rutin slow · SP/DS → on demand', esc(r.cls)));
     if (r.cls === 'Program' || r.cls === 'On Demand') {
-      L.push(step('To Order', `maks(0, RKM + Reservasi − Stok − OS PO) = maks(0, ${fmt(r.rkm || 0)} + ${fmt(res)} − ${fmt(stock)} − ${fmt(ospo)})`, fmt(r.toOrder), stokNote));
+      L.push(step('To Order', `maks(0, Reservasi − Stok − OS PO) = maks(0, ${fmt(res)} − ${fmt(stock)} − ${fmt(ospo)})`, fmt(r.toOrder), stokNote));
       return head + `<ol class="calc-steps">${L.join('')}</ol>${otherStock(r)}`;
     }
     if (r.tEff == null) return head + `<ol class="calc-steps">${L.join('')}</ol><p class="muted">Lead time tidak ada, jadi Min/Max tidak dihitung.</p>`;
@@ -409,8 +409,7 @@
       if (d && d.sisaHari != null && d.sisaHari < 60) warn.push(`Kontrak berakhir ${fmt(d.sisaHari, 0)} hari lagi. Pastikan jadwal kirim masih di dalam masa kontrak.`);
       const flag = (x) => (!x.r ? '<span class="muted small">tidak ada di MRP</span>' : x.qty > 0 && x.max != null && x.after > x.max ? pill('Di atas Max', 'warn') : x.min != null && x.after < x.min ? pill('Masih di bawah Min', 'low') : x.qty > 0 ? pill('Aman', 'ok') : '');
       const sel = `<label class="chk">Zona <select id="simZ" aria-label="Zona">${[['', 'Semua zona'], ...zonas.map((z) => [z, z])].map(([v, t]) => `<option value="${esc(v)}"${SIM.zona === v ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></label>`;
-      return `<p class="tab-note">Isi qty RO per material dan field. Qty awal = To Order dari MRP; ubah sesuai rencana. Sesudah RO = Stok ZNORMAL + OS PO − Reservasi + qty RO. Stok in transit dan valuation type lain ditampilkan sebagai pertimbangan, tidak ikut dihitung. Isian tersimpan di browser ini.</p>
-        <div class="filters">${sel}<label class="chk"><input type="checkbox" id="simNeed"${SIM.need ? ' checked' : ''}> Hanya yang perlu order / sudah diisi</label>
+      return `        <div class="filters">${sel}<label class="chk"><input type="checkbox" id="simNeed"${SIM.need ? ' checked' : ''}> Hanya yang perlu order / sudah diisi</label>
           <button class="btn" id="simMRP" type="button">Isi sesuai MRP</button><button class="btn" id="simClr" type="button">Kosongkan</button><button class="btn" id="simXls" type="button">Unduh Excel</button></div>
         <div class="kv"><div><span>Baris diisi</span><b>${fmt(chosen.length, 0)}</b></div><div><span>Field</span><b>${fmt(new Set(chosen.map((x) => x.plant)).size, 0)}</b></div><div><span>Estimasi nilai RO</span><b>${money(tq, cur)}</b></div>
           ${d ? `<div><span>Sisa kontrak</span><b>${money(d.sisa, cur)}</b></div><div><span>Sisa sesudah simulasi</span><b class="${d.sisa - tq < 0 ? 'neg' : ''}">${money(d.sisa - tq, cur)}</b></div>` : ''}</div>

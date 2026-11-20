@@ -1,20 +1,26 @@
-// ============ Halaman Lacak Material ============
+// ============ Halaman Material Analysis (dulu Lacak Material): jejak material/dokumen, dengan filter tanggal dan plant ============
 // Bagian dari web MIM. Dimuat sesudah js/app.js (fungsi bersama ada di sana) dan sebelum js/views.js.
 
-PAGES.lacak = function () {
+PAGES.analysis = function () {
   const q0 = sessionStorage.getItem('lacakQ') || S.lacakQ || ''; sessionStorage.removeItem('lacakQ');
+  // Filter: plant (checkbox) dan rentang tanggal. Tanggal dipakai untuk kejadian/dokumen (tanggal dokumen, kebutuhan, GI); stok MB52 adalah posisi terkini, jadi tidak ikut difilter tanggal.
+  const F = (S.lf = S.lf || { plant: new Set(), from: '', to: '' });
+  const plants = [...new Set([...(S.mb52 ? S.mb52.items.map((i) => i.plant) : []), ...(S.mrpRes ? [...S.mrpRes.values()].map((r) => r.plant) : []), ...(S.me2n ? S.me2n.lines.map((l) => l.plant) : []), ...(S.mb51 ? S.mb51.moves.map((m) => m.plant) : [])].filter(Boolean))].sort();
+  const pOk = (p) => !F.plant.size || F.plant.has(p);
+  const inRange = (d) => { if (!F.from && !F.to) return true; if (!(d instanceof Date)) return false; const t = +d; return (!F.from || t >= +new Date(F.from + 'T00:00:00')) && (!F.to || t <= +new Date(F.to + 'T23:59:59')); };
   const have = [['ME2N', S.me2n], ['MB51', S.mb51], ['MB25', S.mb25], ['MB52', S.mb52], ['MRP', S.mrpRes]];
   $('view').innerHTML = `<section class="panel lc-search"><div class="lacak-bar"><label class="dt-search lc-in">${UI.I.search}<input id="lq" type="search" aria-label="Kata kunci" placeholder="Kode material, No. PO/RO, No. PR, No. OA, atau No. reservasi" value="${esc(q0)}"></label><button class="btn primary" id="lgo">Lacak</button></div>
+    <div class="seg-bar"><span id="lPl"></span><label class="chk">Dari tanggal <input type="date" id="lFrom" value="${esc(F.from)}"></label><label class="chk">Sampai <input type="date" id="lTo" value="${esc(F.to)}"></label><button class="btn ghost" id="lClr">Reset filter</button></div>
     <p class="lc-src"><span class="muted small">Data dimuat:</span> ${have.map(([n, v]) => pill(n, v ? 'ok' : 'mute')).join(' ')}<span class="muted small">Abu-abu = file belum dimuat, jejaknya tidak lengkap.</span></p></section><div id="lres"></div>`;
   const go = () => {
     const q = $('lq').value.trim(); S.lacakQ = q; if (!q) { $('lres').innerHTML = ''; return; }
     const out = [];
     // 1) dokumen PO/RO atau PR
-    const poLines = S.me2n ? S.me2n.lines.filter((l) => l.doc === q || l.pr === q || l.oa === q) : [];
+    const poLines = S.me2n ? S.me2n.lines.filter((l) => (l.doc === q || l.pr === q || l.oa === q) && pOk(l.plant) && inRange(l.docDate)) : [];
     poLines.sort((a, b) => (b.docDate || 0) - (a.docDate || 0));
     const isOA = !!(S.me3n && S.me3n.docs.has(q));
-    const resvLines = S.mb25 ? S.mb25.lines.filter((l) => l.resv === q) : [];
-    const resvMoves = S.mb51 ? S.mb51.moves.filter((m) => m.resv === q) : [];
+    const resvLines = S.mb25 ? S.mb25.lines.filter((l) => l.resv === q && pOk(l.plant) && inRange(l.reqDate)) : [];
+    const resvMoves = S.mb51 ? S.mb51.moves.filter((m) => m.resv === q && pOk(m.plant) && inRange(m.date)) : [];
     let mats = new Set();
     if (poLines.length) {
       const shown = poLines.slice(0, 100);
@@ -36,16 +42,16 @@ PAGES.lacak = function () {
     const evs = [];
     for (const key of mats) {
       const [mat, plant] = key.split('|');
-      const ev = Trace.traceMaterial(mat, plant || null, { me2n: S.me2n, mb51: S.mb51, mb25: S.mb25 });
-      const stockRows = S.mb52 ? S.mb52.items.filter((i) => i.material === mat && (!plant || i.plant === plant)) : [];
-      const mrpRows = S.mrpRes ? [...S.mrpRes.values()].filter((r) => r.material === mat && (!plant || r.plant === plant)) : [];
+      const ev = Trace.traceMaterial(mat, plant || null, { me2n: S.me2n, mb51: S.mb51, mb25: S.mb25 }).filter((e) => pOk(e.plant) && inRange(e.date));
+      const stockRows = S.mb52 ? S.mb52.items.filter((i) => i.material === mat && (!plant || i.plant === plant) && pOk(i.plant)) : [];
+      const mrpRows = S.mrpRes ? [...S.mrpRes.values()].filter((r) => r.material === mat && (!plant || r.plant === plant) && pOk(r.plant)) : [];
       const desc = (stockRows[0] && stockRows[0].desc) || (mrpRows[0] && mrpRows[0].desc) || (ev[0] && '') || '';
-      const docs = !poLines.length && S.me2n ? S.me2n.lines.filter((l) => l.material === mat && (!plant || l.plant === plant) && !l.deleted).sort((a, b) => (b.docDate || 0) - (a.docDate || 0)) : [];
+      const docs = !poLines.length && S.me2n ? S.me2n.lines.filter((l) => l.material === mat && (!plant || l.plant === plant) && !l.deleted && pOk(l.plant) && inRange(l.docDate)).sort((a, b) => (b.docDate || 0) - (a.docDate || 0)) : [];
       out.push(`<div class="panel"><h3>Material <span class="mono">${esc(mat)}</span>${plant ? ' · ' + esc(plantLabel(plant)) : ''}</h3><p class="muted">${esc(desc)}</p>
         <div class="grid">${stockRows.length ? `<div><b>Stok sekarang (MB52)</b>${plainTable(stockRows, [['Plant', (i) => esc(i.plant)], ['Unrestricted', (i) => fmt(i.sohNormal != null ? i.sohNormal : i.soh) + ' ' + esc(i.uom), 'num'], ['Val. type lain', (i) => (i.sohOther ? fmt(i.sohOther) : ''), 'num'], ['In transit', (i) => (i.transit ? fmt(i.transit) : ''), 'num'], ['Nilai', (i) => money(i.value, stockCur(i.plant)), 'num']])}</div>` : ''}
         ${mrpRows.length ? `<div><b>MRP</b>${plainTable(mrpRows, [['Plant', (r) => esc(r.plant)], ['Aging', (r) => agingPill(r.aging)], ['Min', (r) => fmt(r.min2), 'num'], ['Max', (r) => fmt(r.max2), 'num'], ['OS PO', (r) => fmt(r.ospo), 'num'], ['Reservasi', (r) => fmt(r.mb25), 'num'], ['To Order', (r) => calcA(r, fmt(r.toOrder)), 'num'], ['Kontrak', (r) => oaLink(r.oa)]])}</div>` : ''}</div>
         ${docs.length ? `<h4>PR, PO/RO, dan OA (${fmt(docs.length, 0)})</h4>${plainTable(docs, [...docCols(), ['Plant', (l) => esc(l.plant)], ['Tgl dokumen', (l) => dstr(l.docDate)], ['Qty', (l) => fmt(l.qty) + ' ' + esc(l.uom), 'num'], ['Sisa kirim', (l) => fmt(l.openQty), 'num'], ['Jadwal', (l) => dstr(l.delivery)], ['Vendor', (l) => esc(l.vendor)]])}` : ''}
-        <h4>Jejak (${fmt(ev.length, 0)} kejadian)</h4>${ev.length ? `<div class="lac-ev" data-i="${evs.push(ev) - 1}" data-k="${esc(key)}"></div>` : '<p class="muted">Belum ada kejadian di ME2N/MB51/MB25.</p>'}</div>`);
+        <h4>Jejak (${fmt(ev.length, 0)} kejadian)</h4>${ev.length ? `<div class="lac-ev" data-i="${evs.push(ev) - 1}" data-k="${esc(key)}"></div>` : '<p class="muted">Tidak ada kejadian pada filter ini.</p>'}</div>`);
     }
     $('lres').innerHTML = out.join('');
     // jejak kejadian sebagai tabel: bisa difilter, diurutkan, dan dicari per kolom
@@ -60,5 +66,9 @@ PAGES.lacak = function () {
     ] }));
     document.querySelectorAll('#lres .lm').forEach((a) => (a.onclick = (e) => { e.preventDefault(); $('lq').value = a.dataset.m; go(); }));
   };
+  UI.multi($('lPl'), { label: 'Plant', options: plants.map((p) => ({ value: p, label: plantLabel(p) })), selected: F.plant, onChange: () => go() });
+  $('lFrom').onchange = (e) => { F.from = e.target.value; go(); };
+  $('lTo').onchange = (e) => { F.to = e.target.value; go(); };
+  $('lClr').onclick = () => { F.plant.clear(); F.from = F.to = ''; PAGES.analysis(); };
   $('lgo').onclick = go; $('lq').onkeydown = (e) => { if (e.key === 'Enter') go(); }; go();
 };

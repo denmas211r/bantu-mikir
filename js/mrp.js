@@ -11,8 +11,6 @@
 //   Max2     = FS/MD ? ROUNDUP(Max) + (Yes ? 0 : AMU×5) : kosong   (Max final)
 //   To Order = SP/DS ? max(0, MB25 − Stock − OSPO)
 //              : (Stock − MB25) <= Min2 ? max(0, Max2 − OSPO − (Stock − MB25)) : 0   → ROUNDUP
-// Basis kebutuhan (opsional, input RKM): 'hist' = sama persis Excel; 'max' = max(AMU histori, RKM/12);
-//   'rkm-new' = pakai RKM/12 hanya kalau histori kosong (AMU = 0).
 (function (root) {
   const EPS = 1e-9;
   const roundup = (x) => (x > 0 ? Math.ceil(x - EPS) : x < 0 ? Math.floor(x + EPS) : 0); // ROUNDUP Excel (menjauhi nol)
@@ -20,20 +18,16 @@
 
   function agingOf(freq3) { return freq3 >= 1 ? 'FS' : freq3 >= 0.5 ? 'MD' : freq3 >= 0.2 ? 'SP' : 'DS'; }
 
-  // Hitung satu baris. r = {usage:[36 angka, bulan terlama→terbaru], lt, hasContract:'Yes'|'No'|'', stock, ospo, mb25, rkmYear}
+  // Hitung satu baris. r = {usage:[36 angka, bulan terlama→terbaru], lt, hasContract:'Yes'|'No'|'', stock, ospo, mb25}
   function calc(r, opt = {}) {
     const u = r.usage36 || [];
     const avg3 = u.reduce((a, b) => a + (b || 0), 0) / 36;
     const freq3 = u.filter((v) => v).length / 3;
     const aging = r.agingOverride || agingOf(r.freq3 != null ? r.freq3 : freq3);
     let amuHist = Math.abs(r.amuSum != null ? r.amuSum : avg3);
-    let amu = amuHist, basis = 'Histori';
-    const rkmM = r.rkmYear ? r.rkmYear / 12 : 0;
-    if (opt.basis === 'max' && rkmM > amuHist) { amu = rkmM; basis = 'RKM'; }
-    if (opt.basis === 'rkm-new' && !amuHist && rkmM) { amu = rkmM; basis = 'RKM'; }
-    const useAging = basis === 'RKM' && (aging === 'SP' || aging === 'DS') ? 'MD' : aging; // item baru dari RKM diperlakukan seperti MD
+    const amu = amuHist, useAging = aging;
     const lt = r.lt;
-    const out = { amu, amuHist, avg3, freq3, aging, agingUsed: useAging, basis, lt, ss: 0, min: null, max: null, min2: null, max2: null, toOrder: 0, note: '' };
+    const out = { amu, amuHist, avg3, freq3, aging, agingUsed: useAging, lt, ss: 0, min: null, max: null, min2: null, max2: null, toOrder: 0, note: '' };
     if (lt == null || lt === '' || !isFinite(lt)) { out.note = 'LT tidak ada'; return out; }
     const yes = r.hasContract === 'Yes';
     out.ss = useAging === 'FS' ? roundup(amu * 3) : 0;
@@ -59,7 +53,7 @@
   //   Min(ROP): FS = AMU×T + SS · MD = SS
   //   Max     : chemical = AMU×(P+T) + SS · maintenance = ROP + ROQ×AMU (default 6) · MD = SS; Max ≥ Min, dibulatkan
   //   Order   : tersedia = Stok + OS PO − Reservasi(MB25); bila tersedia < Min → Max − tersedia
-  //             Program/on demand: RKM + Reservasi − (Stok + OS PO)
+  //             Program/on demand: Reservasi − (Stok + OS PO)
   //   Berlebih: cakupan stok > batas bulan (umum 12, chemical 5)
   const TKO_DEFAULT = { amuMonths: 24, z: 1.645, zCrit: 2.326, nonContractLT: 5.5, roqMonths: 6, maxFormula: 'BC', mdAsFS: true, chemSSMonths: 3, ssCapMonths: 3, chemP: 1, excessGeneral: 12, excessChem: 5,
     chemRegex: '^(?!.*BATTERY).*(CHEMICAL|CATALYST|SULFATE|SULPHATE|KAPORIT|CHLORINE|HYPOCHLORITE|HYDROXIDE|DEMULSIFIER|CORROSION INHIBITOR|SCALE INHIBITOR|BIOCIDE|SURFACTANT|SCAVENGER|DEFOAM|SOLVENT|POLYMER|COAGULANT|FLOCCULANT|HYDROCHLORIC|CAUSTIC|SODA ASH)' };
@@ -77,21 +71,18 @@
     const { aging, since } = agingTKO(u);
     const amuHist = win.reduce((a, b) => a + b, 0) / (P.amuDivisor || P.amuMonths); // amuDivisor: histori pendek (MB51) dibagi jumlah bulan sebenarnya
     const sdmi = stdev(win);
-    let amu = amuHist, basis = 'Histori';
-    const rkmM = r.rkmYear ? r.rkmYear / 12 : 0;
-    if (opt.basis === 'max' && rkmM > amuHist) { amu = rkmM; basis = 'RKM'; }
-    if (opt.basis === 'rkm-new' && !amuHist && rkmM) { amu = rkmM; basis = 'RKM'; }
+    const amu = amuHist;
     const isProject = /^project$/i.test(String(r.cat || '').trim());
     const isChem = !!r.chem || new RegExp(P.chemRegex, 'i').test(r.desc || ''); // r.chem = Material Group 89 (CHEMICALS)
-    let effAging = basis === 'RKM' && (aging === 'SP' || aging === 'DS') ? 'FS' : aging; // item baru dari RKM direncanakan sebagai rutin
+    let effAging = aging;
     const mdFS = effAging === 'MD' && P.mdAsFS; if (mdFS) effAging = 'FS';            // Moderate diperlakukan seperti FS (perlu konfirmasi user)
     const cls = isProject ? 'Program' : effAging === 'FS' ? (isChem ? 'Rutin chemical' : 'Rutin maintenance') : effAging === 'MD' ? 'Rutin slow (ROP manual)' : 'On Demand';
-    const out = { method: 'tko', amu, amuHist, sdmi, aging, since, agingUsed: effAging, cls, basis, lt: r.lt, tEff: null, ss: 0, min: null, max: null, min2: null, max2: null, toOrder: 0, surplus: 0, cover: null, berlebih: false, note: '' };
+    const out = { method: 'tko', amu, amuHist, sdmi, aging, since, agingUsed: effAging, cls, lt: r.lt, tEff: null, ss: 0, min: null, max: null, min2: null, max2: null, toOrder: 0, surplus: 0, cover: null, berlebih: false, note: '' };
     const stock = r.stock || 0, ospo = r.ospo || 0, res = r.mb25 || 0, avail = stock + ospo - res;
     out.cover = amu > 0 ? stock / amu : stock > 0 ? Infinity : 0;
     if (cls === 'Program' || cls === 'On Demand') {
-      out.toOrder = roundup(Math.max(0, (r.rkmYear || 0) + res - stock - ospo));
-      out.surplus = Math.max(0, stock - res - (r.rkmYear || 0));
+      out.toOrder = roundup(Math.max(0, res - stock - ospo));
+      out.surplus = Math.max(0, stock - res);
       if (aging === 'DS' && stock > 0) out.note = r.histShort ? 'Belum ada pemakaian di histori MB51 yang tersedia' : 'Kandidat dead stock (cek prospek & peralatan induk)';
       return out;
     }
@@ -163,7 +154,7 @@
     return { rows, lt, ltByKimap, monthLabels, window: [H[last36[0]], H[last36[last36.length - 1]]] };
   }
 
-  // Jalankan mesin untuk semua baris. stockMap (opsional) = stok dari MB52 upload; rkmMap = qty RKM 2027 per Material|Plant
+  // Jalankan mesin untuk semua baris. stockMap (opsional) = stok dari MB52 upload
   function run(wbData, opt = {}) {
     const { rows, lt } = wbData;
     const sumAvg = new Map();
@@ -178,21 +169,20 @@
       if (out.has(key)) continue; // baris duplikat → satu hasil (AMU sudah dijumlah)
       const master = lt.get(r.material); const ltRow = r.kimap ? wbData.ltByKimap.get(r.kimap) : null;
       const stock = opt.stockMap && opt.stockMap.has(key) ? opt.stockMap.get(key) : opt.stockMap ? 0 : r.stock;
-      const rkm = opt.rkmMap ? opt.rkmMap.get(key) || 0 : 0;
       // Kontrak & OS PO terbaru: kalau file ME3N/ME2N dimuat, pakai itu (lebih baru dari isi file MRP)
       const kp = opt.contractPick ? opt.contractPick.get(r.material) || (r.kimap && opt.contractPick.get(r.kimap)) : null;
       const ltv = ltRow ? ltRow.lt : master ? master.lt : null, hc = opt.contractPick ? (kp ? 'Yes' : 'No') : master ? master.hasContract : '';
       if (opt.ospoMap) r = Object.assign({}, r, { ospo: opt.ospoMap.get(r.material + '|' + r.plant) || 0 });
       if (opt.mb25Map) r = Object.assign({}, r, { mb25: opt.mb25Map.get(r.material + '|' + r.plant) || 0 });
       const cat = r.cat || (master && master.cat) || '';
-      const ex = calc({ usage36: r.usage36, amuSum: sumAvg.get(key), lt: ltv, hasContract: hc, stock, ospo: r.ospo, mb25: r.mb25, rkmYear: rkm }, opt);
+      const ex = calc({ usage36: r.usage36, amuSum: sumAvg.get(key), lt: ltv, hasContract: hc, stock, ospo: r.ospo, mb25: r.mb25 }, opt);
       // histori bulanan digabung untuk baris duplikat Material+Plant
       const usageAll = (dupUsage.get(key) || r.usageAll);
-      const tk = calcTKO({ usageAll, lt: ltv, hasContract: hc, cat, desc: r.desc, chem: opt.chemFn ? opt.chemFn(r.material) : false, histShort: !!wbData.histShort, stock, ospo: r.ospo, mb25: r.mb25, rkmYear: rkm, critical: opt.criticalSet ? opt.criticalSet.has(key) : false }, opt);
+      const tk = calcTKO({ usageAll, lt: ltv, hasContract: hc, cat, desc: r.desc, chem: opt.chemFn ? opt.chemFn(r.material) : false, histShort: !!wbData.histShort, stock, ospo: r.ospo, mb25: r.mb25, critical: opt.criticalSet ? opt.criticalSet.has(key) : false }, opt);
       ex.method = 'excel';
       const res = opt.method === 'excel' ? ex : tk;
       out.set(key, Object.assign({ key, material: r.material, plant: r.plant, kimap: r.kimap, desc: r.desc, uom: r.uom, field: r.field, cat,
-        stock, ospo: r.ospo, mb25: r.mb25, rkm, oa: kp ? kp.doc : opt.contractPick ? '' : master ? master.oa : '', pic: kp ? kp.pic : master ? master.pic : '', sisaHari: kp ? kp.sisaHari : master ? master.sisaHari : null,
+        stock, ospo: r.ospo, mb25: r.mb25, oa: kp ? kp.doc : opt.contractPick ? '' : master ? master.oa : '', pic: kp ? kp.pic : master ? master.pic : '', sisaHari: kp ? kp.sisaHari : master ? master.sisaHari : null,
         contract: kp || null,
         hasContract: hc, excel: r.excel, usageAll, wk: wbData.wk || 'PEP', histShort: !!wbData.histShort, ltDefault: !!(master && master.ltDefault), alt: { excel: ex, tko: tk } }, res));
     }
