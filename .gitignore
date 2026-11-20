@@ -4,3 +4,4 @@ node_modules/
 *.xlsm
 *.xls
 .DS_Store
+.claude/settings.local.json

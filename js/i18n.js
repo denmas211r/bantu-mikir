@@ -46,6 +46,12 @@
     'Berjalan': 'Open', 'PO / RO': 'PO / RO', 'Termasuk tidak dihitung': 'Including not counted', '3 bulan': '3 months', '12 bulan': '12 months', 'Tidak ada data yang cocok.': 'No matching data.',
     'Stok': 'Stock', 'Min – Max': 'Min – Max', 'OS PO/RO': 'Open PO/RO', 'To Order': 'To Order', 'Cakupan': 'Coverage', 'Nilai stok': 'Stock value', 'Semua plant': 'All plants', 'Transaksi': 'Transactions', 'Pemakaian': 'Usage', 'MRP': 'MRP',
     'Cari material': 'Search material', 'Tanggal ': 'Date', 'Pesanan ': 'Orders',
+    // standar halaman (tbl.js)
+    'Di bawah SS': 'Below SS', 'Di bawah Min': 'Below Min', 'Normal': 'Normal', 'Di atas Max': 'Above Max', 'Tanpa MRP': 'No MRP', 'Semua status': 'All statuses', 'Semua tahun': 'All years', 'Dari': 'From', 'Reset': 'Reset',
+    'Semua kecuali Habis': 'All except Expired', 'Aktif': 'Active', 'Hampir habis': 'Expiring', 'Habis': 'Expired', 'Berjalan + terlambat': 'Open + late', 'Terbuka': 'Open', 'Selesai': 'Completed', 'Lewat tgl butuh': 'Past required date',
+    'Jatuh tempo': 'Due date', 'Sisa': 'Remaining', 'Tgl butuh': 'Required date', 'Penerima': 'Recipient', 'Dokumen': 'Document', 'Lihat semua': 'View all', 'Buka detail': 'Open detail', 'Stok per plant': 'Stock per plant', 'Jejak waktu': 'Timeline',
+    'Reservasi terbuka': 'Open reservations', 'Kontrak aktif': 'Active contracts', 'Semua kategori (dihitung)': 'All categories (counted)', 'Semua jenis': 'All types', 'Unduh Excel': 'Download Excel', 'Stok di bawah SS': 'Stock below SS', 'PO/RO terlambat': 'Late PO/RO', 'Kontrak hampir habis': 'Expiring contracts',
+    'Tidak ada data.': 'No data.', 'perlu tindakan': 'needs action', 'saatnya pesan': 'time to order', 'Min sampai Max': 'Min to Max', 'stok berlebih': 'excess stock', '‹ Kembali ke hasil pencarian': '‹ Back to search results',
     // Info (warna dan tanda)
     'Kamus istilah': 'Glossary', 'Warna dan tanda': 'Colors and marks', 'Matriks stok (Material Control)': 'Stock matrix (Material Control)', 'Status': 'Status', 'Pergerakan (aging)': 'Movement (aging)',
     'Merah: perlu tindakan segera.': 'Red: needs action now.', 'Kuning: perhatian.': 'Yellow: attention.', 'Hijau: aman.': 'Green: OK.', 'Biru: informasi.': 'Blue: information.', 'Abu-abu: netral atau belum ada data.': 'Grey: neutral or no data.',

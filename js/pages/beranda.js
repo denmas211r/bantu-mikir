@@ -1,32 +1,31 @@
 // ============ Halaman Beranda dan Analisis Warehouse ============
 // Bagian dari web MIM. Dimuat sesudah js/app.js (fungsi bersama ada di sana) dan sebelum js/views.js.
 
+// Beranda: kartu ringkas + dua daftar pendek yang paling butuh tindakan, masing-masing dengan "Lihat semua".
 PAGES.beranda = function () {
   if (!S.mb52 && !S.mrpRes && !S.me2n) {
-    $('view').innerHTML = `<div class="panel empty"><h3>Belum ada data</h3><p>Pilih folder yang berisi file download SAP (MB52, MRP, ME3N, ME2N, MB51, MB25). Dashboard akan terisi otomatis.</p><a class="btn primary" href="#/data">Buka Sumber Data</a></div>`;
+    $('view').innerHTML = `<div class="hint">Belum ada data. Pilih folder yang berisi file download SAP (MB52, MRP, ME3N, ME2N, MB51, MB25) di <a href="#/data">Sumber Data</a>.</div>`;
     return;
   }
-  const X = stockCtx(S.dash), { cmoney, toIDR, items, inSel, selTxt } = X, today = new Date();
-  // Pantau pesanan
-  let exHTML = '<p class="muted small">Tambahkan ME2N untuk melihat progres PO/RO.</p>';
-  if (S.me2n) {
-    const ex = Trace.expediting(S.me2n, S.mb51, today, { plants: X.selWH, stockOnly: store.get('expStockOnly') ?? true }).filter((e) => e.open > 0);
-    const c = (st) => ex.filter((e) => e.status === st).length;
-    const late = ex.filter((e) => e.status === 'Terlambat').sort((a, b) => b.lateDays - a.lateDays).slice(0, 5);
-    exHTML = `<div class="kv"><div><span>PO/RO aktif</span><b>${fmt(ex.length, 0)}</b></div><div><span>Dikirim</span><b>${fmt(c('Dalam pengiriman') + c('Diterima sebagian'), 0)}</b></div>
-      <div><span>Terlambat</span><b class="${late.length ? 'neg' : ''}">${fmt(c('Terlambat'), 0)}</b></div><div><span>Sisa kirim</span><b>${cmoney(ex.reduce((a, e) => a + toIDR(e.openValue, e.currency), 0))}</b></div></div>
-      <h4 class="sub-h">Paling lama terlambat</h4>${plainTable(late, [['PO/RO', (e) => `<a class="mono" href="#/analysis" data-q="${esc(e.doc)}">${esc(e.doc)}</a>`], ['Deskripsi', (e) => esc(e.desc)], ['Lapangan', (e) => esc(PLANT_NAME[e.plant] || e.plant)], ['Hari', (e) => fmt(e.lateDays, 0), 'num']])}`;
-  }
-  $('view').innerHTML = `${stockFilters('d', S.dash, X)}
-    <div class="grid-3">
-      <section class="panel"><div class="panel-h"><h2>Nilai stok</h2></div><div id="dZB"></div></section>
-      <section class="panel"><div class="panel-h"><h2>Pantau pesanan</h2><span class="sub">${esc(selTxt)}</span><span class="right"><a href="#/expediting">Buka</a></span></div>${exHTML}</section>
-    </div>`;
-  bindStockFilters('d', S.dash, X);
-  if (items.length) zonaBars($('dZB'), X, S.dash); else $('dZB').innerHTML = '<p class="muted small">Tambahkan MB52 untuk melihat nilai stok.</p>';
-  document.querySelectorAll('a[data-q]').forEach((a) => (a.onclick = () => sessionStorage.setItem('lacakQ', a.dataset.q)));
+  MP.zonaHook = () => PAGES.beranda();
+  const ok = (p) => G.zonaOk(p), t0 = new Date(); t0.setHours(0, 0, 0, 0);
+  const items = S.mb52 ? S.mb52.items.filter((i) => ok(i.plant)) : [];
+  const mrs = S.mrpRes ? [...S.mrpRes.values()].filter((r) => ok(r.plant) && S.mrpPlants.has(r.plant)).map((r) => ({ r, k: MP.pos(r.stock, r) })) : [];
+  const low = mrs.filter((x) => x.k === 'low').sort((a, b) => (b.r.toOrder || 0) - (a.r.toOrder || 0));
+  const late = S.me2n ? S.me2n.lines.filter((l) => ok(l.plant) && KX.poSt(l) === 'late').sort((a, b) => b.lateDays - a.lateDays) : [];
+  const ksoon = S.me3n ? [...S.me3n.docs.values()].filter((d) => KX.kSt(d) === 'soon') : [];
+  $('view').innerHTML = T.kpis([['Nilai stok', money(items.reduce((a, i) => a + toIDRv(i.value, stockCur(i.plant)), 0), 'IDR'), fmt(new Set(items.map((i) => i.plant)).size, 0) + ' plant, setara IDR'],
+    ['Di bawah SS', fmt(low.length, 0), 'material x plant', 'k-low'], ['PO/RO terlambat', fmt(late.length, 0), 'lewat jatuh tempo', 'k-low'], ['Kontrak hampir habis', fmt(ksoon.length, 0), 'berakhir ≤ 90 hari', 'k-min']])
+    + `<div class="blk-grid">${T.block('Stok di bawah SS', low.length, '#/control')}${T.block('PO/RO terlambat', late.length, '#/po')}</div>`;
+  const B = $('view').querySelectorAll('.blk-b');
+  T.table(B[0], { rows: low.slice(0, 8), pageSize: 8, empty: 'Tidak ada stok di bawah SS.', onRow: (x) => MP.detail(x.r.material, x.r.plant), cols: [{ label: 'Plant', w: 0.6, get: (x) => x.r.plant },
+    { label: 'Material', w: 2.6, get: (x) => x.r.desc, html: (x) => T.two(x.r.desc, x.r.material) }, { label: 'Stok', type: 'num', w: 0.7, get: (x) => x.r.stock, cls: () => 'mx-low' }, { label: 'SS', type: 'num', w: 0.6, get: (x) => x.r.ss, cls: () => 'ref' }, { label: 'To Order', type: 'num', w: 0.8, get: (x) => x.r.toOrder || null, cls: () => 'b' }] });
+  T.table(B[1], { rows: late.slice(0, 8), pageSize: 8, empty: 'Tidak ada PO/RO terlambat.', onRow: (l) => l.material && MP.detail(l.material, l.plant), cols: [{ label: 'Dokumen', w: 1.2, get: (l) => l.doc + '/' + l.item, html: (l) => T.two(l.doc + '/' + l.item, l.type) },
+    { label: 'Material', w: 2.4, get: (l) => l.desc, html: (l) => T.two(l.desc, l.vendor || '') }, { label: 'Plant', w: 0.6, get: (l) => l.plant }, { label: 'Terlambat', type: 'num', w: 0.8, get: (l) => l.lateDays, html: (l) => fmt(l.lateDays, 0) + ' hari', cls: () => 'neg' }] });
+  const a = [...$('view').querySelectorAll('.blk')].map((b) => b.querySelector('.blk-a'));
+  if (a[0]) a[0].onclick = () => { S.ovMode = 'dt'; S.fc = { q: '', plant: '', pos: 'low' }; };
+  if (a[1]) a[1].onclick = () => { S.psTab = 'po'; S.fp = { q: '', plant: '', from: '', to: '', year: '', st: 'late' }; };
 };
-
 PAGES.gudang = function () {
   if (!S.mb52) { $('view').innerHTML = `<div class="panel empty"><h3>Butuh MB52</h3><p>Analisis warehouse dihitung dari stok MB52 (dan MRP untuk pergerakan).</p><a class="btn primary" href="#/data">Buka Sumber Data</a></div>`; return; }
   const X = stockCtx(S.gd), { cmoney, idrOf, items, inSel, selTxt } = X;

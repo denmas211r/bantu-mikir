@@ -32,7 +32,7 @@
 
   // ---------- Pop-up material (satu untuk seluruh web) ----------
   // Atas: nama, kode, status. Tengah: kartu ringkas (stok, Min-Max, PO, reservasi, To Order, cakupan, nilai, kontrak).
-  // Bawah: tab tabel dengan gaya dan ukuran seragam (G.table compact). Hanya fakta dari SAP/MRP, tanpa rekomendasi otomatis.
+  // Bawah: tab tabel standar (T.table). Hanya fakta dari SAP/MRP, tanpa rekomendasi otomatis.
   const TABS_D = [['stok', 'Stok'], ['mrp', 'MRP'], ['po', 'PO/RO'], ['rsv', 'Reservasi'], ['kon', 'Kontrak'], ['trx', 'Transaksi'], ['pakai', 'Pemakaian']];
   const STAT_PILL = { 'Perlu order': 'low', Kosong: 'low', 'Di bawah Min': 'warn', Surplus: 'info', Aman: 'ok' };
   const D = (v) => (v instanceof Date ? v : null);
@@ -68,23 +68,25 @@
       UI.seg(body.querySelector('#mdP'), [['', 'Semua plant']].concat(plantsAll.map((p) => [p, plantLabel(p)])), F.plant, (v) => { F.plant = v; F.calc = ''; render(); });
       body.querySelectorAll('#mdTabs .tab').forEach((b) => (b.onclick = () => { F.tab = b.dataset.t; render(); }));
       const box = body.querySelector('#mdBody');
-      const tbl = (cols, list, name, extra = {}) => { if (!list.length) { box.innerHTML = '<p class="muted pad">Tidak ada data.</p>'; return null; }
-        const d = G.fromObjs(list, cols); return G.table(box, Object.assign({ head: d.head, rows: d.rows, name: mat + '_' + name, plantCol: -1, compact: true, autoHeight: d.rows.length <= 12 }, extra)); };
+      const tbl = (spec, list, name, extra = {}) => { if (!list.length) { box.innerHTML = '<p class="muted pad">Tidak ada data.</p>'; return; }
+        const cols = spec.map(([label, get]) => { const v = list.map(get).find((x) => x != null && x !== ''), f = extra.cls && extra.cls[label];
+          return { label, get, type: v instanceof Date ? 'date' : typeof v === 'number' ? 'num' : 'text', w: /Deskripsi|Vendor|Keterangan|Teks|Penerima|Lokasi/.test(label) ? 2 : 1, cls: f ? (r) => f(get(r), r) : undefined }; });
+        T.table(box, { cols, rows: list, name: mat + '_' + name, pageSize: extra.pageSize || 10, onRow: extra.onRow }); };
       const t = F.tab;
       if (t === 'stok') tbl([['Plant', (i) => i.plant], ['Zona', (i) => zonaOf(i.plant)], ['Unrestricted', (i) => nrm(i)], ['Val. type lain', (i) => i.soh - nrm(i) || null], ['In transit', (i) => i.transit || null], ['Nilai', (i) => i.value], ['Mata uang', (i) => stockCur(i.plant)],
         ['Lokasi', (i) => uniq(i.locs.map((l) => l.sloc)).join(', ')]], its, 'Stok');
       else if (t === 'mrp') {
-        const posCls = (v, r) => (r ? 'mx-' + mrpPos(r.stock, r) : '');
+        const posCls = (v, r) => 'mx-' + (MP.pos(r.stock, r) || 'none');
         tbl([['Plant', (r) => r.plant], ['Aging', (r) => r.aging || ''], ['AMU', (r) => fin(r.amu)], ['LT (bln)', (r) => fin(r.lt)], ['SS', (r) => fin(r.ss)], ['Min', (r) => fin(r.min2)], ['Max', (r) => fin(r.max2)], ['Stok', (r) => r.stock], ['OS PO/RO', (r) => r.ospo], ['Reservasi', (r) => r.mb25], ['To Order', (r) => r.toOrder]],
-          mrs, 'MRP', { cellClass: { SS: (v) => (v == null ? '' : 'mx-low'), Min: (v) => (v == null ? '' : 'mx-min'), Max: (v) => (v == null ? '' : 'mx-max'), Stok: posCls, 'To Order': (v) => (v > 0 ? 'st-low' : '') }, rowClick: (r) => { F.calc = F.calc === r.plant ? '' : r.plant; render(); } });
+          mrs, 'MRP', { cls: { SS: () => 'ref', Min: () => 'ref', Max: () => 'ref', Stok: posCls, 'To Order': () => 'b' }, onRow: (r) => { F.calc = F.calc === r.plant ? '' : r.plant; render(); } });
         const cr = mrs.find((r) => r.plant === F.calc);
         box.insertAdjacentHTML('beforeend', cr ? `<div class="calc" id="mrpCalc">${explainMRP(cr)}</div>` : mrs.length ? '<p class="muted small pad">Klik satu baris untuk melihat cara hitungnya.</p>' : '');
         if (cr && opt.calc) setTimeout(() => { const c = box.querySelector('#mrpCalc'); if (c) c.scrollIntoView({ block: 'nearest' }); }, 60);
-      } else if (t === 'po') tbl([['Plant', (l) => l.plant], ['Dokumen', (l) => l.doc + '/' + l.item], ['Jenis', (l) => l.type], ['Vendor', (l) => l.vendor], ['Tgl kirim', (l) => D(l.delivery)], ['Qty', (l) => l.qty], ['Sisa kirim', (l) => l.openQty], ['Terlambat (hari)', (l) => l.lateDays || null], ['Kontrak (OA)', (l) => l.oa], ['PR', (l) => l.pr]], pos, 'PO_RO', { types: { Dokumen: 'text' } });
-      else if (t === 'rsv') tbl([['Plant', (l) => l.plant], ['Reservasi', (l) => l.resv + '/' + l.item], ['Tgl butuh', (l) => D(l.reqDate)], ['Qty butuh', (l) => l.reqQty], ['Sudah diambil', (l) => l.removed], ['Sisa', (l) => l.diff], ['Penerima', (l) => l.recipient || l.costCenter || l.wbs || ''], ['Mvt', (l) => l.mt]], rss, 'Reservasi', { types: { Reservasi: 'text' } });
-      else if (t === 'kon') tbl([['Kontrak', (i) => i.doc], ['Vendor', (i) => i.k.vendor], ['Berakhir', (i) => D(i.k.end)], ['Sisa hari', (i) => i.k.sisaHari], ['Status', (i) => (i.k.aktif ? 'Aktif' : 'Habis masa')], ['Harga', (i) => i.price], ['Mata uang', (i) => i.k.currency], ['Target qty', (i) => i.targetQty], ['Sisa qty', (i) => i.openQty]], kts, 'Kontrak', { types: { Kontrak: 'text' } });
+      } else if (t === 'po') tbl([['Plant', (l) => l.plant], ['Dokumen', (l) => l.doc + '/' + l.item], ['Jenis', (l) => l.type], ['Vendor', (l) => l.vendor], ['Tgl kirim', (l) => D(l.delivery)], ['Qty', (l) => l.qty], ['Sisa kirim', (l) => l.openQty], ['Terlambat (hari)', (l) => l.lateDays || null], ['Kontrak (OA)', (l) => l.oa], ['PR', (l) => l.pr]], pos, 'PO_RO');
+      else if (t === 'rsv') tbl([['Plant', (l) => l.plant], ['Reservasi', (l) => l.resv + '/' + l.item], ['Tgl butuh', (l) => D(l.reqDate)], ['Qty butuh', (l) => l.reqQty], ['Sudah diambil', (l) => l.removed], ['Sisa', (l) => l.diff], ['Penerima', (l) => l.recipient || l.costCenter || l.wbs || ''], ['Mvt', (l) => l.mt]], rss, 'Reservasi');
+      else if (t === 'kon') tbl([['Kontrak', (i) => i.doc], ['Vendor', (i) => i.k.vendor], ['Berakhir', (i) => D(i.k.end)], ['Sisa hari', (i) => i.k.sisaHari], ['Status', (i) => (i.k.aktif ? 'Aktif' : 'Habis masa')], ['Harga', (i) => i.price], ['Mata uang', (i) => i.k.currency], ['Target qty', (i) => i.targetQty], ['Sisa qty', (i) => i.openQty]], kts, 'Kontrak');
       else if (t === 'trx') tbl([['Tanggal', (x) => D(x.date)], ['Plant', (x) => x.plant], ['Mvt', (x) => x.mt], ['Keterangan Mvt', (x) => x.mtText], ['Kategori', (x) => x.cat], ['Qty', (x) => x.qty], ['Nilai', (x) => x.amount], ['PO/Resv', (x) => x.po || x.resv], ['Teks', (x) => x.header], ['User', (x) => x.user]],
-        mv.slice().sort((a, b) => (b.date || 0) - (a.date || 0)).slice(0, 3000), 'Transaksi', { types: { Mvt: 'text' }, compact: false });
+        mv.slice().sort((a, b) => (b.date || 0) - (a.date || 0)).slice(0, 3000), 'Transaksi', { pageSize: 15 });
       else {
         const mi = window.matIndex(), L = mi.labels || {}, useWK = {};
         mrs.forEach((r) => { const lab = L[r.wk] || []; if (!lab.length) return; const u = useWK[r.wk] || (useWK[r.wk] = new Array(lab.length).fill(0)); (r.usageAll || []).forEach((v, k) => (u[k] += Math.abs(v || 0))); });
@@ -92,36 +94,51 @@
         mv.filter((x) => x.date).forEach((x) => { const g = yr.get(x.date.getFullYear()) || yr.set(x.date.getFullYear(), { y: x.date.getFullYear(), in: 0, out: 0, gi: 0 }).get(x.date.getFullYear()); if (x.qty > 0) g.in += x.qty; else g.out -= x.qty; if (isGI(x)) g.gi -= x.qty; });
         box.innerHTML = Object.keys(useWK).map((w) => `<section class="d-sec"><h3>Pemakaian bulanan WK ${w} <small>24 bulan terakhir</small></h3><div class="dUse" data-w="${w}"></div></section>`).join('') + '<div id="mdYr"></div>' + (Object.keys(useWK).length || yr.size ? '' : '<p class="muted pad">Tidak ada data pemakaian.</p>');
         box.querySelectorAll('.dUse').forEach((el) => { const w = el.dataset.w, lab = L[w], n = Math.min(24, lab.length); UI.columns(el, lab.slice(-n).map((l) => { const [y, m] = l.split('-'); return MON[+m - 1] + ' 20' + y; }), useWK[w].slice(-n), (v) => fmt(v, 1) + ' ' + uom); });
-        const ys = [...yr.values()].sort((a, b) => b.y - a.y); if (ys.length) { const d = G.fromObjs(ys, [['Tahun', (g) => String(g.y)], ['Masuk', (g) => g.in], ['Keluar', (g) => g.out], ['Pemakaian GI', (g) => g.gi]]); G.table(box.querySelector('#mdYr'), { head: d.head, rows: d.rows, name: mat + '_Rekap_tahunan', plantCol: -1, compact: true, autoHeight: true, types: { Tahun: 'text' } }); }
+        const ys = [...yr.values()].sort((a, b) => b.y - a.y); if (ys.length) T.table(box.querySelector('#mdYr'), { rows: ys, pageSize: 10, cols: [{ label: 'Tahun', get: (g) => String(g.y) }, { label: 'Masuk', type: 'num', get: (g) => g.in }, { label: 'Keluar', type: 'num', get: (g) => g.out }, { label: 'Pemakaian GI', type: 'num', get: (g) => g.gi }] });
       }
     };
     render();
   };
 
-  // ---------- Material Control per Zona (Overview | Detail MRP per plant) ----------
-  function dtRows() {
-    const X = idx(), res = S.mrpRes ? [...S.mrpRes.values()].filter((r) => ok(r.plant)) : [];
-    return res.map((r) => { const o = (X.it.get(r.material) || []).filter((i) => ok(i.plant) && i.plant !== r.plant), mo = (X.mr.get(r.material) || []).filter((x) => ok(x.plant) && x.plant !== r.plant);
-      return { r, oStock: sum(o, nrm) || (mo.length ? sum(mo, (x) => x.stock) : 0), oSur: sum(mo, (x) => x.surplus), oN: uniq([...o.map((i) => i.plant), ...mo.map((x) => x.plant)]).length }; });
-  }
+  // ---------- Material Control: Overview (satu baris per material) | Detail (satu baris per material x plant MRP) ----------
+  // Satu kosakata status untuk seluruh web: posisi stok terhadap SS / Min / Max (sama dengan warna sel Stok).
+  const POS = { low: ['Di bawah SS', 'low'], min: ['Di bawah Min', 'warn'], ok: ['Normal', 'ok'], max: ['Di atas Max', 'info'], '': ['Tanpa MRP', 'mute'] };
+  const RANK = { low: 0, min: 1, max: 2, ok: 3, '': 4 };
+  MP.POS = POS;
+  MP.pos = (stock, r) => (r ? mrpPos(stock || 0, r) : '');
+  MP.posPill = (k) => T.pill(POS[k || ''][0], POS[k || ''][1]);
+  MP.worst = (ks) => ks.slice().sort((a, b) => RANK[a] - RANK[b])[0] || '';
   PAGES.control = function () {
-    if (!S.mb52 && !S.mrpRes) { $('view').innerHTML = needFile('MB52 atau MRP', 'Material Control membaca stok (MB52), OS PO (ME2N), reservasi (MB25), kontrak (ME3N), dan hasil MRP.'); return; }
-    const mode = S.ovMode || 'ov'; MP.zonaHook = () => PAGES.control();
-    $('view').innerHTML = `<div class="seg-bar"><span id="ovSeg"></span></div><div id="ovBody"></div>`;
+    if (!S.mb52 && !S.mrpRes) { $('view').innerHTML = needFile('MB52 atau MRP', 'Material Control membaca stok (MB52) dan hasil MRP.'); return; }
+    const mode = S.ovMode === 'dt' ? 'dt' : 'ov'; MP.zonaHook = () => PAGES.control();
+    const F = (S.fc = S.fc || { q: '', plant: '', pos: '' }), plants = [...S.mrpPlants].filter((p) => G.zonaOk(p)).sort();
+    $('view').innerHTML = '<div class="seg-bar"><span id="ovSeg"></span></div><div id="fb"></div><div id="kp"></div><div id="tb"></div>';
     UI.seg($('ovSeg'), [['ov', 'Overview'], ['dt', 'Detail']], mode, (v) => { S.ovMode = v; PAGES.control(); });
-    const src = `Sumber: ${['MB52', 'MRP', 'ME2N (OS PO/RO)', 'MB25 (reservasi terbuka)', 'ME3N (kontrak aktif)'].filter((x, i) => [S.mb52, S.mrpRes, S.me2n, S.mb25, S.me3n][i]).join(', ')}. `;
-    if (mode === 'ov') {
-      PAGES.matriks($('ovBody'));
-    } else {
-      if (!S.mrpRes) { $('ovBody').innerHTML = '<p class="muted pad">Detail MRP butuh file MRP (WK PEP) atau MB52 + MB51 client 180 (WK PHE).</p>'; return; }
-      const R = dtRows(), d = G.fromObjs(R, [['Plant', (o) => o.r.plant], ['Material', (o) => o.r.material], ['KIMAP', (o) => o.r.kimap], ['Deskripsi', (o) => o.r.desc], ['Satuan', (o) => o.r.uom], ['Kelas', (o) => o.r.cls || ''], ['Aging', (o) => o.r.aging || ''],
-        ['AMU', (o) => fin(o.r.amu)], ['LT (bln)', (o) => fin(o.r.lt)], ['SS', (o) => fin(o.r.ss)], ['Min', (o) => fin(o.r.min2)], ['Max', (o) => fin(o.r.max2)], ['Stok', (o) => o.r.stock], ['OS PO/RO', (o) => o.r.ospo], ['Reservasi', (o) => o.r.mb25], ['To Order', (o) => o.r.toOrder], ['Surplus', (o) => o.r.surplus || null],
-        ['Cover (bln)', (o) => fin(o.r.cover)], ['Jalur', (o) => (o.r.toOrder > 0 ? (o.r.oa ? 'RO ' + o.r.oa : 'PR') : '')], ['Stok plant lain', (o) => o.oStock || null], ['Surplus plant lain', (o) => o.oSur || null], ['Surplus lain / To Order (%)', (o) => (o.r.toOrder > 0 && o.oSur ? Math.round((o.oSur / o.r.toOrder) * 100) : null)],
-        ['Posisi stok', (o) => MRP_POS[mrpPos(o.r.stock, o.r)] || ''], ['Status', (o) => (o.r.toOrder > 0 ? 'Perlu order' : o.r.berlebih ? 'Berlebih' : 'Cukup')], ['Catatan', (o) => o.r.note || '']]);
-      const posCls = (v) => ({ [MRP_POS.low]: 'mx-low', [MRP_POS.min]: 'mx-min', [MRP_POS.ok]: 'mx-ok', [MRP_POS.max]: 'mx-max' }[v] || '');
-      $('ovBody').innerHTML = `<div class="mx-bar"><div class="mx-leg-wrap">${mrpLegend()}</div></div><div id="dtT"></div>`;
-      G.table($('dtT'), { head: d.head, rows: d.rows, name: 'MRP_per_Plant', plantCol: 0, types: { Material: 'text', KIMAP: 'text' }, hide: ['KIMAP', 'Satuan', 'Cover (bln)', 'Catatan'], pin: ['Plant', 'Material'], cellClass: { SS: (v) => (v == null ? '' : 'mx-low'), Min: (v) => (v == null ? '' : 'mx-min'), Max: (v) => (v == null ? '' : 'mx-max'), Stok: (v, o) => (o ? posCls(MRP_POS[mrpPos(o.r.stock, o.r)]) : ''), Status: stCls, 'Posisi stok': posCls }, rowClick: (o) => MP.detail(o.r.material, o.r.plant),
-        source: src + 'Min/Max/SS/AMU/To Order = hasil mesin MRP (metode ' + esc(S.set.method) + '). Stok dan surplus plant lain dalam zona terpilih = fakta pembanding, bukan rekomendasi transfer.' });
-    }
+    const draw = () => {
+      const H = F.plant ? [F.plant] : plants;
+      let rows0, cols;
+      if (mode === 'ov') {
+        const has = (o, p) => o.stock.has(p) || o.mrp.has(p);
+        rows0 = [...matIndex().map.values()].filter((o) => H.some((p) => has(o, p)) && T.match(o.material + ' ' + o.desc, F.q))
+          .map((o) => ({ o, k: MP.worst(H.filter((p) => has(o, p)).map((p) => MP.pos(o.stock.get(p), o.mrp.get(p)))) }));
+        cols = [{ label: 'Material', w: 3.4, get: (x) => x.o.desc, html: (x) => T.two(x.o.desc || x.o.material, x.o.material + ' · ' + (x.o.uom || '')) },
+          ...H.map((p) => ({ label: p, type: 'num', w: 0.8, get: (x) => (has(x.o, p) ? x.o.stock.get(p) || 0 : null), cls: (x) => (has(x.o, p) ? 'mx-' + (MP.pos(x.o.stock.get(p), x.o.mrp.get(p)) || 'none') : '') })),
+          { label: 'To Order', type: 'num', w: 0.8, get: (x) => H.reduce((a, p) => a + ((x.o.mrp.get(p) || {}).toOrder || 0), 0) || null, cls: () => 'b' },
+          { label: 'Status', type: 'status', w: 1.2, get: (x) => POS[x.k][0], html: (x) => MP.posPill(x.k) }];
+      } else {
+        rows0 = (S.mrpRes ? [...S.mrpRes.values()] : []).filter((r) => H.includes(r.plant) && T.match(r.material + ' ' + (r.kimap || '') + ' ' + r.desc, F.q)).map((r) => ({ r, k: MP.pos(r.stock, r) }));
+        cols = [{ label: 'Plant', w: 0.7, get: (x) => x.r.plant }, { label: 'Material', w: 3, get: (x) => x.r.desc, html: (x) => T.two(x.r.desc, x.r.material + ' · ' + (x.r.uom || '')) },
+          { label: 'Aging', type: 'status', w: 0.7, get: (x) => x.r.aging, html: (x) => agingPill(x.r.aging) },
+          { label: 'SS', type: 'num', w: 0.7, get: (x) => fin(x.r.ss), cls: () => 'ref' }, { label: 'Min', type: 'num', w: 0.7, get: (x) => fin(x.r.min2), cls: () => 'ref' }, { label: 'Max', type: 'num', w: 0.7, get: (x) => fin(x.r.max2), cls: () => 'ref' },
+          { label: 'Stok', type: 'num', w: 0.8, get: (x) => x.r.stock, cls: (x) => 'mx-' + (x.k || 'none') }, { label: 'OS PO/RO', type: 'num', w: 0.8, get: (x) => x.r.ospo }, { label: 'Reservasi', type: 'num', w: 0.8, get: (x) => x.r.mb25 },
+          { label: 'To Order', type: 'num', w: 0.8, get: (x) => x.r.toOrder || null, cls: () => 'b' }, { label: 'Status', type: 'status', w: 1.2, get: (x) => POS[x.k][0], html: (x) => MP.posPill(x.k) }];
+      }
+      const n = (k) => rows0.filter((x) => x.k === k).length;
+      $('kp').innerHTML = T.kpis([['Di bawah SS', fmt(n('low'), 0), 'perlu tindakan', 'k-low'], ['Di bawah Min', fmt(n('min'), 0), 'saatnya pesan', 'k-min'], ['Normal', fmt(n('ok'), 0), 'Min sampai Max', 'k-ok'], ['Di atas Max', fmt(n('max'), 0), 'stok berlebih', 'k-max']]);
+      const rows = rows0.filter((x) => !F.pos || x.k === F.pos).sort((a, b) => RANK[a.k] - RANK[b.k]);
+      T.table($('tb'), { cols, rows, name: mode === 'ov' ? 'Material_Control_Overview' : 'Material_Control_Detail', empty: 'Tidak ada material pada filter ini.', onRow: (x) => (x.o ? MP.detail(x.o.material, F.plant) : MP.detail(x.r.material, x.r.plant)) });
+    };
+    T.filters($('fb'), { q: 'Cari nama atau kode material. Contoh: laker, flange 3', plants, selects: [{ key: 'pos', label: 'Semua status', options: ['low', 'min', 'ok', 'max'].map((k) => [k, POS[k][0]]) }] }, F, draw);
+    draw();
   };
 })();

@@ -122,18 +122,5 @@
   G.track = (el, destroy) => { const h = { el, destroy: () => { if (!h.dead) { h.dead = true; destroy(); } } }; G.live.push(h); return h; };
   G.cleanup = () => { G.live = G.live.filter((h) => { if (h.dead) return false; if (document.body.contains(h.el)) return true; h.destroy(); return false; }); };
   G.table = table;
-  // Halaman pantau: kartu ringkas (tiles) + satu kotak cari (nama, kode, sinonim) + tabel sederhana dengan filter chip dari kolomnya.
-  // o = { key (nama state cari), top (html atas), tiles [[label, nilai, sub, kelas]], ph, rows, text(row), cols (spec G.fromObjs), name, opts (opsi G.table) }
-  G.listPage = (o) => {
-    const q0 = (root.S && S[o.key]) || '';
-    $('view').innerHTML = `${o.top || ''}<div class="kpis">${o.tiles.map(([l, v, s, c]) => `<div class="kpi ${c || ''}"><span>${esc(l)}</span><b>${v}</b>${s ? `<small>${s}</small>` : ''}</div>`).join('')}</div>
-      <div class="mon-bar"><label class="dt-search lc-in">${UI.I.search}<input id="mq" type="search" placeholder="${esc(o.ph)}" aria-label="Cari" value="${esc(q0)}"></label></div><div id="mTbl"></div>`;
-    const draw = () => {
-      const q = $('mq').value.trim(); S[o.key] = q; const list = q ? o.rows.filter((r) => hit(o.text(r), expand(q))) : o.rows;
-      if (!list.length) { $('mTbl').innerHTML = '<div class="panel empty">Tidak ada data yang cocok.</div>'; return; }
-      const d = G.fromObjs(list, o.cols); table($('mTbl'), Object.assign({ head: d.head, rows: d.rows, name: o.name, plantCol: -1, compact: true }, o.opts));
-    };
-    let t; $('mq').oninput = () => { clearTimeout(t); t = setTimeout(draw, 250); }; draw();
-  };
   root.G = G;
 })(window);

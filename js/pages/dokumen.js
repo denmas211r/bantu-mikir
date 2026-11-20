@@ -68,10 +68,14 @@
     draw();
   }
   function drawList(body) {
-    const rows = DOCR.rows;
-    if (!rows.length) { body.innerHTML = '<p class="muted pad">Pilih folder yang berisi dokumen PDF (boleh bersubfolder).</p>'; return; }
-    const d = G.fromObjs(rows, [['Jenis', (r) => r.jenis], ['Kekuatan aturan', (r) => r.rank || null], ['Nomor', (r) => r.nomor], ['Judul', (r) => r.judul], ['Tahun (dari nama)', (r) => r.tahun], ['Tanggal dokumen', (r) => { const v = DOCR.idx.get(r.key); return v && v.date; }], ['Folder', (r) => r.folder], ['Ukuran (KB)', (r) => r.kb], ['Tgl ubah file', (r) => r.mod]]);
-    G.table(body, { head: d.head, rows: d.rows, name: 'Daftar_Dokumen_Aturan', plantCol: -1, types: { Nomor: 'text', 'Tahun (dari nama)': 'text' }, hide: ['Folder'], rowClick: (r) => openViewer(r, 1) });
+    if (!DOCR.rows.length) { body.innerHTML = '<div class="hint">Pilih folder yang berisi dokumen PDF (boleh bersubfolder).</div>'; return; }
+    const F = (S.fd = S.fd || { q: '', jenis: '' });
+    body.innerHTML = '<div id="dkF"></div><div id="dkT" style="margin-top:14px"></div>';
+    const draw = () => T.table($('dkT'), { rows: DOCR.rows.filter((r) => (!F.jenis || r.jenis === F.jenis) && T.match([r.jenis, r.nomor, r.judul, r.tahun, r.folder].join(' '), F.q)).sort((a, b) => (a.rank || 9) - (b.rank || 9) || a.judul.localeCompare(b.judul)),
+      name: 'Daftar_Dokumen_Aturan', onRow: (r) => openViewer(r, 1), empty: 'Tidak ada dokumen pada filter ini.', cols: [{ label: 'Jenis', w: 0.8, get: (r) => r.jenis }, { label: 'Nomor', w: 0.8, get: (r) => r.nomor },
+        { label: 'Judul', w: 4, get: (r) => r.judul }, { label: 'Tahun', type: 'date', w: 0.6, get: (r) => r.tahun }, { label: 'Ukuran (KB)', type: 'num', w: 0.8, get: (r) => r.kb }] });
+    T.filters($('dkF'), { q: 'Cari judul atau nomor dokumen', selects: [{ key: 'jenis', label: 'Semua jenis', options: [...new Set(DOCR.rows.map((r) => r.jenis))].sort().map((j) => [j, j]) }] }, F, draw);
+    draw();
   }
   function drawSearch(body) {
     body.innerHTML = `<div class="seg-bar"><input type="search" id="dsQ" placeholder="Cari kata di semua dokumen" aria-label="Cari teks" style="width:320px"><button class="btn primary" id="dsGo">Cari</button><button class="btn" id="dsIdx">Bangun / perbarui indeks</button><span class="note" id="dsSt"></span></div><div id="dsRes"></div>`;
@@ -87,8 +91,8 @@
         out.push({ r, page: i + 1, snip: (a ? '… ' : '') + t.slice(a, e) + (e < t.length ? ' …' : ''), hits: terms.reduce((s, w) => s + lo.split(w).length - 1, 0) }); }); });
       out.sort((x, y) => y.hits - x.hits); const res = $('dsRes');
       if (!out.length) { res.innerHTML = `<p class="muted pad">${have() ? 'Tidak ada hasil.' : 'Belum ada dokumen yang diindeks. Klik "Bangun / perbarui indeks".'}</p>`; return; }
-      const d = G.fromObjs(out.slice(0, 3000), [['Jenis', (o) => o.r.jenis], ['Nomor', (o) => o.r.nomor], ['Dokumen', (o) => o.r.judul || o.r.f.name], ['Halaman', (o) => o.page], ['Kemunculan di halaman', (o) => o.hits], ['Kutipan', (o) => o.snip]]);
-      G.table(res, { head: d.head, rows: d.rows, name: 'Hasil_cari_dokumen', plantCol: -1, types: { Nomor: 'text' }, rowClick: (o) => openViewer(o.r, o.page), source: `${out.length.toLocaleString('id-ID')} halaman cocok${out.length > 3000 ? ' (3.000 teratas ditampilkan)' : ''}. Klik hasil untuk membuka dokumen di halaman itu.` });
+      T.table(res, { rows: out.slice(0, 3000), name: 'Hasil_cari_dokumen', onRow: (o) => openViewer(o.r, o.page), cols: [{ label: 'Jenis', w: 0.7, get: (o) => o.r.jenis }, { label: 'Dokumen', w: 2.4, get: (o) => o.r.judul || o.r.f.name },
+        { label: 'Halaman', type: 'num', w: 0.6, get: (o) => o.page }, { label: 'Kemunculan', type: 'num', w: 0.7, get: (o) => o.hits }, { label: 'Kutipan', w: 4, get: (o) => o.snip }] });
     };
     $('dsGo').onclick = go; $('dsQ').onkeydown = (e) => { if (e.key === 'Enter') go(); };
   }

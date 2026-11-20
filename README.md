@@ -11,6 +11,7 @@ Live: https://denmas211r.github.io/bantu-mikir/
 | `css/kantor.css` | Kantor 2.0: sidebar terang 5 grup, topbar, filter bar, tema AG Grid |
 | `js/app.js` | Otak web: menu 5 grup, filter Zona, pindah halaman, muat folder |
 | `js/config.js` | Konfigurasi satu tempat: pemetaan plant ke zona, nama plant |
+| `js/tbl.js` | Standar halaman: baris filter (Cari, Plant, Dari, Sampai, Tahun, pilihan halaman), kartu ringkas, tabel (teks kiri, angka kanan, tanggal/status tengah, lebar kolom proporsional, tidak melebar keluar layar), satu kamus warna status |
 | `js/grid.js` | Komponen tabel baru (AG Grid): cari, urut, pin, filter checkbox, date range (Flatpickr), unduh Excel |
 | `js/pages/mplan.js` | Material Control (Overview = matriks, Detail = MRP per plant; SS/Min/Max/Stok berwarna) dan pop-up material tunggal `MP.detail` (header, kartu ringkas, tab Stok/MRP/PO-RO/Reservasi/Kontrak/Transaksi/Pemakaian) |
 | `js/pages/analysis.js` | Material Analysis: jejak material/dokumen (PR, PO/RO, OA, reservasi) dengan filter plant dan tanggal |
