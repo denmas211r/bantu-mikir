@@ -30,7 +30,7 @@ const MENU = [
     ['po', 'Pesanan', 'truck'],
     ['gerak', 'Keluar-Masuk Barang', 'flow'],
   ]],
-  // Performance & Reporting (Analisis Warehouse, Deadstock & BAU) disembunyikan dulu di versi basic; kodenya tetap di beranda.js dan optim.js.
+  ['Performance & Reporting', [['gudang', 'Analisis Warehouse', 'gauge']]], // Deadstock & BAU masih disembunyikan (optim.js)
   ['Governance', [['aturan', 'Dokumen Aturan', 'book']]],
   ['Data', [['data', 'Sumber Data', 'db'], ['padanan', 'Padanan KIMAP', 'list']]],
   ['Bantuan', [['pengaturan', 'Pengaturan', 'gear']]],
