@@ -13,14 +13,15 @@
   Object.assign(KX, { K_ST, kSt });
   PAGES.kontrak = function () {
     if (!S.me3n) return empty('file kontrak ME3N', 'Taruh file ME3N di folder data, atau upload di Sumber Data.');
-    const F = (S.fk = S.fk || { q: '', st: '' }), docs = [...S.me3n.docs.values()], txt = new Map();
+    const F = (S.fk = S.fk || { q: '', st: new Set() }), docs = [...S.me3n.docs.values()], txt = new Map();
     S.me3n.items.forEach((i) => txt.set(i.doc, (txt.get(i.doc) || '') + ' ' + i.material + ' ' + i.desc));
     $('view').innerHTML = '<div id="fb"></div><div id="kp"></div><div id="tb"></div>';
-    let shown = 60;
+    let shown = 60; MP.zonaHook = () => PAGES.kontrak();
     const draw = () => {
       const base = docs.filter((d) => T.match([d.doc, d.vendor, d.pic, d.kel, txt.get(d.doc)].join(' '), F.q)), n = (k) => base.filter((d) => kSt(d) === k).length;
-      $('kp').innerHTML = T.kpis([['Aktif', fmt(n('aktif'), 0), 'masih berlaku', 'k-ok'], ['Hampir habis', fmt(n('soon'), 0), 'berakhir ≤ 90 hari', 'k-low'], ['Sisa nilai < 20%', fmt(n('low'), 0), 'perlu amandemen', 'k-min'], ['Habis', fmt(n('habis'), 0), 'lewat masa / nilai habis']]);
-      const list = base.filter((d) => (F.st === 'all' ? true : F.st ? kSt(d) === F.st : kSt(d) !== 'habis')).sort((a, b) => (a.sisaHari ?? 1e9) - (b.sisaHari ?? 1e9));
+      $('kp').innerHTML = T.kpis([['Aktif', fmt(n('aktif'), 0), 'masih berlaku', 'k-ok', 'aktif'], ['Hampir habis', fmt(n('soon'), 0), 'berakhir ≤ 90 hari', 'k-low', 'soon'], ['Sisa nilai < 20%', fmt(n('low'), 0), 'perlu amandemen', 'k-min', 'low'], ['Habis', fmt(n('habis'), 0), 'lewat masa / nilai habis', '', 'habis']]);
+      T.bindKpis($('kp'), F, 'st', () => { shown = 60; draw(); });
+      const list = base.filter((d) => T.has(F, 'st', kSt(d))).sort((a, b) => (a.sisaHari ?? 1e9) - (b.sisaHari ?? 1e9));
       if (!list.length) { $('tb').innerHTML = '<div class="hint">Tidak ada kontrak pada filter ini.</div>'; return; }
       $('tb').innerHTML = `<div class="kcards">${list.slice(0, shown).map((d) => { const s = K_ST[kSt(d)], used = d.target > 0 ? Math.max(0, Math.min(100, (1 - d.pctSisa) * 100)) : 0;
         return `<button type="button" class="kcard" data-oa="${esc(d.doc)}"><div class="k1"><b>${esc(d.doc)}</b>${T.pill(s[0], s[1])}</div><div class="kv2" title="${esc(d.vendor)}">${esc(d.vendor || '-')}</div><div class="kg">${esc(d.kel || '')}${d.pic ? ' · ' + esc(d.pic) : ''}</div>
@@ -30,7 +31,7 @@
       $('tb').querySelectorAll('.kcard').forEach((c) => (c.onclick = () => KX.contract(c.dataset.oa)));
       if ($('kMore')) $('kMore').onclick = () => { shown += 60; draw(); };
     };
-    T.filters($('fb'), { q: 'Cari nomor OA, vendor, atau nama barang. Contoh: laker, gasket', selects: [{ key: 'st', label: 'Semua kecuali Habis', options: [['aktif', 'Aktif'], ['soon', 'Hampir habis'], ['low', 'Sisa nilai < 20%'], ['habis', 'Habis'], ['all', 'Semua status']] }] }, F, () => { shown = 60; draw(); });
+    T.filters($('fb'), { q: 'Cari nomor OA, vendor, atau nama barang. Contoh: laker, gasket', selects: [{ key: 'st', label: 'Status', def: ['aktif', 'soon', 'low'], options: [['aktif', 'Aktif'], ['soon', 'Hampir habis'], ['low', 'Sisa nilai < 20%'], ['habis', 'Habis']] }] }, F, () => { shown = 60; draw(); });
     draw();
   };
   KX.contract = function (doc) {
@@ -64,15 +65,16 @@
     UI.seg($('psTab'), [['po', 'PO / RO'], ['resv', 'Reservasi']], tab, (v) => { S.psTab = v; PAGES.po(); });
     const isPO = tab === 'po', src = isPO ? S.me2n && S.me2n.lines : S.mb25 && S.mb25.lines;
     if (!src) { $('tb').innerHTML = needFile(isPO ? 'file ME2N' : 'file MB25', isPO ? 'PO dan RO dibaca dari ME2N.' : 'Reservasi dibaca dari MB25.'); return; }
-    const F = isPO ? (S.fp = S.fp || { q: '', plant: '', from: '', to: '', year: '', st: '' }) : (S.fr = S.fr || { q: '', plant: '', from: '', to: '', year: '', st: '' });
+    const F = isPO ? (S.fp = S.fp || { q: '', plant: new Set(), from: '', to: '', st: new Set() }) : (S.fr = S.fr || { q: '', plant: new Set(), from: '', to: '', st: new Set() });
     const ST = isPO ? PO_ST : RV_ST, stOf = isPO ? poSt : rvSt, dOf = isPO ? (l) => l.delivery : (l) => l.reqDate;
     const draw = () => {
-      const base = src.filter((l) => G.zonaOk(l.plant) && (!F.plant || l.plant === F.plant) && T.inRange(dOf(l), F) && T.match(isPO ? [l.doc, l.vendor, l.material, l.desc, l.pr, l.oa].join(' ') : [l.resv, l.material, l.desc, l.recipient, l.costCenter, l.wbs].join(' '), F.q));
-      const n = (k) => base.filter((l) => stOf(l) === k).length, soon = new Date(+t0() + 30 * 864e5);
+      const base = src.filter((l) => G.zonaOk(l.plant) && T.has(F, 'plant', l.plant) && T.inRange(dOf(l), F) && T.match(isPO ? [l.doc, l.vendor, l.material, l.desc, l.pr, l.oa].join(' ') : [l.resv, l.material, l.desc, l.recipient, l.costCenter, l.wbs].join(' '), F.q));
+      const soon = new Date(+t0() + 30 * 864e5), dueSoon = (l) => stOf(l) === 'open' && l.delivery && l.delivery <= soon, n = (k) => base.filter((l) => stOf(l) === k).length;
       $('kp').innerHTML = T.kpis(isPO
-        ? [['Berjalan', fmt(n('open'), 0), 'belum diterima penuh'], ['Terlambat', fmt(n('late'), 0), 'lewat jatuh tempo', 'k-low'], ['Jatuh tempo ≤ 30 hari', fmt(base.filter((l) => stOf(l) === 'open' && l.delivery && l.delivery <= soon).length, 0), 'segera dipantau', 'k-min'], ['Selesai', fmt(n('done'), 0), 'sudah diterima', 'k-ok']]
-        : [['Terbuka', fmt(n('open'), 0), 'belum diambil'], ['Lewat tgl butuh', fmt(n('late'), 0), 'belum diambil', 'k-low'], ['Selesai', fmt(n('done'), 0), 'sudah diambil / ditutup', 'k-ok'], ['Dihapus', fmt(n('del'), 0), 'tidak dihitung']]);
-      const rows = base.filter((l) => (F.st === 'all' ? true : F.st ? stOf(l) === F.st : stOf(l) === 'open' || stOf(l) === 'late')).sort((a, b) => (dOf(a) || 0) - (dOf(b) || 0));
+        ? [['Berjalan', fmt(n('open'), 0), 'belum diterima penuh', '', 'open'], ['Terlambat', fmt(n('late'), 0), 'lewat jatuh tempo', 'k-low', 'late'], ['Jatuh tempo ≤ 30 hari', fmt(base.filter(dueSoon).length, 0), 'segera dipantau', 'k-min', 'due'], ['Selesai', fmt(n('done'), 0), 'sudah diterima', 'k-ok', 'done']]
+        : [['Terbuka', fmt(n('open'), 0), 'belum diambil', '', 'open'], ['Lewat tgl butuh', fmt(n('late'), 0), 'belum diambil', 'k-low', 'late'], ['Selesai', fmt(n('done'), 0), 'sudah diambil / ditutup', 'k-ok', 'done'], ['Dihapus', fmt(n('del'), 0), 'tidak dihitung', '', 'del']]);
+      T.bindKpis($('kp'), F, 'st', draw);
+      const rows = base.filter((l) => !F.st.size || [...F.st].some((k) => (k === 'due' ? dueSoon(l) : stOf(l) === k))).sort((a, b) => (dOf(a) || 0) - (dOf(b) || 0));
       const stCol = { label: 'Status', type: 'status', w: 1.1, get: (l) => ST[stOf(l)][0], html: (l) => T.pill(...ST[stOf(l)]) }, mat = { label: 'Material', w: 2.8, get: (l) => l.desc, html: (l) => T.two(l.desc || l.material, l.material) };
       T.table($('tb'), isPO
         ? { rows, name: 'PO_RO', empty: 'Tidak ada PO/RO pada filter ini.', onRow: (l) => l.material && MP.detail(l.material, l.plant), cols: [{ label: 'Dokumen', w: 1.2, get: (l) => l.doc + '/' + l.item, html: (l) => T.two(l.doc + '/' + l.item, l.type) }, mat,
@@ -80,8 +82,8 @@
         : { rows, name: 'Reservasi', empty: 'Tidak ada reservasi pada filter ini.', onRow: (l) => KX.resv(l), cols: [{ label: 'Reservasi', w: 1.1, get: (l) => l.resv + '/' + l.item }, mat, { label: 'Plant', w: 0.6, get: (l) => l.plant },
           { label: 'Tgl butuh', type: 'date', w: 0.9, get: (l) => l.reqDate }, { label: 'Sisa', type: 'num', w: 0.7, get: (l) => (resvOpen(l) ? l.diff : 0) }, { label: 'Penerima', w: 1.8, get: (l) => l.recipient || l.costCenter || l.wbs || '' }, stCol] });
     };
-    T.filters($('fb'), { q: isPO ? 'Cari nomor PO/RO, vendor, atau nama barang. Contoh: 4500012345, bearing' : 'Cari nomor reservasi, penerima, atau nama barang', plants: [...new Set(src.map((l) => l.plant))].filter((p) => G.zonaOk(p)).sort(), dates: true, years: T.years(src.map(dOf)),
-      selects: [{ key: 'st', label: 'Berjalan + terlambat', options: Object.entries(ST).map(([k, v]) => [k, v[0]]).concat([['all', 'Semua status']]) }] }, F, draw);
+    T.filters($('fb'), { q: isPO ? 'Cari nomor PO/RO, vendor, atau nama barang. Contoh: 4500012345, bearing' : 'Cari nomor reservasi, penerima, atau nama barang', plants: [...new Set(src.map((l) => l.plant))].filter((p) => G.zonaOk(p)).sort(), dates: true,
+      selects: [{ key: 'st', label: 'Status', def: ['open', 'late'], options: Object.entries(ST).map(([k, v]) => [k, v[0]]).concat(isPO ? [['due', 'Jatuh tempo ≤ 30 hari']] : []) }] }, F, draw);
     draw();
   };
   KX.resv = function (l) {

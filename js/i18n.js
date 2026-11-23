@@ -52,6 +52,7 @@
     'Jatuh tempo': 'Due date', 'Sisa': 'Remaining', 'Tgl butuh': 'Required date', 'Penerima': 'Recipient', 'Dokumen': 'Document', 'Lihat semua': 'View all', 'Buka detail': 'Open detail', 'Stok per plant': 'Stock per plant', 'Jejak waktu': 'Timeline',
     'Reservasi terbuka': 'Open reservations', 'Kontrak aktif': 'Active contracts', 'Semua kategori (dihitung)': 'All categories (counted)', 'Semua jenis': 'All types', 'Unduh Excel': 'Download Excel', 'Stok di bawah SS': 'Stock below SS', 'PO/RO terlambat': 'Late PO/RO', 'Kontrak hampir habis': 'Expiring contracts',
     'Tidak ada data.': 'No data.', 'perlu tindakan': 'needs action', 'saatnya pesan': 'time to order', 'Min sampai Max': 'Min to Max', 'stok berlebih': 'excess stock', '‹ Kembali ke hasil pencarian': '‹ Back to search results',
+    'Padanan KIMAP': 'KIMAP Equivalents', 'Beda client': 'Cross client', 'Satu client': 'Same client', 'KIMAP sama persis': 'Identical KIMAP', 'Mirip': 'Similar', 'Skor': 'Score', 'Alasan': 'Reason', 'Status': 'Status', 'Jenis': 'Type', 'Plant': 'Plant',
     // Info (warna dan tanda)
     'Kamus istilah': 'Glossary', 'Warna dan tanda': 'Colors and marks', 'Matriks stok (Material Control)': 'Stock matrix (Material Control)', 'Status': 'Status', 'Pergerakan (aging)': 'Movement (aging)',
     'Merah: perlu tindakan segera.': 'Red: needs action now.', 'Kuning: perhatian.': 'Yellow: attention.', 'Hijau: aman.': 'Green: OK.', 'Biru: informasi.': 'Blue: information.', 'Abu-abu: netral atau belum ada data.': 'Grey: neutral or no data.',

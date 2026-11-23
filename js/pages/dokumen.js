@@ -69,12 +69,12 @@
   }
   function drawList(body) {
     if (!DOCR.rows.length) { body.innerHTML = '<div class="hint">Pilih folder yang berisi dokumen PDF (boleh bersubfolder).</div>'; return; }
-    const F = (S.fd = S.fd || { q: '', jenis: '' });
+    const F = (S.fd = S.fd || { q: '', jenis: new Set() });
     body.innerHTML = '<div id="dkF"></div><div id="dkT" style="margin-top:14px"></div>';
-    const draw = () => T.table($('dkT'), { rows: DOCR.rows.filter((r) => (!F.jenis || r.jenis === F.jenis) && T.match([r.jenis, r.nomor, r.judul, r.tahun, r.folder].join(' '), F.q)).sort((a, b) => (a.rank || 9) - (b.rank || 9) || a.judul.localeCompare(b.judul)),
+    const draw = () => T.table($('dkT'), { rows: DOCR.rows.filter((r) => T.has(F, 'jenis', r.jenis) && T.match([r.jenis, r.nomor, r.judul, r.tahun, r.folder].join(' '), F.q)).sort((a, b) => (a.rank || 9) - (b.rank || 9) || a.judul.localeCompare(b.judul)),
       name: 'Daftar_Dokumen_Aturan', onRow: (r) => openViewer(r, 1), empty: 'Tidak ada dokumen pada filter ini.', cols: [{ label: 'Jenis', w: 0.8, get: (r) => r.jenis }, { label: 'Nomor', w: 0.8, get: (r) => r.nomor },
         { label: 'Judul', w: 4, get: (r) => r.judul }, { label: 'Tahun', type: 'date', w: 0.6, get: (r) => r.tahun }, { label: 'Ukuran (KB)', type: 'num', w: 0.8, get: (r) => r.kb }] });
-    T.filters($('dkF'), { q: 'Cari judul atau nomor dokumen', selects: [{ key: 'jenis', label: 'Semua jenis', options: [...new Set(DOCR.rows.map((r) => r.jenis))].sort().map((j) => [j, j]) }] }, F, draw);
+    T.filters($('dkF'), { q: 'Cari judul atau nomor dokumen', selects: [{ key: 'jenis', label: 'Jenis', options: [...new Set(DOCR.rows.map((r) => r.jenis))].sort().map((j) => [j, j]) }] }, F, draw);
     draw();
   }
   function drawSearch(body) {

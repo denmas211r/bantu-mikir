@@ -18,6 +18,7 @@ Live: https://denmas211r.github.io/bantu-mikir/
 | `js/i18n.js` | Bahasa Indonesia/English: kamus EN (menu, judul, tombol, filter, kepala kolom); pilihan disimpan di Pengaturan |
 | `js/pages/cexp.js` | Contract & Expediting sebagai halaman pantau (kartu ringkas + kotak cari + tabel sederhana lewat `G.listPage`): Kontrak, Pesanan (PO/RO dan Reservasi). Keluar-Masuk Barang ada di views.js. Detail lengkap di pop-up; data mentah SAP di Sumber Data > Data |
 | `js/pages/dokumen.js` | Governance: Dokumen Aturan (Pedoman/TKO/TKI/Regulasi dalam satu daftar, filter Jenis; daftar PDF dari folder lokal, penampil per halaman, cari teks lewat indeks di browser; butuh vendor/pdf.min.mjs untuk pencarian) |
+| `js/pages/padanan.js` | Padanan KIMAP (tab di Sumber Data): pasangan material sepadan per client/WK (KIMAP sama persis, kode mirip, deskripsi mirip) dengan skor dan alasan; batas di `THRESH` |
 | `js/pages/raw.js` | Data Mentah (tab di Sumber Data): MB52, MB51, ME2N, ME3N apa adanya, file sejenis digabung |
 | `js/ui.js` | Komponen lama (dipakai halaman lama, diganti bertahap): tabel (cari, urut, filter pilihan ganda, pilih kolom, halaman, unduh Excel), dropdown pilihan ganda, grafik |
 | `js/contract.js`, `js/trace.js` | Kontrak ME3N, PO/RO ME2N, pergerakan MB51, reservasi MB25, expediting & pelacakan |

@@ -102,19 +102,11 @@ function buildNav() {
   $('sideHelp').innerHTML = (MENU.find(([g]) => g === 'Bantuan') || [, []])[1].map(([k, t, ic]) => `<a href="#/${k}" data-k="${k}" class="side-btn" title="${t}" aria-label="${t}">${svg(ic)}</a>`).join('');
   buildZona();
 }
-// Filter Zona global (checkbox). Data Zona 4 belum dimuat, pemetaan plant->zona ada di js/config.js
+// Toggle WK global (kanan atas): WK PEP | WK PHE | Semua. Memfilter semua halaman lewat G.zonaOk(plant) (nama lama dipertahankan).
 function buildZona() {
-  const z = (S.zona = store.get('zona') || { sel: CFG.ZONA_DEFAULT.slice() });
-  const both = () => z.sel.length >= CFG.ZONA_LIST.length;
-  const paint = () => { $('zona').innerHTML = '<span class="zona-l">Zona</span>' + CFG.ZONA_LIST.map((n) => `<label><input type="checkbox" data-z="${n}" ${z.sel.includes(n) ? 'checked' : ''}>${n}</label>`).join('') + `<label><input type="checkbox" data-z="*" ${both() ? 'checked' : ''}>Semua</label>`; };
-  paint();
-  $('zona').onchange = (e) => {
-    const v = e.target.dataset.z;
-    z.sel = v === '*' ? (e.target.checked ? CFG.ZONA_LIST.slice() : CFG.ZONA_DEFAULT.slice()) : CFG.ZONA_LIST.filter((n) => (n === v ? e.target.checked : z.sel.includes(n)));
-    if (!z.sel.length) z.sel = CFG.ZONA_DEFAULT.slice();
-    store.set('zona', z); paint(); document.dispatchEvent(new Event('zonachange'));
-  };
-  G.zonaOk = (p) => both() || z.sel.includes(zonaOf(p));
+  S.wkSel = ['PEP', 'PHE', 'all'].includes(store.get('wkSel')) ? store.get('wkSel') : 'all';
+  UI.seg($('zona'), [['PEP', 'WK PEP'], ['PHE', 'WK PHE'], ['all', 'Semua']], S.wkSel, (v) => { S.wkSel = v; store.set('wkSel', v); buildZona(); document.dispatchEvent(new Event('zonachange')); });
+  G.zonaOk = (p) => S.wkSel === 'all' || wkOfPlant(p) === S.wkSel;
 }
 function sideData() {}
 function route() {

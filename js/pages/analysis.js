@@ -3,12 +3,12 @@
 // (maks 5 baris, "Lihat semua" membuka halaman fiturnya dengan pencarian terisi) + jejak waktu. Filter Plant dan rentang tanggal berlaku untuk semua blok
 // yang punya plant/tanggal (stok MB52 = posisi terkini, tidak ikut filter tanggal; kontrak tidak punya plant/tanggal).
 PAGES.analysis = function () {
-  const F = (S.fa = S.fa || { q: '', plant: '', from: '', to: '', year: '' });
+  const F = (S.fa = S.fa || { q: '', plant: new Set(), from: '', to: '' });
   const pre = sessionStorage.getItem('lacakQ'); if (pre) { F.q = pre; sessionStorage.removeItem('lacakQ'); }
   if (!S.mb52 && !S.mrpRes && !S.me2n) { $('view').innerHTML = needFile('MB52, MRP, atau ME2N', 'Material Analysis membaca stok, PO/RO, reservasi, kontrak, dan gerakan material.'); return; }
   const all = (k, f) => (S[k] ? S[k][k === 'mb52' ? 'items' : k === 'mb51' ? 'moves' : 'lines'].map(f) : []);
   const plants = [...new Set([...all('mb52', (i) => i.plant), ...all('me2n', (l) => l.plant), ...all('mb25', (l) => l.plant)])].filter((p) => p && G.zonaOk(p)).sort();
-  const years = T.years([...all('me2n', (l) => l.delivery), ...all('mb25', (l) => l.reqDate), ...all('mb51', (m) => m.date)]);
+  MP.zonaHook = () => PAGES.analysis();
   $('view').innerHTML = '<div id="fb"></div><div id="ar" class="view-root"></div>';
   const draw = () => {
     const q = F.q, ar = $('ar');
@@ -31,7 +31,7 @@ PAGES.analysis = function () {
   };
   const st = (o) => MP.worst([...o.mrp.values()].filter((r) => S.mrpPlants.has(r.plant)).map((r) => MP.pos(r.stock, r)));
   const one = (m, back) => {
-    const o = matIndex().map.get(m) || null, inP = (x) => G.zonaOk(x.plant) && (!F.plant || x.plant === F.plant), nrm = (i) => (i.sohNormal != null ? i.sohNormal : i.soh) || 0;
+    const o = matIndex().map.get(m) || null, inP = (x) => G.zonaOk(x.plant) && T.has(F, 'plant', x.plant), nrm = (i) => (i.sohNormal != null ? i.sohNormal : i.soh) || 0;
     const its = o ? o.items.filter(inP) : [], mrs = o ? [...o.mrp.values()].filter(inP) : [];
     const pos = S.me2n ? S.me2n.lines.filter((l) => l.material === m && !l.deleted && inP(l) && T.inRange(l.delivery, F)).sort((a, b) => KX.poSt(a).localeCompare(KX.poSt(b)) || (a.delivery || 0) - (b.delivery || 0)) : [];
     const rsv = S.mb25 ? S.mb25.lines.filter((l) => l.material === m && !l.deleted && inP(l) && T.inRange(l.reqDate, F)).sort((a, b) => KX.rvSt(a).localeCompare(KX.rvSt(b)) || (a.reqDate || 0) - (b.reqDate || 0)) : [];
@@ -60,12 +60,12 @@ PAGES.analysis = function () {
     T.table(B[4], { rows: ev, pageSize: 10, name: 'Jejak_' + m, empty: 'Tidak ada kejadian pada filter ini.', cols: [{ label: 'Tanggal', type: 'date', w: 0.9, get: (e) => e.date }, { label: 'Jenis', type: 'status', w: 1.1, get: (e) => e.step, html: (e) => T.pill(e.step, EV[e.step]) },
       { label: 'Plant', w: 0.6, get: (e) => e.plant }, { label: 'Dokumen', w: 1.2, get: (e) => e.doc }, { label: 'Keterangan', w: 3.4, get: (e) => e.text }, { label: 'Qty', type: 'num', w: 0.7, get: (e) => e.qty, cls: (e) => (e.qty < 0 ? 'neg' : '') }] });
     // "Lihat semua" membuka halaman fitur dengan pencarian = kode material dan filter yang sama
-    const go = [() => { S.fc = { q: m, plant: F.plant, pos: '' }; }, () => { S.psTab = 'po'; S.fp = { q: m, plant: F.plant, from: F.from, to: F.to, year: F.year, st: 'all' }; },
-      () => { S.psTab = 'resv'; S.fr = { q: m, plant: F.plant, from: F.from, to: F.to, year: F.year, st: 'all' }; }, () => { S.fk = { q: m, st: 'all' }; }];
+    const go = [() => { S.fc = { q: m, plant: new Set(F.plant), pos: new Set() }; }, () => { S.psTab = 'po'; S.fp = { q: m, plant: new Set(F.plant), from: F.from, to: F.to, st: new Set() }; },
+      () => { S.psTab = 'resv'; S.fr = { q: m, plant: new Set(F.plant), from: F.from, to: F.to, st: new Set() }; }, () => { S.fk = { q: m, st: new Set() }; }];
     ar.querySelectorAll('.blk').forEach((b, i) => { const a = b.querySelector('.blk-a'); if (a && go[i]) a.onclick = () => go[i](); });
-    $('aPop').onclick = (e) => { e.preventDefault(); MP.detail(m, F.plant); };
+    $('aPop').onclick = (e) => { e.preventDefault(); MP.detail(m, F.plant.size === 1 ? [...F.plant][0] : null); };
     if ($('aBack')) $('aBack').onclick = (e) => { e.preventDefault(); S.faMat = null; S.faQ = F.q; draw(); };
   };
-  T.filters($('fb'), { q: 'Nama atau kode material, No. PO/RO, PR, OA, atau reservasi. Contoh: laker, flange 3', plants, dates: true, years }, F, draw);
+  T.filters($('fb'), { q: 'Nama atau kode material, No. PO/RO, PR, OA, atau reservasi. Contoh: laker, flange 3', plants, dates: true }, F, draw);
   draw();
 };

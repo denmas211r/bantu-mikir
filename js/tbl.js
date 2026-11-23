@@ -15,37 +15,43 @@
   T.two = (main, sub) => `<span class="two"><b>${esc(main)}</b><small>${esc(sub)}</small></span>`; // sel dua baris: nama + kode
 
   // ---------- kartu ringkas ----------
-  // tiles: [[label, nilai (html), keterangan, kelas k-low|k-min|k-ok|k-max]]
-  T.kpis = (tiles) => `<div class="kpis">${tiles.map(([l, v, s, c]) => `<div class="kpi ${c || ''}"><span>${esc(l)}</span><b>${v}</b>${s ? `<small>${esc(s)}</small>` : ''}</div>`).join('')}</div>`;
-
-  // ---------- baris filter ----------
-  // spec: { q: placeholder, plants: [kode], dates: true, years: [tahun], selects: [{ key, label, options: [[nilai, teks]] }] }
-  // st  : objek state halaman (q, plant, from, to, year, dan key pilihan); onChange dipanggil setiap ada perubahan
-  T.filters = (el, spec, st, onChange) => {
-    const sel = (k, first, opts) => `<select data-k="${k}" aria-label="${esc(first)}"><option value="">${esc(first)}</option>${opts.map(([v, t]) => `<option value="${esc(v)}"${String(st[k] || '') === String(v) ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>`;
-    el.innerHTML = `<div class="fb">${spec.q ? `<input type="search" class="fb-q" data-k="q" placeholder="${esc(spec.q)}" aria-label="Cari" value="${esc(st.q || '')}">` : ''}
-      ${spec.plants ? sel('plant', 'Semua plant', spec.plants.map((p) => [p, plantLabel(p)])) : ''}
-      ${spec.dates ? `<label>Dari <input type="date" data-k="from" value="${esc(st.from || '')}"></label><label>Sampai <input type="date" data-k="to" value="${esc(st.to || '')}"></label>` : ''}
-      ${spec.years && spec.years.length ? sel('year', 'Semua tahun', spec.years.map((y) => [y, y])) : ''}
-      ${(spec.selects || []).map((s) => sel(s.key, s.label, s.options)).join('')}
-      <button type="button" class="btn ghost" data-k="reset">Reset</button></div>`;
-    let t;
-    const set = (k, v) => {
-      st[k] = v;
-      if (k === 'year') { st.from = v ? v + '-01-01' : ''; st.to = v ? v + '-12-31' : ''; el.querySelector('[data-k=from]') && (el.querySelector('[data-k=from]').value = st.from); el.querySelector('[data-k=to]') && (el.querySelector('[data-k=to]').value = st.to); }
-      if (k === 'from' || k === 'to') { st.year = ''; const y = el.querySelector('[data-k=year]'); if (y) y.value = ''; }
-    };
-    el.querySelectorAll('[data-k]').forEach((x) => {
-      const k = x.dataset.k;
-      if (k === 'reset') x.onclick = () => { Object.keys(st).forEach((z) => (st[z] = Array.isArray(st[z]) ? [] : '')); T.filters(el, spec, st, onChange); onChange(); };
-      else if (k === 'q') x.oninput = () => { clearTimeout(t); t = setTimeout(() => { set('q', x.value.trim()); onChange(); }, 250); };
-      else x.onchange = () => { set(k, x.value); onChange(); };
+  // tiles: [[label, nilai (html), keterangan, kelas k-low|k-min|k-ok|k-max, nilaiFilter?]]
+  // Kartu dengan nilaiFilter bisa diklik: mengisi filter status halaman (klik lagi = lepas). Hubungkan dengan T.bindKpis.
+  T.kpis = (tiles) => `<div class="kpis">${tiles.map(([l, v, s, c, f]) => `<div class="kpi ${c || ''}${f ? ' pick' : ''}"${f ? ` data-v="${esc(f)}" role="button" tabindex="0"` : ''}><span>${esc(l)}</span><b>${v}</b>${s ? `<small>${esc(s)}</small>` : ''}</div>`).join('')}</div>`;
+  T.bindKpis = (root, st, key, onChange) => {
+    const cur = st[key]; root.querySelectorAll('.kpi.pick').forEach((k) => {
+      k.classList.toggle('on', cur.size === 1 && cur.has(k.dataset.v));
+      const go = () => { const was = cur.size === 1 && cur.has(k.dataset.v); cur.clear(); if (!was) cur.add(k.dataset.v); if (T._repaint) T._repaint(); onChange(); };
+      k.onclick = go; k.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } };
     });
   };
-  // tanggal masuk rentang filter (kosong = semua). d = Date
+
+  // ---------- baris filter ----------
+  // spec: { q: placeholder, plants: [kode], dates: true, selects: [{ key, label, options: [[nilai, teks]], def?: [nilai terpilih awal] }] }
+  // st  : state halaman. q/from/to = teks; plant dan tiap key select = Set (kosong = semua). Dropdown berisi checkbox seperti filter pivot Excel; data berubah tiap checkbox diklik.
+  // Tanggal kosong = semua data; baru memfilter setelah diisi.
+  T.has = (st, k, v) => !st[k] || !st[k].size || st[k].has(v);
+  T.filters = (el, spec, st, onChange) => {
+    const multi = [].concat(spec.plants ? [{ key: 'plant', label: 'Plant', options: spec.plants.map((p) => [p, plantLabel(p)]) }] : [], spec.selects || []);
+    multi.forEach((m) => { if (!(st[m.key] instanceof Set)) st[m.key] = new Set(st[m.key] ? [].concat(st[m.key]) : []); });
+    if (!st._init) { st._init = 1; multi.forEach((m) => { if (!st[m.key].size) (m.def || []).forEach((v) => st[m.key].add(v)); }); }
+    const txt = (m) => { const c = st[m.key]; if (!c.size || c.size >= m.options.length) return 'Semua'; if (c.size === 1) return (m.options.find((o) => String(o[0]) === [...c][0]) || [, [...c][0]])[1]; return c.size + ' dipilih'; };
+    const paint = () => {
+      el.innerHTML = `<div class="fb">${spec.q ? `<input type="search" class="fb-q" data-k="q" placeholder="${esc(spec.q)}" aria-label="Cari" value="${esc(st.q || '')}">` : ''}
+        ${multi.map((m) => `<button type="button" class="fsel${st[m.key].size && st[m.key].size < m.options.length ? ' on' : ''}" data-m="${esc(m.key)}"><span>${esc(m.label)}</span><b>${esc(txt(m))}</b><i>▾</i></button>`).join('')}
+        ${spec.dates ? `<label>Dari <input type="date" data-k="from" value="${esc(st.from || '')}"></label><label>Sampai <input type="date" data-k="to" value="${esc(st.to || '')}"></label>` : ''}
+        <button type="button" class="btn ghost" data-k="reset">Reset</button></div>`;
+      let t;
+      const q = el.querySelector('[data-k=q]'); if (q) q.oninput = () => { clearTimeout(t); t = setTimeout(() => { st.q = q.value.trim(); onChange(); }, 250); };
+      el.querySelectorAll('input[type=date]').forEach((x) => (x.onchange = () => { st[x.dataset.k] = x.value; onChange(); }));
+      el.querySelectorAll('.fsel').forEach((b) => (b.onclick = () => { const m = multi.find((z) => z.key === b.dataset.m);
+        UI.checklist(UI.openPop(b, '', 280), m.options.map(([v, l]) => ({ value: String(v), label: l })), st[m.key], () => { b.querySelector('b').textContent = txt(m); b.classList.toggle('on', st[m.key].size > 0 && st[m.key].size < m.options.length); onChange(); }); }));
+      el.querySelector('[data-k=reset]').onclick = () => { st.q = st.from = st.to = ''; multi.forEach((m) => { st[m.key].clear(); (m.def || []).forEach((v) => st[m.key].add(v)); }); paint(); onChange(); };
+    };
+    T._repaint = paint; paint();
+  };
   const ymd = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   T.inRange = (d, st) => { if (!st.from && !st.to) return true; if (!(d instanceof Date) || isNaN(d)) return false; const s = ymd(d); return (!st.from || s >= st.from) && (!st.to || s <= st.to); };
-  T.years = (dates) => [...new Set(dates.filter((d) => d instanceof Date).map((d) => d.getFullYear()))].sort((a, b) => b - a);
   T.match = (text, q) => !q || hit(text, expand(q)); // cari dengan sinonim (laker = bearing)
 
   // ---------- tabel ----------

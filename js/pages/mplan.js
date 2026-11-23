@@ -111,11 +111,11 @@
   PAGES.control = function () {
     if (!S.mb52 && !S.mrpRes) { $('view').innerHTML = needFile('MB52 atau MRP', 'Material Control membaca stok (MB52) dan hasil MRP.'); return; }
     const mode = S.ovMode === 'dt' ? 'dt' : 'ov'; MP.zonaHook = () => PAGES.control();
-    const F = (S.fc = S.fc || { q: '', plant: '', pos: '' }), plants = [...S.mrpPlants].filter((p) => G.zonaOk(p)).sort();
+    const F = (S.fc = S.fc || { q: '', plant: new Set(), pos: new Set() }), plants = [...S.mrpPlants].filter((p) => G.zonaOk(p)).sort();
     $('view').innerHTML = '<div class="seg-bar"><span id="ovSeg"></span></div><div id="fb"></div><div id="kp"></div><div id="tb"></div>';
     UI.seg($('ovSeg'), [['ov', 'Overview'], ['dt', 'Detail']], mode, (v) => { S.ovMode = v; PAGES.control(); });
     const draw = () => {
-      const H = F.plant ? [F.plant] : plants;
+      const H = plants.filter((p) => T.has(F, 'plant', p));
       let rows0, cols;
       if (mode === 'ov') {
         const has = (o, p) => o.stock.has(p) || o.mrp.has(p);
@@ -134,11 +134,12 @@
           { label: 'To Order', type: 'num', w: 0.8, get: (x) => x.r.toOrder || null, cls: () => 'b' }, { label: 'Status', type: 'status', w: 1.2, get: (x) => POS[x.k][0], html: (x) => MP.posPill(x.k) }];
       }
       const n = (k) => rows0.filter((x) => x.k === k).length;
-      $('kp').innerHTML = T.kpis([['Di bawah SS', fmt(n('low'), 0), 'perlu tindakan', 'k-low'], ['Di bawah Min', fmt(n('min'), 0), 'saatnya pesan', 'k-min'], ['Normal', fmt(n('ok'), 0), 'Min sampai Max', 'k-ok'], ['Di atas Max', fmt(n('max'), 0), 'stok berlebih', 'k-max']]);
-      const rows = rows0.filter((x) => !F.pos || x.k === F.pos).sort((a, b) => RANK[a.k] - RANK[b.k]);
-      T.table($('tb'), { cols, rows, name: mode === 'ov' ? 'Material_Control_Overview' : 'Material_Control_Detail', empty: 'Tidak ada material pada filter ini.', onRow: (x) => (x.o ? MP.detail(x.o.material, F.plant) : MP.detail(x.r.material, x.r.plant)) });
+      $('kp').innerHTML = T.kpis([['Di bawah SS', fmt(n('low'), 0), 'perlu tindakan', 'k-low', 'low'], ['Di bawah Min', fmt(n('min'), 0), 'saatnya pesan', 'k-min', 'min'], ['Normal', fmt(n('ok'), 0), 'Min sampai Max', 'k-ok', 'ok'], ['Di atas Max', fmt(n('max'), 0), 'stok berlebih', 'k-max', 'max']]);
+      T.bindKpis($('kp'), F, 'pos', draw);
+      const rows = rows0.filter((x) => T.has(F, 'pos', x.k)).sort((a, b) => RANK[a.k] - RANK[b.k]);
+      T.table($('tb'), { cols, rows, name: mode === 'ov' ? 'Material_Control_Overview' : 'Material_Control_Detail', empty: 'Tidak ada material pada filter ini.', onRow: (x) => (x.o ? MP.detail(x.o.material, F.plant.size === 1 ? [...F.plant][0] : null) : MP.detail(x.r.material, x.r.plant)) });
     };
-    T.filters($('fb'), { q: 'Cari nama atau kode material. Contoh: laker, flange 3', plants, selects: [{ key: 'pos', label: 'Semua status', options: ['low', 'min', 'ok', 'max'].map((k) => [k, POS[k][0]]) }] }, F, draw);
+    T.filters($('fb'), { q: 'Cari nama atau kode material. Contoh: laker, flange 3', plants, selects: [{ key: 'pos', label: 'Status', options: ['low', 'min', 'ok', 'max'].map((k) => [k, POS[k][0]]) }] }, F, draw);
     draw();
   };
 })();

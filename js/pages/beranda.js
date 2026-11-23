@@ -23,8 +23,8 @@ PAGES.beranda = function () {
   T.table(B[1], { rows: late.slice(0, 8), pageSize: 8, empty: 'Tidak ada PO/RO terlambat.', onRow: (l) => l.material && MP.detail(l.material, l.plant), cols: [{ label: 'Dokumen', w: 1.2, get: (l) => l.doc + '/' + l.item, html: (l) => T.two(l.doc + '/' + l.item, l.type) },
     { label: 'Material', w: 2.4, get: (l) => l.desc, html: (l) => T.two(l.desc, l.vendor || '') }, { label: 'Plant', w: 0.6, get: (l) => l.plant }, { label: 'Terlambat', type: 'num', w: 0.8, get: (l) => l.lateDays, html: (l) => fmt(l.lateDays, 0) + ' hari', cls: () => 'neg' }] });
   const a = [...$('view').querySelectorAll('.blk')].map((b) => b.querySelector('.blk-a'));
-  if (a[0]) a[0].onclick = () => { S.ovMode = 'dt'; S.fc = { q: '', plant: '', pos: 'low' }; };
-  if (a[1]) a[1].onclick = () => { S.psTab = 'po'; S.fp = { q: '', plant: '', from: '', to: '', year: '', st: 'late' }; };
+  if (a[0]) a[0].onclick = () => { S.ovMode = 'dt'; S.fc = { q: '', plant: new Set(), pos: new Set(['low']), _init: 1 }; };
+  if (a[1]) a[1].onclick = () => { S.psTab = 'po'; S.fp = { q: '', plant: new Set(), from: '', to: '', st: new Set(['late']), _init: 1 }; };
 };
 PAGES.gudang = function () {
   if (!S.mb52) { $('view').innerHTML = `<div class="panel empty"><h3>Butuh MB52</h3><p>Analisis warehouse dihitung dari stok MB52 (dan MRP untuk pergerakan).</p><a class="btn primary" href="#/data">Buka Sumber Data</a></div>`; return; }

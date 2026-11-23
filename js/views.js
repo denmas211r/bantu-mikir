@@ -300,12 +300,13 @@
   // Keluar-Masuk Barang: filter standar (cari, plant, rentang tanggal, tahun, kategori) + kartu ringkas + tabel 7 kolom.
   PAGES.gerak = function () {
     if (!S.mb51) { $('view').innerHTML = needFile('file MB51', 'Pergerakan material dibaca dari MB51. Taruh semua file MB51 (misalnya per bulan) di folder data: web menggabungkannya dan membuang baris yang dobel.'); return; }
-    const D = prep(), F = (S.fg = S.fg || { q: '', plant: '', from: '', to: '', year: '', cat: '' });
+    const D = prep(), F = (S.fg = S.fg || { q: '', plant: new Set(), from: '', to: '', cat: new Set() });
     const all = D.moves.filter((x) => x.m.date).sort((a, b) => b.m.date - a.m.date);
     const cats = [...new Set(all.map((x) => catName(x.cat)))].sort();
+    MP.zonaHook = () => PAGES.gerak();
     $('view').innerHTML = '<div id="fb"></div><div id="kp"></div><div id="tb"></div>';
     const draw = () => {
-      const rows = all.filter((x) => G.zonaOk(x.m.plant) && (!F.plant || x.m.plant === F.plant) && T.inRange(x.m.date, F) && (F.cat ? catName(x.cat) === F.cat : x.cat !== 'Not Included')
+      const rows = all.filter((x) => G.zonaOk(x.m.plant) && T.has(F, 'plant', x.m.plant) && T.inRange(x.m.date, F) && T.has(F, 'cat', catName(x.cat))
         && T.match([x.m.material, x.m.desc, x.m.matDoc, x.m.po, x.m.resv, x.m.header].join(' '), F.q));
       const inn = rows.filter((x) => x.m.qty > 0), out = rows.filter((x) => x.m.qty < 0), use = rows.filter((x) => x.cat === 'Own Use'), v = (l) => money(l.reduce((a, x) => a + x.idr, 0), 'IDR');
       $('kp').innerHTML = T.kpis([['Gerakan', fmt(rows.length, 0), F.from || F.to ? (F.from || '…') + ' s.d. ' + (F.to || '…') : 'semua tanggal'], ['Barang masuk', v(inn), fmt(inn.length, 0) + ' gerakan'], ['Barang keluar', v(out), fmt(out.length, 0) + ' gerakan'], ['Pemakaian (Own Use)', v(use), fmt(use.length, 0) + ' gerakan']]);
@@ -314,8 +315,8 @@
         { label: 'Kategori', w: 1.2, get: (x) => catName(x.cat) }, { label: 'Qty', type: 'num', w: 0.8, get: (x) => x.m.qty, cls: (x) => (x.m.qty < 0 ? 'neg' : '') }, { label: 'Nilai', type: 'num', w: 1.1, get: (x) => x.m.amount, html: (x) => money(x.m.amount, x.cur) },
         { label: 'Dokumen', w: 1, get: (x) => x.m.matDoc }] });
     };
-    T.filters($('fb'), { q: 'Cari material, dokumen, atau keterangan. Contoh: laker, 4900012345', plants: [...new Set(all.map((x) => x.m.plant))].filter((p) => G.zonaOk(p)).sort(), dates: true, years: T.years(all.map((x) => x.m.date)),
-      selects: [{ key: 'cat', label: 'Semua kategori (dihitung)', options: cats.map((c) => [c, c]) }] }, F, draw);
+    T.filters($('fb'), { q: 'Cari material, dokumen, atau keterangan. Contoh: laker, 4900012345', plants: [...new Set(all.map((x) => x.m.plant))].filter((p) => G.zonaOk(p)).sort(), dates: true,
+      selects: [{ key: 'cat', label: 'Kategori', options: cats.map((c) => [c, c]), def: cats.filter((c) => c !== 'Not Included') }] }, F, draw);
     draw();
   };
 
