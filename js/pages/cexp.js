@@ -13,12 +13,12 @@
   Object.assign(KX, { K_ST, kSt });
   PAGES.kontrak = function () {
     if (!S.me3n) return empty('file kontrak ME3N', 'Taruh file ME3N di folder data, atau upload di Sumber Data.');
-    const F = (S.fk = S.fk || { q: '', st: new Set() }), docs = [...S.me3n.docs.values()], txt = new Map();
+    const F = (S.fk = S.fk || { q: '', st: new Set(), pg: new Set() }), docs = [...S.me3n.docs.values()], txt = new Map();
     S.me3n.items.forEach((i) => txt.set(i.doc, (txt.get(i.doc) || '') + ' ' + i.material + ' ' + i.desc));
     $('view').innerHTML = '<div id="fb"></div><div id="kp"></div><div id="tb"></div>';
     let shown = 60; MP.zonaHook = () => PAGES.kontrak();
     const draw = () => {
-      const base = docs.filter((d) => T.match([d.doc, d.vendor, d.pic, d.kel, txt.get(d.doc)].join(' '), F.q)), n = (k) => base.filter((d) => kSt(d) === k).length;
+      const base = docs.filter((d) => T.has(F, 'pg', d.pg || '') && T.match([d.doc, d.vendor, d.pic, d.kel, txt.get(d.doc)].join(' '), F.q)), n = (k) => base.filter((d) => kSt(d) === k).length;
       $('kp').innerHTML = T.kpis([['Aktif', fmt(n('aktif'), 0), 'masih berlaku', 'k-ok', 'aktif'], ['Hampir habis', fmt(n('soon'), 0), 'berakhir ≤ 90 hari', 'k-low', 'soon'], ['Sisa nilai < 20%', fmt(n('low'), 0), 'perlu amandemen', 'k-min', 'low'], ['Habis', fmt(n('habis'), 0), 'lewat masa / nilai habis', '', 'habis']]);
       T.bindKpis($('kp'), F, 'st', () => { shown = 60; draw(); });
       const list = base.filter((d) => T.has(F, 'st', kSt(d))).sort((a, b) => (a.sisaHari ?? 1e9) - (b.sisaHari ?? 1e9));
@@ -31,7 +31,7 @@
       $('tb').querySelectorAll('.kcard').forEach((c) => (c.onclick = () => KX.contract(c.dataset.oa)));
       if ($('kMore')) $('kMore').onclick = () => { shown += 60; draw(); };
     };
-    T.filters($('fb'), { q: 'Cari nomor OA, vendor, atau nama barang. Contoh: laker, gasket', selects: [{ key: 'st', label: 'Status', def: ['aktif', 'soon', 'low'], options: [['aktif', 'Aktif'], ['soon', 'Hampir habis'], ['low', 'Sisa nilai < 20%'], ['habis', 'Habis']] }] }, F, () => { shown = 60; draw(); });
+    T.filters($('fb'), { q: 'Cari nomor OA, vendor, atau nama barang. Contoh: laker, gasket', selects: [{ key: 'pg', label: 'Purch. Group', options: [...new Set(docs.map((d) => d.pg || ''))].filter(Boolean).sort().map((g) => [g, g + (window.Contract && Contract.PIC && Contract.PIC[g] ? ' ' + Contract.PIC[g] : '')]) }, { key: 'st', label: 'Status', def: ['aktif', 'soon', 'low'], options: [['aktif', 'Aktif'], ['soon', 'Hampir habis'], ['low', 'Sisa nilai < 20%'], ['habis', 'Habis']] }] }, F, () => { shown = 60; draw(); });
     draw();
   };
   KX.contract = function (doc) {

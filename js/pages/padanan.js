@@ -1,4 +1,4 @@
-// ============ Padanan KIMAP (menu sendiri di Material Planning): material yang sepadan di satu client atau beda client ============
+// ============ Padanan KIMAP (menu di grup Data): material yang sepadan di satu client atau beda client ============
 // Satu entri = satu KIMAP di satu WK (client 100 = PEP, 180 = PHE); stok = jumlah semua plant. Pasangan dicari dengan tiga cara:
 //  1) KIMAP sama persis di dua client            -> skor 100
 //  2) Kode mirip (beda <= 2 karakter) + deskripsi mirip -> skor = 50% kemiripan kode + 50% kemiripan deskripsi (minimal 80)
@@ -22,8 +22,9 @@
   function pairs() {
     if (S._pad && S._pad.ver === S.ver) return S._pad.list;
     const E = entries(), seen = new Set(), list = [];
-    const put = (a, b, score, reason, kind) => { if (a.code === b.code && a.wk === b.wk) return; const k = [a.code + a.wk, b.code + b.wk].sort().join('~'); if (seen.has(k)) return; seen.add(k);
-      if (a.wk > b.wk || (a.wk === b.wk && a.code > b.code)) [a, b] = [b, a]; list.push({ a, b, score, reason, kind, jenis: a.wk === b.wk ? 'Satu client' : 'Beda client' }); };
+    const put = (a, b, score, reason, kind) => {
+      const sim = Math.round(jac(a.t, b.t) * 100); if (a.code === b.code && a.wk === b.wk) return; const k = [a.code + a.wk, b.code + b.wk].sort().join('~'); if (seen.has(k)) return; seen.add(k);
+      if (a.wk > b.wk || (a.wk === b.wk && a.code > b.code)) [a, b] = [b, a]; list.push({ a, b, score, sim, reason, kind, jenis: a.wk === b.wk ? 'Sesama WK' : 'Lintas WK' }); };
     // 1) KIMAP sama persis di client berbeda
     const byCode = new Map(); E.forEach((e) => (byCode.get(e.code) || byCode.set(e.code, []).get(e.code)).push(e));
     byCode.forEach((g) => { for (let i = 0; i < g.length; i++) for (let j = i + 1; j < g.length; j++) put(g[i], g[j], 100, 'KIMAP sama persis', 'exact'); });
@@ -36,7 +37,7 @@
     const freq = new Map(); E.forEach((e) => e.t.forEach((w) => freq.set(w, (freq.get(w) || 0) + 1)));
     const inv = new Map(); E.forEach((e) => { if (e.t.length < 3) return; e.t.slice().sort((x, y) => freq.get(x) - freq.get(y)).slice(0, 3).forEach((w) => { if (freq.get(w) <= THRESH.bucket) (inv.get(w) || inv.set(w, []).get(w)).push(e); }); });
     inv.forEach((g) => { for (let i = 0; i < g.length; i++) for (let j = i + 1; j < g.length; j++) { const a = g[i], b = g[j]; if (a.code === b.code) continue; const J = jac(a.t, b.t); if (J >= THRESH.descOnly) put(a, b, Math.round(100 * J), `Deskripsi ${Math.round(J * 100)}% mirip`, 'desc'); } });
-    list.sort((x, y) => y.score - x.score || x.a.desc.localeCompare(y.a.desc));
+    list.sort((x, y) => y.sim - x.sim || y.score - x.score || x.a.desc.localeCompare(y.a.desc));
     S._pad = { ver: S.ver, list }; return list;
   }
 
@@ -47,18 +48,18 @@
     host.innerHTML = '<div id="pdF"></div><div id="pdK" style="margin-top:14px"></div><div id="pdT" style="margin-top:14px"></div>';
     const draw = () => {
       const base = pairs().filter((p) => (S.wkSel === 'all' || (p.a.wk === S.wkSel && p.b.wk === S.wkSel)) && (T.matOk(F, p.a.code, p.a.desc) || T.matOk(F, p.b.code, p.b.desc)) && T.match([p.a.code, p.a.desc, p.b.code, p.b.desc].join(' '), F.q));
-      const n = (f) => base.filter(f).length, isT = (v, p) => (v === 'cross' ? p.jenis === 'Beda client' : v === 'same' ? p.jenis === 'Satu client' : v === 'exact' ? p.kind === 'exact' : p.kind !== 'exact');
-      $('pdK').innerHTML = T.kpis([['Beda client', fmt(n((p) => p.jenis === 'Beda client'), 0), 'PEP dan PHE', '', 'cross'], ['Satu client', fmt(n((p) => p.jenis === 'Satu client'), 0), 'dalam client yang sama', '', 'same'],
-        ['KIMAP sama persis', fmt(n((p) => p.kind === 'exact'), 0), 'kode identik di dua client', 'k-ok', 'exact'], ['Mirip', fmt(n((p) => p.kind !== 'exact'), 0), 'kode / deskripsi mendekati sama', 'k-min', 'near']]);
+      const n = (f) => base.filter(f).length, isT = (v, p) => (v === 'cross' ? p.jenis === 'Lintas WK' : v === 'same' ? p.jenis === 'Sesama WK' : v === 'exact' ? p.kind === 'exact' : p.kind !== 'exact');
+      $('pdK').innerHTML = T.kpis([['Lintas WK', fmt(n((p) => p.jenis === 'Lintas WK'), 0), 'PEP dengan PHE', 'k-cross', 'cross'], ['Sesama WK', fmt(n((p) => p.jenis === 'Sesama WK'), 0), 'dalam satu WK', 'k-min', 'same'],
+        ['KIMAP sama persis', fmt(n((p) => p.kind === 'exact'), 0), 'kode identik di dua WK', 'k-ok', 'exact'], ['Mirip', fmt(n((p) => p.kind !== 'exact'), 0), 'kode atau deskripsi mendekati', 'k-max', 'near']]);
       T.bindKpis($('pdK'), F, 'tipe', draw);
       const rows = base.filter((p) => !F.tipe.size || [...F.tipe].some((v) => isT(v, p)));
-      const who = (e) => T.two(e.desc || e.code, e.code + ' · WK ' + e.wk);
+      const who = (e) => `<span class="two"><b>${esc(e.desc || e.code)}</b><small>${esc(e.code)} · <span class="wk wk-${esc(e.wk)}">WK ${esc(e.wk)}</span></small></span>`;
       T.table($('pdT'), { rows, name: 'Padanan_KIMAP', empty: 'Tidak ada padanan pada filter ini.', onRow: (p) => MP.detail(p.a.code), cols: [
-        { label: 'Material A', w: 3, get: (p) => p.a.desc, html: (p) => who(p.a) }, { label: 'Stok A', type: 'num', w: 0.7, get: (p) => p.a.stock },
-        { label: 'Material B', w: 3, get: (p) => p.b.desc, html: (p) => who(p.b) }, { label: 'Stok B', type: 'num', w: 0.7, get: (p) => p.b.stock },
-        { label: 'Skor', type: 'status', w: 0.7, get: (p) => p.score, html: (p) => T.pill(p.score + '%', p.score >= 95 ? 'ok' : p.score >= 88 ? 'info' : 'warn') }, { label: 'Alasan', w: 2.2, get: (p) => p.reason }] });
+        { label: 'Material A', w: 3.2, get: (p) => p.a.desc, html: (p) => who(p.a), cls: (p) => (p.jenis === 'Lintas WK' ? 'xw-cross' : 'xw-same') }, { label: 'Material B', w: 3.2, get: (p) => p.b.desc, html: (p) => who(p.b) },
+        { label: 'Kemiripan deskripsi', type: 'status', w: 1.1, get: (p) => p.sim, html: (p) => T.pill(p.sim + '%', p.sim >= 95 ? 'ok' : p.sim >= 80 ? 'info' : 'warn') },
+        { label: 'Hubungan', type: 'status', w: 1, get: (p) => p.jenis, html: (p) => T.pill(p.jenis, p.jenis === 'Lintas WK' ? 'cross' : 'same') }] });
     };
-    T.filters($('pdF'), { q: 'Cari KIMAP atau deskripsi. Contoh: gasket, K180100047', materials: pairs().flatMap((p) => [[p.a.code, p.a.desc], [p.b.code, p.b.desc]]), selects: [{ key: 'tipe', label: 'Jenis', options: [['cross', 'Beda client'], ['same', 'Satu client'], ['exact', 'KIMAP sama persis'], ['near', 'Mirip']] }] }, F, draw);
+    T.filters($('pdF'), { q: 'Cari KIMAP atau deskripsi. Contoh: gasket, K180100047', materials: pairs().flatMap((p) => [[p.a.code, p.a.desc], [p.b.code, p.b.desc]]), selects: [{ key: 'tipe', label: 'Hubungan', options: [['cross', 'Lintas WK'], ['same', 'Sesama WK'], ['exact', 'KIMAP sama persis'], ['near', 'Mirip']] }] }, F, draw);
     draw();
   };
 })();

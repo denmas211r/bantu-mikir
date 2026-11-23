@@ -24,7 +24,6 @@ const MENU = [
   ['Material Planning', [
     ['analysis', 'Material Analysis', 'route'],
     ['control', 'Material Control', 'gauge'],
-    ['padanan', 'Padanan KIMAP', 'list'],
   ]],
   ['Contract & Expediting', [
     ['kontrak', 'Kontrak', 'doc'],
@@ -33,7 +32,7 @@ const MENU = [
   ]],
   // Performance & Reporting (Analisis Warehouse, Deadstock & BAU) disembunyikan dulu di versi basic; kodenya tetap di beranda.js dan optim.js.
   ['Governance', [['aturan', 'Dokumen Aturan', 'book']]],
-  ['Data', [['data', 'Sumber Data', 'db']]],
+  ['Data', [['data', 'Sumber Data', 'db'], ['padanan', 'Padanan KIMAP', 'list']]],
   ['Bantuan', [['pengaturan', 'Pengaturan', 'gear']]],
 ];
 // route lama (bookmark) -> route pengganti; opsi tab diset lewat fungsi
