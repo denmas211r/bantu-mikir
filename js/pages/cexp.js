@@ -77,7 +77,7 @@
       const rows = base.filter((l) => !F.st.size || [...F.st].some((k) => (k === 'due' ? dueSoon(l) : stOf(l) === k))).sort((a, b) => (dOf(a) || 0) - (dOf(b) || 0));
       const stCol = { label: 'Status', type: 'status', w: 1.1, get: (l) => ST[stOf(l)][0], html: (l) => T.pill(...ST[stOf(l)]) }, mat = { label: 'Material', w: 2.8, get: (l) => l.desc, html: (l) => T.two(l.desc || l.material, l.material) };
       T.table($('tb'), isPO
-        ? { rows, name: 'PO_RO', empty: 'Tidak ada PO/RO pada filter ini.', onRow: (l) => l.material && MP.detail(l.material, l.plant), cols: [{ label: 'Dokumen', w: 1.2, get: (l) => l.doc + '/' + l.item, html: (l) => T.two(l.doc + '/' + l.item, l.type) }, mat,
+        ? { rows, name: 'PO_RO', empty: 'Tidak ada PO/RO pada filter ini.', onRow: (l) => l.material && MP.detail(l.material, l.plant, { tab: 'po' }), cols: [{ label: 'Dokumen', w: 1.2, get: (l) => l.doc + '/' + l.item, html: (l) => T.two(l.doc + '/' + l.item, l.type) }, mat,
           { label: 'Vendor', w: 2, get: (l) => l.vendor }, { label: 'Plant', w: 0.6, get: (l) => l.plant }, { label: 'Jatuh tempo', type: 'date', w: 0.9, get: (l) => l.delivery }, { label: 'Sisa', type: 'num', w: 0.7, get: (l) => l.openQty }, stCol] }
         : { rows, name: 'Reservasi', empty: 'Tidak ada reservasi pada filter ini.', onRow: (l) => KX.resv(l), cols: [{ label: 'Reservasi', w: 1.1, get: (l) => l.resv + '/' + l.item }, mat, { label: 'Plant', w: 0.6, get: (l) => l.plant },
           { label: 'Tgl butuh', type: 'date', w: 0.9, get: (l) => l.reqDate }, { label: 'Sisa', type: 'num', w: 0.7, get: (l) => (resvOpen(l) ? l.diff : 0) }, { label: 'Penerima', w: 1.8, get: (l) => l.recipient || l.costCenter || l.wbs || '' }, stCol] });

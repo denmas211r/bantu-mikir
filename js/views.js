@@ -310,7 +310,7 @@
         && T.match([x.m.material, x.m.desc, x.m.matDoc, x.m.po, x.m.resv, x.m.header].join(' '), F.q));
       const inn = rows.filter((x) => x.m.qty > 0), out = rows.filter((x) => x.m.qty < 0), use = rows.filter((x) => x.cat === 'Own Use'), v = (l) => money(l.reduce((a, x) => a + x.idr, 0), 'IDR');
       $('kp').innerHTML = T.kpis([['Gerakan', fmt(rows.length, 0), F.from || F.to ? (F.from || '…') + ' s.d. ' + (F.to || '…') : 'semua tanggal'], ['Barang masuk', v(inn), fmt(inn.length, 0) + ' gerakan'], ['Barang keluar', v(out), fmt(out.length, 0) + ' gerakan'], ['Pemakaian (Own Use)', v(use), fmt(use.length, 0) + ' gerakan']]);
-      T.table($('tb'), { rows, name: 'Keluar_Masuk_Barang', empty: 'Tidak ada gerakan pada filter ini.', onRow: (x) => MP.detail(x.m.material, x.m.plant), cols: [
+      T.table($('tb'), { rows, name: 'Keluar_Masuk_Barang', empty: 'Tidak ada gerakan pada filter ini.', onRow: (x) => MP.detail(x.m.material, x.m.plant, { tab: 'trx' }), cols: [
         { label: 'Tanggal', type: 'date', w: 0.9, get: (x) => x.m.date }, { label: 'Plant', w: 0.6, get: (x) => x.m.plant }, { label: 'Material', w: 3, get: (x) => x.m.desc, html: (x) => T.two(x.m.desc || x.m.material, x.m.material) },
         { label: 'Kategori', w: 1.2, get: (x) => catName(x.cat) }, { label: 'Qty', type: 'num', w: 0.8, get: (x) => x.m.qty, cls: (x) => (x.m.qty < 0 ? 'neg' : '') }, { label: 'Nilai', type: 'num', w: 1.1, get: (x) => x.m.amount, html: (x) => money(x.m.amount, x.cur) },
         { label: 'Dokumen', w: 1, get: (x) => x.m.matDoc }] });

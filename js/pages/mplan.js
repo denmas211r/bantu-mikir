@@ -45,7 +45,7 @@
     const body = UI.drawer('', { wide: true, label: 'Detail material ' + mat });
     if (!o && !plantsAll.length) { body.innerHTML = `<div class="md-head"><h2 class="mono">${esc(mat)}</h2></div><p class="muted">Material tidak ada di data yang dimuat.</p>`; return; }
     const uom = (o && o.uom) || ref.uom || '';
-    const F = { plant: opt.calc || (plant && plantsAll.includes(plant) ? plant : ''), tab: opt.calc ? 'mrp' : 'stok', calc: opt.calc || '' };
+    const F = { plant: opt.calc || (plant && plantsAll.includes(plant) ? plant : ''), tab: opt.tab || (opt.calc ? 'mrp' : 'stok'), calc: opt.calc || '' };
     const render = () => {
       const inP = (x) => !F.plant || x.plant === F.plant;
       const its = its0.filter(inP), mrs = mrs0.filter(inP), pos = pos0.filter(inP), rss = rss0.filter(inP), kts = kts0, mv = mv0.filter(inP);
@@ -108,6 +108,8 @@
   MP.pos = (stock, r) => (r ? mrpPos(stock || 0, r) : '');
   MP.posPill = (k) => T.pill(POS[k || ''][0], POS[k || ''][1]);
   MP.worst = (ks) => ks.slice().sort((a, b) => RANK[a] - RANK[b])[0] || '';
+  // OA aktif per material (dipakai kolom OA di Overview dan Detail)
+  MP.oaOf = (m) => { if (!S.me3n) return []; if (!MP._oa || MP._oa.ver !== S.ver) { const map = new Map(); S.me3n.items.forEach((i) => { if (!i.material || KX.kSt(i.k) === 'habis') return; const a = map.get(i.material) || map.set(i.material, []).get(i.material); if (!a.includes(i.doc)) a.push(i.doc); }); MP._oa = { ver: S.ver, map }; } return MP._oa.map.get(m) || []; };
   PAGES.control = function () {
     if (!S.mb52 && !S.mrpRes) { $('view').innerHTML = needFile('MB52 atau MRP', 'Material Control membaca stok (MB52) dan hasil MRP.'); return; }
     const mode = ['dt', 'oa'].includes(S.ovMode) ? S.ovMode : 'ov'; MP.zonaHook = () => PAGES.control();
@@ -117,6 +119,8 @@
     const mats = mode === 'oa' ? oaDocs.flatMap((d) => (oaItems.get(d.doc) || []).map((i) => [i.material, i.desc])) : [...mi.values()].map((o) => [o.material, o.desc]);
     $('view').innerHTML = '<div class="seg-bar"><span id="ovSeg"></span></div><div id="fb"></div><div id="kp"></div><div id="tb"></div>';
     UI.seg($('ovSeg'), [['ov', 'Overview'], ['dt', 'Detail'], ['oa', 'Per OA']], mode, (v) => { S.ovMode = v; PAGES.control(); });
+    const oaCol = (get) => ({ label: 'OA', w: 1.3, get: (x) => (MP.oaOf(get(x)).join(', ')), html: (x) => { const a = MP.oaOf(get(x)); if (!a.length) return ''; const d = S.me3n.docs.get(a[0]); return `<span class="two oa-l"><b>${esc(a[0])}${a.length > 1 ? ' +' + (a.length - 1) : ''}</b><small>${esc((d && d.vendor) || '')}</small></span>`; },
+      onCell: (x) => { S.ovMode = 'oa'; S.fc = { q: '', plant: new Set(F.plant), pos: new Set(), oa: new Set(MP.oaOf(get(x))), _init: 1 }; PAGES.control(); } });
     const draw = () => {
       const H = plants.filter((p) => T.has(F, 'plant', p));
       let rows0, cols, name;
@@ -125,18 +129,20 @@
         rows0 = [...mi.values()].filter((o) => H.some((p) => has(o, p)) && T.matOk(F, o.material, o.desc) && T.match(o.material + ' ' + o.desc, F.q))
           .map((o) => ({ o, k: MP.worst(H.filter((p) => has(o, p)).map((p) => MP.pos(o.stock.get(p), o.mrp.get(p)))) }));
         name = 'Material_Control_Overview';
-        cols = [{ label: 'Material', w: 3.4, get: (x) => x.o.desc, html: (x) => T.two(x.o.desc || x.o.material, x.o.material + ' · ' + (x.o.uom || '')) },
-          ...H.map((p) => ({ label: p, type: 'num', w: 0.8, get: (x) => (has(x.o, p) ? x.o.stock.get(p) || 0 : null), cls: (x) => (has(x.o, p) ? 'mx-' + (MP.pos(x.o.stock.get(p), x.o.mrp.get(p)) || 'none') : '') })),
-          { label: 'To Order', type: 'num', w: 0.8, get: (x) => H.reduce((a, p) => a + ((x.o.mrp.get(p) || {}).toOrder || 0), 0) || null, cls: () => 'b' },
-          { label: 'Status', type: 'status', w: 1.2, get: (x) => POS[x.k][0], html: (x) => MP.posPill(x.k) }];
+        const one = H.length === 1 ? H[0] : null;
+        cols = [{ label: 'Material', w: 3, get: (x) => x.o.desc, html: (x) => T.two(x.o.desc || x.o.material, x.o.material + ' · ' + (x.o.uom || '')) }, oaCol((x) => x.o.material),
+          ...H.map((p) => ({ label: p, type: 'num', w: 0.8, get: (x) => (has(x.o, p) ? x.o.stock.get(p) || 0 : null), cls: (x) => (has(x.o, p) ? 'mx-' + (MP.pos(x.o.stock.get(p), x.o.mrp.get(p)) || 'none') : ''), onCell: (x) => MP.detail(x.o.material, p, { tab: 'stok' }) })),
+          { label: 'To Order', type: 'num', w: 0.8, get: (x) => H.reduce((a, p) => a + ((x.o.mrp.get(p) || {}).toOrder || 0), 0) || null, cls: () => 'b', onCell: (x) => MP.detail(x.o.material, one, { tab: 'mrp' }) },
+          { label: 'Status', type: 'status', w: 1.2, get: (x) => POS[x.k][0], html: (x) => MP.posPill(x.k), onCell: (x) => MP.detail(x.o.material, one, { tab: 'mrp' }) }];
       } else if (mode === 'dt') {
         rows0 = (S.mrpRes ? [...S.mrpRes.values()] : []).filter((r) => H.includes(r.plant) && T.matOk(F, r.material, r.desc) && T.match(r.material + ' ' + (r.kimap || '') + ' ' + r.desc, F.q)).map((r) => ({ r, k: MP.pos(r.stock, r) }));
         name = 'Material_Control_Detail';
-        cols = [{ label: 'Plant', w: 0.7, get: (x) => x.r.plant }, { label: 'Material', w: 3, get: (x) => x.r.desc, html: (x) => T.two(x.r.desc, x.r.material + ' · ' + (x.r.uom || '')) },
-          { label: 'Aging', type: 'status', w: 0.7, get: (x) => x.r.aging, html: (x) => agingPill(x.r.aging) },
-          { label: 'SS', type: 'num', w: 0.7, get: (x) => fin(x.r.ss), cls: () => 'ref' }, { label: 'Min', type: 'num', w: 0.7, get: (x) => fin(x.r.min2), cls: () => 'ref' }, { label: 'Max', type: 'num', w: 0.7, get: (x) => fin(x.r.max2), cls: () => 'ref' },
-          { label: 'Stok', type: 'num', w: 0.8, get: (x) => x.r.stock, cls: (x) => 'mx-' + (x.k || 'none') }, { label: 'OS PO/RO', type: 'num', w: 0.8, get: (x) => x.r.ospo }, { label: 'Reservasi', type: 'num', w: 0.8, get: (x) => x.r.mb25 },
-          { label: 'To Order', type: 'num', w: 0.8, get: (x) => x.r.toOrder || null, cls: () => 'b' }, { label: 'Status', type: 'status', w: 1.2, get: (x) => POS[x.k][0], html: (x) => MP.posPill(x.k) }];
+        const go = (tab, calc) => (x) => MP.detail(x.r.material, x.r.plant, calc ? { calc: x.r.plant } : { tab });
+        cols = [{ label: 'Plant', w: 0.7, get: (x) => x.r.plant }, { label: 'Material', w: 2.6, get: (x) => x.r.desc, html: (x) => T.two(x.r.desc, x.r.material + ' · ' + (x.r.uom || '')), onCell: go('stok') }, oaCol((x) => x.r.material),
+          { label: 'Aging', type: 'status', w: 0.7, get: (x) => x.r.aging, html: (x) => agingPill(x.r.aging), onCell: go('mrp') },
+          { label: 'SS', type: 'num', w: 0.6, get: (x) => fin(x.r.ss), cls: () => 'ref', onCell: go('mrp') }, { label: 'Min', type: 'num', w: 0.6, get: (x) => fin(x.r.min2), cls: () => 'ref', onCell: go('mrp') }, { label: 'Max', type: 'num', w: 0.6, get: (x) => fin(x.r.max2), cls: () => 'ref', onCell: go('mrp') },
+          { label: 'Stok', type: 'num', w: 0.7, get: (x) => x.r.stock, cls: (x) => 'mx-' + (x.k || 'none'), onCell: go('stok') }, { label: 'OS PO/RO', type: 'num', w: 0.7, get: (x) => x.r.ospo, onCell: go('po') }, { label: 'Reservasi', type: 'num', w: 0.7, get: (x) => x.r.mb25, onCell: go('rsv') },
+          { label: 'To Order', type: 'num', w: 0.7, get: (x) => x.r.toOrder || null, cls: () => 'b', onCell: go('mrp', true) }, { label: 'Status', type: 'status', w: 1.1, get: (x) => POS[x.k][0], html: (x) => MP.posPill(x.k), onCell: go('mrp', true) }];
       } else {
         // Per OA: setiap item kontrak aktif dengan posisi stoknya, untuk analisis, call RO, dan keputusan. Angka = jumlah plant terpilih (hanya fakta, tanpa rekomendasi otomatis).
         rows0 = [];
@@ -146,18 +152,19 @@
           if (!T.matOk(F, i.material, i.desc) || !T.match([d.doc, d.vendor, i.material, i.desc].join(' '), F.q)) return;
           rows0.push({ d, i, stock, ss, mn, mx, to: sum((r) => r.toOrder), os: sum((r) => r.ospo), k: rs.length ? MP.pos(stock, { min2: mn, max2: mx, ss }) : '' }); }); });
         name = 'Material_Control_Per_OA';
-        cols = [{ label: 'OA', w: 2, get: (x) => x.d.doc, html: (x) => T.two(x.d.doc, x.d.vendor || '') }, { label: 'Material', w: 3, get: (x) => x.i.desc, html: (x) => T.two(x.i.desc || x.i.material, x.i.material + ' · ' + (x.i.uom || '')) },
-          { label: 'Stok', type: 'num', w: 0.7, get: (x) => x.stock, cls: (x) => 'mx-' + (x.k || 'none') }, { label: 'Min – Max', type: 'num', w: 0.9, get: (x) => (x.k ? x.mn : null), html: (x) => (x.k ? fmt(x.mn) + ' – ' + fmt(x.mx) : ''), cls: () => 'ref' },
-          { label: 'To Order', type: 'num', w: 0.8, get: (x) => x.to || null, cls: () => 'b' }, { label: 'OS PO/RO', type: 'num', w: 0.8, get: (x) => x.os || null },
-          { label: 'Sisa kontrak', type: 'num', w: 0.9, get: (x) => x.i.openQty, cls: (x) => (x.to > 0 && x.i.openQty < x.to ? 'neg' : '') }, { label: 'Sisa hari', type: 'num', w: 0.7, get: (x) => x.d.sisaHari, cls: (x) => (x.d.sisaHari != null && x.d.sisaHari <= 90 ? 'neg' : '') },
-          { label: 'Status', type: 'status', w: 1.1, get: (x) => POS[x.k][0], html: (x) => MP.posPill(x.k) }];
+        const mat = (tab) => (x) => MP.detail(x.i.material, F.plant.size === 1 ? [...F.plant][0] : null, { tab });
+        cols = [{ label: 'OA', w: 2, get: (x) => x.d.doc, html: (x) => `<span class="two oa-l"><b>${esc(x.d.doc)}</b><small>${esc(x.d.vendor || '')}</small></span>`, onCell: (x) => KX.contract(x.d.doc) }, { label: 'Material', w: 3, get: (x) => x.i.desc, html: (x) => T.two(x.i.desc || x.i.material, x.i.material + ' · ' + (x.i.uom || '')), onCell: mat('stok') },
+          { label: 'Stok', type: 'num', w: 0.7, get: (x) => x.stock, cls: (x) => 'mx-' + (x.k || 'none'), onCell: mat('stok') }, { label: 'Min – Max', type: 'num', w: 0.9, get: (x) => (x.k ? x.mn : null), html: (x) => (x.k ? fmt(x.mn) + ' – ' + fmt(x.mx) : ''), cls: () => 'ref', onCell: mat('mrp') },
+          { label: 'To Order', type: 'num', w: 0.8, get: (x) => x.to || null, cls: () => 'b', onCell: mat('mrp') }, { label: 'OS PO/RO', type: 'num', w: 0.8, get: (x) => x.os || null, onCell: mat('po') },
+          { label: 'Sisa kontrak', type: 'num', w: 0.9, get: (x) => x.i.openQty, cls: (x) => (x.to > 0 && x.i.openQty < x.to ? 'neg' : ''), onCell: (x) => KX.contract(x.d.doc) }, { label: 'Sisa hari', type: 'num', w: 0.7, get: (x) => x.d.sisaHari, cls: (x) => (x.d.sisaHari != null && x.d.sisaHari <= 90 ? 'neg' : ''), onCell: (x) => KX.contract(x.d.doc) },
+          { label: 'Status', type: 'status', w: 1.1, get: (x) => POS[x.k][0], html: (x) => MP.posPill(x.k), onCell: mat('mrp') }];
       }
       const n = (k) => rows0.filter((x) => x.k === k).length;
       $('kp').innerHTML = T.kpis([['Di bawah SS', fmt(n('low'), 0), 'perlu tindakan', 'k-low', 'low'], ['Di bawah Min', fmt(n('min'), 0), 'saatnya pesan', 'k-min', 'min'], ['Normal', fmt(n('ok'), 0), 'Min sampai Max', 'k-ok', 'ok'], ['Di atas Max', fmt(n('max'), 0), 'stok berlebih', 'k-max', 'max']]);
       T.bindKpis($('kp'), F, 'pos', draw);
       const rows = rows0.filter((x) => T.has(F, 'pos', x.k)).sort((a, b) => RANK[a.k] - RANK[b.k] || (b.to || 0) - (a.to || 0));
       T.table($('tb'), { cols, rows, name, empty: mode === 'oa' && !S.me3n ? 'Butuh file kontrak ME3N.' : 'Tidak ada material pada filter ini.',
-        onRow: (x) => (mode === 'oa' ? MP.detail(x.i.material) : x.o ? MP.detail(x.o.material, F.plant.size === 1 ? [...F.plant][0] : null) : MP.detail(x.r.material, x.r.plant)) });
+        onRow: (x) => (mode === 'oa' ? MP.detail(x.i.material) : x.o ? MP.detail(x.o.material) : MP.detail(x.r.material, x.r.plant)) });
     };
     T.filters($('fb'), { q: mode === 'oa' ? 'Cari nomor OA, vendor, atau nama barang. Contoh: laker, 4600001' : 'Cari nama atau kode material. Contoh: laker, flange 3', materials: mats, plants,
       selects: [].concat(mode === 'oa' ? [{ key: 'oa', label: 'OA', options: oaDocs.map((d) => [d.doc, d.doc + ' ' + (d.vendor || '')]) }] : [], [{ key: 'pos', label: 'Status', options: ['low', 'min', 'ok', 'max'].map((k) => [k, POS[k][0]]) }]) }, F, draw);

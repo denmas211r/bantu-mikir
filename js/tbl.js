@@ -63,19 +63,20 @@
   const cmp = (a, b) => { const na = a == null || a === '', nb = b == null || b === ''; if (na || nb) return na - nb; if (a instanceof Date || typeof a === 'number') return a - b; return String(a).localeCompare(String(b), 'id', { numeric: true }); };
   const cell = (c, r) => { if (c.html) return c.html(r); const v = c.get(r); if (v == null || v === '') return ''; if (c.type === 'num') return typeof v === 'number' ? fmt(v, c.dec == null ? 2 : c.dec) : esc(v); if (c.type === 'date') return v instanceof Date ? dstr(v) : esc(v); return esc(v); };
   T.table = (el, o) => {
-    const st = { page: 0, sort: o.sort ? Object.assign({}, o.sort) : null }, size = o.pageSize || 50, tot = o.cols.reduce((a, c) => a + (c.w || 1), 0);
+    const hasCell = o.cols.some((c) => c.onCell), st = { page: 0, sort: o.sort ? Object.assign({}, o.sort) : null }, size = o.pageSize || 50, tot = o.cols.reduce((a, c) => a + (c.w || 1), 0);
     let rows = o.rows;
     const draw = () => {
       const n = rows.length, pages = Math.max(1, Math.ceil(n / size)); if (st.page >= pages) st.page = pages - 1;
       const part = rows.slice(st.page * size, st.page * size + size);
       el.innerHTML = `<div class="t-wrap"><table class="t"><colgroup>${o.cols.map((c) => `<col style="width:${(((c.w || 1) / tot) * 100).toFixed(2)}%">`).join('')}</colgroup>
         <thead><tr>${o.cols.map((c, i) => `<th class="${ALIGN[c.type] || ''}" data-i="${i}" title="${esc(c.label)}">${esc(c.label)}${st.sort && st.sort.i === i ? (st.sort.dir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('')}</tr></thead>
-        <tbody>${part.length ? part.map((r, k) => `<tr data-k="${k}"${o.onRow ? ' class="click"' : ''}>${o.cols.map((c) => { const h = cell(c, r); return `<td class="${ALIGN[c.type] || ''} ${(c.cls && c.cls(r)) || ''}" title="${esc(strip(h))}">${h}</td>`; }).join('')}</tr>`).join('')
+        <tbody>${part.length ? part.map((r, k) => `<tr data-k="${k}"${o.onRow || hasCell ? ' class="click"' : ''}>${o.cols.map((c) => { const h = cell(c, r); return `<td class="${ALIGN[c.type] || ''} ${(c.cls && c.cls(r)) || ''}${c.onCell ? ' cl' : ''}" title="${esc(strip(h))}">${h}</td>`; }).join('')}</tr>`).join('')
           : `<tr><td class="empty" colspan="${o.cols.length}">${esc(o.empty || 'Tidak ada data.')}</td></tr>`}</tbody></table></div>
         ${n > size || o.name ? `<div class="t-foot"><span>${n ? `${fmt(st.page * size + 1, 0)}–${fmt(Math.min(n, (st.page + 1) * size), 0)} dari ${fmt(n, 0)}` : ''}</span>${pages > 1 ? `<span class="t-pg"><button type="button" class="btn ghost small" data-p="-1" aria-label="Halaman sebelumnya"${st.page ? '' : ' disabled'}>‹</button>${st.page + 1} / ${pages}<button type="button" class="btn ghost small" data-p="1" aria-label="Halaman berikutnya"${st.page < pages - 1 ? '' : ' disabled'}>›</button></span>` : ''}${o.name ? '<button type="button" class="btn ghost small" data-x>Unduh Excel</button>' : ''}</div>` : ''}`;
       el.querySelectorAll('th').forEach((th) => (th.onclick = () => { const i = +th.dataset.i; st.sort = st.sort && st.sort.i === i ? { i, dir: -st.sort.dir } : { i, dir: o.cols[i].type === 'num' || o.cols[i].type === 'date' ? -1 : 1 };
         const c = o.cols[i]; rows = o.rows.slice().sort((a, b) => cmp(c.get(a), c.get(b)) * st.sort.dir); st.page = 0; draw(); }));
-      if (o.onRow) el.querySelectorAll('tbody tr[data-k]').forEach((tr) => (tr.onclick = () => o.onRow(part[+tr.dataset.k])));
+      // klik sel: kolom dengan onCell membuka tujuannya sendiri (mis. Stok -> tab Stok); kolom lain memakai onRow
+      if (o.onRow || hasCell) el.querySelectorAll('tbody tr[data-k]').forEach((tr) => (tr.onclick = (e) => { const td = e.target.closest('td'), c = td ? o.cols[td.cellIndex] : null, r = part[+tr.dataset.k]; if (c && c.onCell) c.onCell(r); else if (o.onRow) o.onRow(r); }));
       el.querySelectorAll('[data-p]').forEach((b) => (b.onclick = () => { st.page += +b.dataset.p; draw(); }));
       const x = el.querySelector('[data-x]'); if (x) x.onclick = () => { const aoa = [o.cols.map((c) => c.label)].concat(rows.map((r) => o.cols.map((c) => c.get(r)))); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa, { cellDates: true, dateNF: 'dd/mm/yyyy' }), 'Data'); XLSX.writeFile(wb, o.name + '.xlsx', { cellDates: true }); };
     };

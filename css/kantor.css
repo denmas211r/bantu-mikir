@@ -233,3 +233,6 @@ table.t .pill { max-width: 100%; overflow: hidden; text-overflow: ellipsis; vert
 .pill.cross { background: #efe9fb; color: #5b2ea6; } .pill.same { background: var(--mrp-min-bg); color: var(--mrp-min); }
 table.t td.xw-cross { box-shadow: inset 4px 0 0 #7c4dcc; } table.t td.xw-same { box-shadow: inset 4px 0 0 #d9a000; }
 .wk { font-weight: 600; font-size: 11px; padding: 0 6px; border-radius: 8px; } .wk-PEP { background: var(--mrp-max-bg); color: var(--mrp-max); } .wk-PHE { background: #fde7f1; color: #a3195b; }
+
+table.t td.cl:hover { text-decoration: underline; }
+table.t .oa-l { color: var(--brand); } table.t .oa-l b { font-weight: 600; }
