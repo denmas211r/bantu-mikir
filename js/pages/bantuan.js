@@ -42,14 +42,12 @@ function dataSources() {
 
 // Sumber Data = 2 sub-fitur: Sumber (folder + file) dan Data Mentah (isi tarikan SAP apa adanya, dulu menu Data SAP)
 PAGES.data = function () {
-  const tab = ['raw', 'pad'].includes(S.dataTab) ? S.dataTab : 'src';
+  const tab = S.dataTab === 'raw' ? 'raw' : 'src';
   if (S.rawG) { S.rawG.destroy(); S.rawG = null; }
   if (tab === 'src') dataSources(); else $('view').innerHTML = '<div id="dtBody"></div>';
-  if (tab !== 'pad' && MP) MP.zonaHook = null;
   $('view').insertAdjacentHTML('afterbegin', '<div class="seg-bar"><span id="dtSeg"></span></div>');
-  UI.seg($('dtSeg'), [['src', 'Sumber'], ['raw', 'Data'], ['pad', 'Padanan KIMAP']], tab, (v) => { S.dataTab = v; PAGES.data(); });
+  UI.seg($('dtSeg'), [['src', 'Sumber'], ['raw', 'Data']], tab, (v) => { S.dataTab = v; PAGES.data(); });
   if (tab === 'raw') PAGES.raw($('dtBody'));
-  if (tab === 'pad') PAGES.padanan($('dtBody'));
 };
 
 PAGES.pengaturan = function () {

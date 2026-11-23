@@ -24,6 +24,7 @@ const MENU = [
   ['Material Planning', [
     ['analysis', 'Material Analysis', 'route'],
     ['control', 'Material Control', 'gauge'],
+    ['padanan', 'Padanan KIMAP', 'list'],
   ]],
   ['Contract & Expediting', [
     ['kontrak', 'Kontrak', 'doc'],

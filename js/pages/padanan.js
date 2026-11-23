@@ -1,4 +1,4 @@
-// ============ Padanan KIMAP (tab di Sumber Data): material yang sepadan di satu client atau beda client ============
+// ============ Padanan KIMAP (menu sendiri di Material Planning): material yang sepadan di satu client atau beda client ============
 // Satu entri = satu KIMAP di satu WK (client 100 = PEP, 180 = PHE); stok = jumlah semua plant. Pasangan dicari dengan tiga cara:
 //  1) KIMAP sama persis di dua client            -> skor 100
 //  2) Kode mirip (beda <= 2 karakter) + deskripsi mirip -> skor = 50% kemiripan kode + 50% kemiripan deskripsi (minimal 80)
@@ -40,13 +40,13 @@
     S._pad = { ver: S.ver, list }; return list;
   }
 
-  PAGES.padanan = function (host) {
-    MP.zonaHook = () => PAGES.data();
+  PAGES.padanan = function () {
+    const host = $('view'); MP.zonaHook = () => PAGES.padanan();
     if (!S.mb52 && !S.mrpRes) { host.innerHTML = needFile('MB52 atau MRP', 'Padanan KIMAP dihitung dari daftar material di MB52 dan MRP.'); return; }
     const F = (S.fpd = S.fpd || { q: '', tipe: new Set() });
     host.innerHTML = '<div id="pdF"></div><div id="pdK" style="margin-top:14px"></div><div id="pdT" style="margin-top:14px"></div>';
     const draw = () => {
-      const base = pairs().filter((p) => (S.wkSel === 'all' || (p.a.wk === S.wkSel && p.b.wk === S.wkSel)) && T.match([p.a.code, p.a.desc, p.b.code, p.b.desc].join(' '), F.q));
+      const base = pairs().filter((p) => (S.wkSel === 'all' || (p.a.wk === S.wkSel && p.b.wk === S.wkSel)) && (T.matOk(F, p.a.code, p.a.desc) || T.matOk(F, p.b.code, p.b.desc)) && T.match([p.a.code, p.a.desc, p.b.code, p.b.desc].join(' '), F.q));
       const n = (f) => base.filter(f).length, isT = (v, p) => (v === 'cross' ? p.jenis === 'Beda client' : v === 'same' ? p.jenis === 'Satu client' : v === 'exact' ? p.kind === 'exact' : p.kind !== 'exact');
       $('pdK').innerHTML = T.kpis([['Beda client', fmt(n((p) => p.jenis === 'Beda client'), 0), 'PEP dan PHE', '', 'cross'], ['Satu client', fmt(n((p) => p.jenis === 'Satu client'), 0), 'dalam client yang sama', '', 'same'],
         ['KIMAP sama persis', fmt(n((p) => p.kind === 'exact'), 0), 'kode identik di dua client', 'k-ok', 'exact'], ['Mirip', fmt(n((p) => p.kind !== 'exact'), 0), 'kode / deskripsi mendekati sama', 'k-min', 'near']]);
@@ -58,7 +58,7 @@
         { label: 'Material B', w: 3, get: (p) => p.b.desc, html: (p) => who(p.b) }, { label: 'Stok B', type: 'num', w: 0.7, get: (p) => p.b.stock },
         { label: 'Skor', type: 'status', w: 0.7, get: (p) => p.score, html: (p) => T.pill(p.score + '%', p.score >= 95 ? 'ok' : p.score >= 88 ? 'info' : 'warn') }, { label: 'Alasan', w: 2.2, get: (p) => p.reason }] });
     };
-    T.filters($('pdF'), { q: 'Cari KIMAP atau deskripsi. Contoh: gasket, K180100047', selects: [{ key: 'tipe', label: 'Jenis', options: [['cross', 'Beda client'], ['same', 'Satu client'], ['exact', 'KIMAP sama persis'], ['near', 'Mirip']] }] }, F, draw);
+    T.filters($('pdF'), { q: 'Cari KIMAP atau deskripsi. Contoh: gasket, K180100047', materials: pairs().flatMap((p) => [[p.a.code, p.a.desc], [p.b.code, p.b.desc]]), selects: [{ key: 'tipe', label: 'Jenis', options: [['cross', 'Beda client'], ['same', 'Satu client'], ['exact', 'KIMAP sama persis'], ['near', 'Mirip']] }] }, F, draw);
     draw();
   };
 })();

@@ -30,9 +30,13 @@
   // spec: { q: placeholder, plants: [kode], dates: true, selects: [{ key, label, options: [[nilai, teks]], def?: [nilai terpilih awal] }] }
   // st  : state halaman. q/from/to = teks; plant dan tiap key select = Set (kosong = semua). Dropdown berisi checkbox seperti filter pivot Excel; data berubah tiap checkbox diklik.
   // Tanggal kosong = semua data; baru memfilter setelah diisi.
+  T.matOk = (st, code, name) => T.has(st, 'kimap', String(code || '')) && T.has(st, 'mname', name || '');
   T.has = (st, k, v) => !st[k] || !st[k].size || st[k].has(v);
   T.filters = (el, spec, st, onChange) => {
-    const multi = [].concat(spec.plants ? [{ key: 'plant', label: 'Plant', options: spec.plants.map((p) => [p, plantLabel(p)]) }] : [], spec.selects || []);
+    // spec.materials = [[kode, nama]]: tambah dua filter dropdown-checkbox, KIMAP (kode) dan Material (nama), masing-masing dengan kotak cari di dalamnya
+    const mats = spec.materials ? (() => { const u = new Map(); spec.materials.forEach(([c, n]) => { if (c) u.set(String(c), n || ''); });
+      return [{ key: 'kimap', label: 'KIMAP', options: [...u.keys()].sort().map((c) => [c, c]) }, { key: 'mname', label: 'Material', options: [...new Set([...u.values()].filter(Boolean))].sort().map((n) => [n, n]) }]; })() : [];
+    const multi = [].concat(mats, spec.plants ? [{ key: 'plant', label: 'Plant', options: spec.plants.map((p) => [p, plantLabel(p)]) }] : [], spec.selects || []);
     multi.forEach((m) => { if (!(st[m.key] instanceof Set)) st[m.key] = new Set(st[m.key] ? [].concat(st[m.key]) : []); });
     if (!st._init) { st._init = 1; multi.forEach((m) => { if (!st[m.key].size) (m.def || []).forEach((v) => st[m.key].add(v)); }); }
     const txt = (m) => { const c = st[m.key]; if (!c.size || c.size >= m.options.length) return 'Semua'; if (c.size === 1) return (m.options.find((o) => String(o[0]) === [...c][0]) || [, [...c][0]])[1]; return c.size + ' dipilih'; };

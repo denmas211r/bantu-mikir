@@ -306,7 +306,7 @@
     MP.zonaHook = () => PAGES.gerak();
     $('view').innerHTML = '<div id="fb"></div><div id="kp"></div><div id="tb"></div>';
     const draw = () => {
-      const rows = all.filter((x) => G.zonaOk(x.m.plant) && T.has(F, 'plant', x.m.plant) && T.inRange(x.m.date, F) && T.has(F, 'cat', catName(x.cat))
+      const rows = all.filter((x) => G.zonaOk(x.m.plant) && T.has(F, 'plant', x.m.plant) && T.matOk(F, x.m.material, x.m.desc) && T.inRange(x.m.date, F) && T.has(F, 'cat', catName(x.cat))
         && T.match([x.m.material, x.m.desc, x.m.matDoc, x.m.po, x.m.resv, x.m.header].join(' '), F.q));
       const inn = rows.filter((x) => x.m.qty > 0), out = rows.filter((x) => x.m.qty < 0), use = rows.filter((x) => x.cat === 'Own Use'), v = (l) => money(l.reduce((a, x) => a + x.idr, 0), 'IDR');
       $('kp').innerHTML = T.kpis([['Gerakan', fmt(rows.length, 0), F.from || F.to ? (F.from || '…') + ' s.d. ' + (F.to || '…') : 'semua tanggal'], ['Barang masuk', v(inn), fmt(inn.length, 0) + ' gerakan'], ['Barang keluar', v(out), fmt(out.length, 0) + ' gerakan'], ['Pemakaian (Own Use)', v(use), fmt(use.length, 0) + ' gerakan']]);
@@ -315,7 +315,7 @@
         { label: 'Kategori', w: 1.2, get: (x) => catName(x.cat) }, { label: 'Qty', type: 'num', w: 0.8, get: (x) => x.m.qty, cls: (x) => (x.m.qty < 0 ? 'neg' : '') }, { label: 'Nilai', type: 'num', w: 1.1, get: (x) => x.m.amount, html: (x) => money(x.m.amount, x.cur) },
         { label: 'Dokumen', w: 1, get: (x) => x.m.matDoc }] });
     };
-    T.filters($('fb'), { q: 'Cari material, dokumen, atau keterangan. Contoh: laker, 4900012345', plants: [...new Set(all.map((x) => x.m.plant))].filter((p) => G.zonaOk(p)).sort(), dates: true,
+    T.filters($('fb'), { q: 'Cari material, dokumen, atau keterangan. Contoh: laker, 4900012345', materials: all.map((x) => [x.m.material, x.m.desc]), plants: [...new Set(all.map((x) => x.m.plant))].filter((p) => G.zonaOk(p)).sort(), dates: true,
       selects: [{ key: 'cat', label: 'Kategori', options: cats.map((c) => [c, c]), def: cats.filter((c) => c !== 'Not Included') }] }, F, draw);
     draw();
   };

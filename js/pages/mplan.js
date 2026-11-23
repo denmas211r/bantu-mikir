@@ -111,7 +111,7 @@
   PAGES.control = function () {
     if (!S.mb52 && !S.mrpRes) { $('view').innerHTML = needFile('MB52 atau MRP', 'Material Control membaca stok (MB52) dan hasil MRP.'); return; }
     const mode = S.ovMode === 'dt' ? 'dt' : 'ov'; MP.zonaHook = () => PAGES.control();
-    const F = (S.fc = S.fc || { q: '', plant: new Set(), pos: new Set() }), plants = [...S.mrpPlants].filter((p) => G.zonaOk(p)).sort();
+    const F = (S.fc = S.fc || { q: '', plant: new Set(), pos: new Set() }), mats = [...matIndex().map.values()].map((o) => [o.material, o.desc]), plants = [...S.mrpPlants].filter((p) => G.zonaOk(p)).sort();
     $('view').innerHTML = '<div class="seg-bar"><span id="ovSeg"></span></div><div id="fb"></div><div id="kp"></div><div id="tb"></div>';
     UI.seg($('ovSeg'), [['ov', 'Overview'], ['dt', 'Detail']], mode, (v) => { S.ovMode = v; PAGES.control(); });
     const draw = () => {
@@ -119,14 +119,14 @@
       let rows0, cols;
       if (mode === 'ov') {
         const has = (o, p) => o.stock.has(p) || o.mrp.has(p);
-        rows0 = [...matIndex().map.values()].filter((o) => H.some((p) => has(o, p)) && T.match(o.material + ' ' + o.desc, F.q))
+        rows0 = [...matIndex().map.values()].filter((o) => H.some((p) => has(o, p)) && T.matOk(F, o.material, o.desc) && T.match(o.material + ' ' + o.desc, F.q))
           .map((o) => ({ o, k: MP.worst(H.filter((p) => has(o, p)).map((p) => MP.pos(o.stock.get(p), o.mrp.get(p)))) }));
         cols = [{ label: 'Material', w: 3.4, get: (x) => x.o.desc, html: (x) => T.two(x.o.desc || x.o.material, x.o.material + ' · ' + (x.o.uom || '')) },
           ...H.map((p) => ({ label: p, type: 'num', w: 0.8, get: (x) => (has(x.o, p) ? x.o.stock.get(p) || 0 : null), cls: (x) => (has(x.o, p) ? 'mx-' + (MP.pos(x.o.stock.get(p), x.o.mrp.get(p)) || 'none') : '') })),
           { label: 'To Order', type: 'num', w: 0.8, get: (x) => H.reduce((a, p) => a + ((x.o.mrp.get(p) || {}).toOrder || 0), 0) || null, cls: () => 'b' },
           { label: 'Status', type: 'status', w: 1.2, get: (x) => POS[x.k][0], html: (x) => MP.posPill(x.k) }];
       } else {
-        rows0 = (S.mrpRes ? [...S.mrpRes.values()] : []).filter((r) => H.includes(r.plant) && T.match(r.material + ' ' + (r.kimap || '') + ' ' + r.desc, F.q)).map((r) => ({ r, k: MP.pos(r.stock, r) }));
+        rows0 = (S.mrpRes ? [...S.mrpRes.values()] : []).filter((r) => H.includes(r.plant) && T.matOk(F, r.material, r.desc) && T.match(r.material + ' ' + (r.kimap || '') + ' ' + r.desc, F.q)).map((r) => ({ r, k: MP.pos(r.stock, r) }));
         cols = [{ label: 'Plant', w: 0.7, get: (x) => x.r.plant }, { label: 'Material', w: 3, get: (x) => x.r.desc, html: (x) => T.two(x.r.desc, x.r.material + ' · ' + (x.r.uom || '')) },
           { label: 'Aging', type: 'status', w: 0.7, get: (x) => x.r.aging, html: (x) => agingPill(x.r.aging) },
           { label: 'SS', type: 'num', w: 0.7, get: (x) => fin(x.r.ss), cls: () => 'ref' }, { label: 'Min', type: 'num', w: 0.7, get: (x) => fin(x.r.min2), cls: () => 'ref' }, { label: 'Max', type: 'num', w: 0.7, get: (x) => fin(x.r.max2), cls: () => 'ref' },
@@ -139,7 +139,7 @@
       const rows = rows0.filter((x) => T.has(F, 'pos', x.k)).sort((a, b) => RANK[a.k] - RANK[b.k]);
       T.table($('tb'), { cols, rows, name: mode === 'ov' ? 'Material_Control_Overview' : 'Material_Control_Detail', empty: 'Tidak ada material pada filter ini.', onRow: (x) => (x.o ? MP.detail(x.o.material, F.plant.size === 1 ? [...F.plant][0] : null) : MP.detail(x.r.material, x.r.plant)) });
     };
-    T.filters($('fb'), { q: 'Cari nama atau kode material. Contoh: laker, flange 3', plants, selects: [{ key: 'pos', label: 'Status', options: ['low', 'min', 'ok', 'max'].map((k) => [k, POS[k][0]]) }] }, F, draw);
+    T.filters($('fb'), { q: 'Cari nama atau kode material. Contoh: laker, flange 3', materials: mats, plants, selects: [{ key: 'pos', label: 'Status', options: ['low', 'min', 'ok', 'max'].map((k) => [k, POS[k][0]]) }] }, F, draw);
     draw();
   };
 })();

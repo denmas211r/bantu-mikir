@@ -68,7 +68,7 @@
     const F = isPO ? (S.fp = S.fp || { q: '', plant: new Set(), from: '', to: '', st: new Set() }) : (S.fr = S.fr || { q: '', plant: new Set(), from: '', to: '', st: new Set() });
     const ST = isPO ? PO_ST : RV_ST, stOf = isPO ? poSt : rvSt, dOf = isPO ? (l) => l.delivery : (l) => l.reqDate;
     const draw = () => {
-      const base = src.filter((l) => G.zonaOk(l.plant) && T.has(F, 'plant', l.plant) && T.inRange(dOf(l), F) && T.match(isPO ? [l.doc, l.vendor, l.material, l.desc, l.pr, l.oa].join(' ') : [l.resv, l.material, l.desc, l.recipient, l.costCenter, l.wbs].join(' '), F.q));
+      const base = src.filter((l) => G.zonaOk(l.plant) && T.has(F, 'plant', l.plant) && T.matOk(F, l.material, l.desc) && T.inRange(dOf(l), F) && T.match(isPO ? [l.doc, l.vendor, l.material, l.desc, l.pr, l.oa].join(' ') : [l.resv, l.material, l.desc, l.recipient, l.costCenter, l.wbs].join(' '), F.q));
       const soon = new Date(+t0() + 30 * 864e5), dueSoon = (l) => stOf(l) === 'open' && l.delivery && l.delivery <= soon, n = (k) => base.filter((l) => stOf(l) === k).length;
       $('kp').innerHTML = T.kpis(isPO
         ? [['Berjalan', fmt(n('open'), 0), 'belum diterima penuh', '', 'open'], ['Terlambat', fmt(n('late'), 0), 'lewat jatuh tempo', 'k-low', 'late'], ['Jatuh tempo ≤ 30 hari', fmt(base.filter(dueSoon).length, 0), 'segera dipantau', 'k-min', 'due'], ['Selesai', fmt(n('done'), 0), 'sudah diterima', 'k-ok', 'done']]
@@ -82,7 +82,7 @@
         : { rows, name: 'Reservasi', empty: 'Tidak ada reservasi pada filter ini.', onRow: (l) => KX.resv(l), cols: [{ label: 'Reservasi', w: 1.1, get: (l) => l.resv + '/' + l.item }, mat, { label: 'Plant', w: 0.6, get: (l) => l.plant },
           { label: 'Tgl butuh', type: 'date', w: 0.9, get: (l) => l.reqDate }, { label: 'Sisa', type: 'num', w: 0.7, get: (l) => (resvOpen(l) ? l.diff : 0) }, { label: 'Penerima', w: 1.8, get: (l) => l.recipient || l.costCenter || l.wbs || '' }, stCol] });
     };
-    T.filters($('fb'), { q: isPO ? 'Cari nomor PO/RO, vendor, atau nama barang. Contoh: 4500012345, bearing' : 'Cari nomor reservasi, penerima, atau nama barang', plants: [...new Set(src.map((l) => l.plant))].filter((p) => G.zonaOk(p)).sort(), dates: true,
+    T.filters($('fb'), { q: isPO ? 'Cari nomor PO/RO, vendor, atau nama barang. Contoh: 4500012345, bearing' : 'Cari nomor reservasi, penerima, atau nama barang', materials: src.map((l) => [l.material, l.desc]), plants: [...new Set(src.map((l) => l.plant))].filter((p) => G.zonaOk(p)).sort(), dates: true,
       selects: [{ key: 'st', label: 'Status', def: ['open', 'late'], options: Object.entries(ST).map(([k, v]) => [k, v[0]]).concat(isPO ? [['due', 'Jatuh tempo ≤ 30 hari']] : []) }] }, F, draw);
     draw();
   };
