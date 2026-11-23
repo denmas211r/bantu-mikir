@@ -238,3 +238,17 @@ table.t td.cl:hover { text-decoration: underline; }
 table.t .oa-l { color: var(--brand); } table.t .oa-l b { font-weight: 600; }
 
 .bar-in { display: inline-block; width: 70px; height: 8px; border-radius: 4px; background: var(--line-2); vertical-align: middle; margin-right: 6px; overflow: hidden; } .bar-in i { display: block; height: 100%; background: var(--brand); }
+
+/* ---- dashboard Analisis Warehouse ---- */
+.dgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; } @media (max-width: 1200px) { .dgrid { grid-template-columns: minmax(0, 1fr); } }
+.dcard { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; align-content: start; }
+.dc-h { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; } .dc-h h3 { margin: 0; font-size: 14px; font-weight: 600; } .dc-x { margin-left: auto; }
+.chart { height: 250px; width: 100%; } .chart.trend { height: 260px; }
+table.mxa { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 4px; font-size: 13px; }
+table.mxa th { font-size: 12px; font-weight: 600; color: var(--ink-2); text-align: center; padding: 6px 4px; } table.mxa th i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+table.mxa th.rh { text-align: left; } table.mxa th.rh small { display: block; font-weight: 400; color: var(--muted); font-size: 11px; margin-top: 2px; }
+table.mxa td.mc { text-align: center; padding: 10px 4px; border-radius: 10px; background: var(--surface-2); } table.mxa td.mc b { display: block; font-size: 14px; font-weight: 600; } table.mxa td.mc small { display: block; font-size: 11px; color: var(--muted); }
+table.mxa td.tt { background: var(--mute-soft); } table.mxa td.pk { cursor: pointer; } table.mxa td.pk:hover { outline: 2px solid var(--brand); }
+/* grafik ECharts: lepas aturan global ikon svg (16px, fill none) */
+.chart svg { width: auto; height: auto; fill: revert; stroke: none; stroke-width: revert; flex: none; }
+.kpis { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
