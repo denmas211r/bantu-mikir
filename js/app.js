@@ -65,7 +65,7 @@ async function startSession(user, role, key, raw) {
   await Cache.init(raw);
   const data = await Vault.decryptJSON(key, await (await fetch('data/data.enc.json', { cache: 'no-store' })).json());
   S = { role, data, user, mb52: null, mrpWB: null, mrpRes: null, mrp: null,
-    mrpPlants: new Set(store.get('mrpPlants') || DEFAULT_MRP_PLANTS), set: Object.assign({ lang: 'id', method: 'tko', tko: {}, kurs: 18150, zona: {}, wkCur: { PEP: 'IDR', PHE: 'USD' }, pheLT: 3 }, store.get('settings') || {}), mrpWK: store.get('mrpWK') || 'PEP', src: {}, raw: {}, dash: { cur: 'IDR', wh: new Set(), zona: new Set(), wk: new Set(), open: new Set() }, gd: { cur: 'IDR', wh: new Set(), zona: new Set(), wk: new Set() }, cariView: store.get('cariView') || 'matriks', cariWK: store.get('cariWK') || 'all', kView: store.get('kView') || 'kartu' };
+    mrpPlants: new Set(store.get('mrpPlants') || DEFAULT_MRP_PLANTS), set: Object.assign({ lang: 'id', method: 'tko', tko: {}, kurs: 18150, zona: {}, wkCur: { PEP: 'IDR', PHE: 'USD' }, pheLT: 3 }, store.get('settings') || {}), mrpWK: store.get('mrpWK') || 'PEP', cur: store.get('cur') === 'USD' ? 'USD' : 'IDR', src: {}, raw: {}, dash: { cur: 'IDR', wh: new Set(), zona: new Set(), wk: new Set(), open: new Set() }, gd: { cur: 'IDR', wh: new Set(), zona: new Set(), wk: new Set() }, cariView: store.get('cariView') || 'matriks', cariWK: store.get('cariWK') || 'all', kView: store.get('kView') || 'kartu' };
   I18N.set(S.set.lang); $('login').hidden = true; $('app').hidden = false;
   $('whoName').textContent = S.user; $('whoRole').textContent = role; $('avatar').textContent = S.user[0].toUpperCase();
   buildNav(); route(); initFolder();
@@ -422,7 +422,13 @@ function tabbed(state, TABS, extraTop = '') {
 const dstr = (d) => (d ? d.toLocaleDateString(I18N.loc(), { day: '2-digit', month: 'short', year: 'numeric' }) : '-');
 const money = (v, cur = 'IDR') => { if (v == null || v === '' || !isFinite(v)) return ''; cur = cur || 'IDR'; const a = Math.abs(v);
   return cur + ' ' + (a >= 1e9 ? fmt(v / 1e9, 2) + ' M' : a >= 1e6 ? fmt(v / 1e6, 2) + ' jt' : fmt(v, cur === 'IDR' ? 0 : 2)); };
-const toIDRv = (v, cur) => (cur === 'USD' ? v * (S.set.kurs || 18150) : v || 0);
+// Kurs (Rupiah per 1 USD) per bulan dari Pengaturan (S.set.kursMonthly = { 'YYYY-MM': kurs }). Bulan kosong memakai bulan terisi terdekat (sebelumnya dulu), lalu kurs bawaan.
+function kursFor(d) {
+  const km = S.set.kursMonthly || {}, ks = Object.keys(km).filter((k) => km[k] > 0).sort(), def = S.set.kurs || 18150; if (!ks.length) return def;
+  const t = d instanceof Date && !isNaN(d) ? d : new Date(), key = t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0');
+  if (km[key] > 0) return km[key]; let prev = null, next = null; ks.forEach((k) => { if (k < key) prev = k; else if (k > key && !next) next = k; }); return km[prev || next] || def;
+}
+const toIDRv = (v, cur, d) => (cur === 'USD' ? v * kursFor(d) : v || 0);
 const needFile = (what, hint) => `<div class="panel empty"><h3>Butuh ${what}</h3><p>${hint}</p><a class="btn primary" href="#/data">Buka Sumber Data</a></div>`;
 
 // ---------- Lacak material ----------

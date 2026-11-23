@@ -60,9 +60,13 @@ PAGES.pengaturan = function () {
         ['Zona', (p) => `<select class="zn" data-p="${esc(p)}" aria-label="Zona ${esc(p)}">${ZONA_LIST.map((z) => `<option ${zonaOf(p) === z ? 'selected' : ''}>${z}</option>`).join('')}</select>`],
         ['Dipantau MRP', (p) => `<input type="checkbox" class="mp" value="${esc(p)}" ${S.mrpPlants.has(p) ? 'checked' : ''} aria-label="Pantau ${esc(p)}">`]])}</section>
     <section class="panel"><div class="panel-h"><h2>Mata uang dan kurs</h2></div>
-      <div class="params"><label>Rupiah per 1 USD<span><input type="number" id="kurs" min="1" step="1" value="${S.set.kurs}"></span></label>
+      <div class="params"><label>Kurs bawaan, Rupiah per 1 USD<span><input type="number" id="kurs" min="1" step="1" value="${S.set.kurs}"></span></label>
         ${['PEP', 'PHE'].map((w) => `<label>Mata uang nilai stok MB52 WK ${w}<span><select class="wkc" data-w="${w}">${['IDR', 'USD'].map((c) => `<option ${(S.set.wkCur || {})[w] === c ? 'selected' : ''}>${c}</option>`).join('')}</select></span></label>`).join('')}</div>
       <p class="muted small" style="margin-top:8px">Nilai awal Rp 18.150 (JISDOR awal Nov 2026); sesuaikan dengan kurs kantor. ${infoI('Kurs dipakai untuk konversi IDR dan USD di dashboard dan estimasi nilai. MB52 tidak mencantumkan mata uang, jadi mata uang nilai stok diatur per WK (company code). Pastikan sesuai dengan SAP.')}</p></section>
+    <section class="panel"><div class="panel-h"><h2>Kurs per bulan</h2></div>
+      <p class="muted small">Isi kurs Rupiah per 1 USD untuk tiap bulan. Dipakai Analisis Warehouse saat tampil USD atau IDR: stok memakai kurs bulan berjalan, pergerakan memakai kurs bulan transaksinya. Bulan yang kosong memakai bulan terisi terdekat, lalu kurs bawaan.</p>
+      <div class="params" style="margin-top:8px"><label>Bulan<span><input type="month" id="kmMon"></span></label><label>Kurs (Rp per USD)<span><input type="number" id="kmVal" min="1" step="1" placeholder="mis. 16250"></span></label><label>&nbsp;<span><button type="button" class="btn primary" id="kmAdd">Tambah / ubah</button></span></label></div>
+      <div id="kmList" style="margin-top:10px"></div></section>
     <section class="panel"><div class="panel-h"><h2>Metode perhitungan MRP</h2></div>
       <div class="radios">${Object.entries(METHOD).map(([k, t]) => `<label class="radio"><input type="radio" name="method" value="${k}" ${S.set.method === k ? 'checked' : ''}>${esc(t)}</label>`).join('')}</div>
       ${S.set.method === 'tko' ? `<div class="params" style="margin-top:12px">${TKO_FIELDS.map(([k, t, u]) => `<label>${esc(t)} <span class="muted">(${u})</span><span><input type="number" step="0.5" min="0" data-k="${k}" value="${P(k)}"></span></label>`).join('')}
@@ -78,6 +82,11 @@ PAGES.pengaturan = function () {
   document.querySelectorAll('.zn').forEach((sl) => (sl.onchange = () => { S.set.zona = Object.assign({}, S.set.zona || {}, { [sl.dataset.p]: sl.value }); saveSet(); }));
   document.querySelectorAll('.mp').forEach((c) => (c.onchange = () => { c.checked ? S.mrpPlants.add(c.value) : S.mrpPlants.delete(c.value); store.set('mrpPlants', [...S.mrpPlants]); }));
   document.querySelectorAll('.wkc').forEach((sl) => (sl.onchange = () => { S.set.wkCur = Object.assign({}, S.set.wkCur, { [sl.dataset.w]: sl.value }); saveSet(); }));
+  const kmDraw = () => { const km = S.set.kursMonthly || {}, ks = Object.keys(km).sort().reverse();
+    $('kmList').innerHTML = ks.length ? plainTable(ks, [['Bulan', (k) => esc(k)], ['Kurs (Rp per USD)', (k) => fmt(km[k], 2), 'num'], ['', (k) => `<button type="button" class="btn ghost small" data-del="${esc(k)}">Hapus</button>`]]) : '<p class="muted small">Belum ada kurs bulanan; dipakai kurs bawaan.</p>';
+    $('kmList').querySelectorAll('[data-del]').forEach((b) => (b.onclick = () => { delete S.set.kursMonthly[b.dataset.del]; store.set('settings', S.set); kmDraw(); })); };
+  $('kmAdd').onclick = () => { const m = $('kmMon').value, v = parseFloat($('kmVal').value); if (!m || !(v > 0)) return; S.set.kursMonthly = Object.assign({}, S.set.kursMonthly, { [m]: v }); store.set('settings', S.set); $('kmVal').value = ''; kmDraw(); };
+  kmDraw();
   $('kurs').onchange = () => { const v = parseFloat($('kurs').value); if (v > 0) { S.set.kurs = v; saveSet(); } };
   document.querySelectorAll('input[name=method]').forEach((r) => (r.onchange = () => { S.set.method = r.value; saveSet(); route(); }));
   document.querySelectorAll('.params input[data-k]').forEach((i) => (i.onchange = () => { const v = parseFloat(i.value); if (isFinite(v) && v >= 0) { S.set.tko[i.dataset.k] = v; saveSet(); } }));
