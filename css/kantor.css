@@ -252,3 +252,4 @@ table.mxa td.tt { background: var(--mute-soft); } table.mxa td.pk { cursor: poin
 /* grafik ECharts: lepas aturan global ikon svg (16px, fill none) */
 .chart svg { width: auto; height: auto; fill: revert; stroke: none; stroke-width: revert; flex: none; }
 .kpis { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.kc { display: inline-block; font-size: 12px; padding: 1px 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); white-space: nowrap; }
