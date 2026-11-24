@@ -14,6 +14,7 @@
     // umum
     'Zona': 'Zone', 'Semua': 'All', 'Semua plant': 'All plants', 'Semua zona': 'All zones', 'Semua WK': 'All WK', 'Plant': 'Plant', 'Cari': 'Search', 'Reset filter': 'Reset filters', 'Dari tanggal': 'From date', 'Sampai': 'To',
     'Tampilkan': 'Show', 'Sembunyikan': 'Hide', 'Selengkapnya': 'More', 'Ringkas': 'Less', 'Tidak ada data.': 'No data.', 'Tutup': 'Close', 'Buka': 'Open', 'Hapus pilihan': 'Clear selection', 'Kolom': 'Columns', 'Lebarkan': 'Expand',
+    'Simulasi RO': 'RO Simulation', 'Isi sesuai MRP': 'Fill from MRP', 'Kosongkan': 'Clear', 'Hanya yang perlu order atau sudah diisi': 'Only items to order or filled in', 'Sisa nilai kontrak': 'Remaining contract value', 'Nilai RO simulasi': 'Simulated RO value', 'Sisa sesudah simulasi': 'Remaining after simulation', 'Qty RO': 'RO qty', 'Harga satuan': 'Unit price', 'Nilai RO': 'RO value', 'Stok sesudah': 'Stock after',
     'Unduh Excel': 'Download Excel', 'Halaman sebelumnya': 'Previous page', 'Halaman berikutnya': 'Next page', 'Halaman': 'Page', 'dari': 'of', 'dipilih': 'selected',
     // Material Analysis
     'Lacak': 'Track', 'Data dimuat:': 'Data loaded:', 'Abu-abu = file belum dimuat, jejaknya tidak lengkap.': 'Grey = file not loaded, so the trail is incomplete.', 'Kode material, No. PO/RO, No. PR, No. OA, atau No. reservasi': 'Material code, PO/RO no., PR no., OA no., or reservation no.',

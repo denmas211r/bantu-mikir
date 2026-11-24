@@ -34,23 +34,65 @@
     T.filters($('fb'), { q: 'Cari nomor OA, vendor, atau nama barang. Contoh: laker, gasket', selects: [{ key: 'pg', label: 'Purch. Group', options: [...new Set(docs.map((d) => d.pg || ''))].filter(Boolean).sort().map((g) => [g, g + (window.Contract && Contract.PIC && Contract.PIC[g] ? ' ' + Contract.PIC[g] : '')]) }, { key: 'st', label: 'Status', def: ['aktif', 'soon', 'low'], options: [['aktif', 'Aktif'], ['soon', 'Hampir habis'], ['low', 'Sisa nilai < 20%'], ['habis', 'Habis']] }] }, F, () => { shown = 60; draw(); });
     draw();
   };
-  KX.contract = function (doc) {
+  KX.contract = function (doc, tab, plant) {
     const d = S.me3n && S.me3n.docs.get(doc); if (!d) return;
     const its = S.me3n.items.filter((i) => i.doc === doc), calls = S.me2n ? S.me2n.lines.filter((l) => l.oa === doc && !l.deleted).sort((a, b) => (b.docDate || 0) - (a.docDate || 0)) : null, s = K_ST[kSt(d)];
     const body = UI.drawer(`<div class="mhead"><h2>${esc(d.vendor || 'OA ' + doc)}</h2><div class="meta"><span class="mono">OA ${esc(doc)}</span>${d.pic ? `<span>${esc(d.pic)}</span>` : ''}${T.pill(s[0], s[1])}</div></div>
       ${T.kpis([['Nilai kontrak', esc(money(d.target, d.currency)), dstr(d.start) + ' s.d. ' + dstr(d.end)], ['Terpakai', esc(money(d.released, d.currency)), fmt((1 - d.pctSisa) * 100, 0) + '%'], ['Sisa nilai', esc(money(d.sisa, d.currency)), fmt(d.pctSisa * 100, 0) + '%', d.pctSisa < 0.2 ? 'k-min' : ''], ['Sisa hari', d.sisaHari != null ? fmt(d.sisaHari, 0) : '–', 'sampai berakhir', d.sisaHari != null && d.sisaHari <= 90 ? 'k-low' : '']])}
       <div class="seg-bar"><span id="kdSeg"></span></div><div id="kdBody"></div>`, { wide: true, label: 'Kontrak ' + doc });
-    const show = (k) => {
-      UI.seg(body.querySelector('#kdSeg'), [['item', `Item (${fmt(its.length, 0)})`], ['his', `PO/RO dari kontrak (${calls ? fmt(calls.length, 0) : '–'})`]], k, show);
+    // ---------- Simulasi Call RO: isi qty RO per material x plant, lihat sisa nilai kontrak dan stok sesudahnya ----------
+    // Awal = To Order dari MRP. Qty bisa diubah. Hanya hitungan; tidak membuat RO di SAP. Disimpan di browser per OA.
+    const sim = (box, plant0) => {
+      const all = store.get('simRO2') || {}, SIM = all[doc] || (all[doc] = { q: {}, plant: '', need: true }); if (plant0) SIM.plant = plant0;
+      const mi = matIndex().map, cur = d.currency, rows = [];
+      its.forEach((it) => { const o = mi.get(it.material); if (!o) return; o.mrp.forEach((r, p) => { if (S.mrpPlants.has(p) && G.zonaOk(p)) rows.push({ k: it.item + '|' + p, it, p, r, stock: o.stock.get(p) || 0 }); }); });
+      rows.sort((a, b) => (b.r.toOrder || 0) - (a.r.toOrder || 0) || a.it.material.localeCompare(b.it.material) || a.p.localeCompare(b.p));
+      const plants = [...new Set(rows.map((x) => x.p))].sort(), qty = (x) => (SIM.q[x.k] != null ? SIM.q[x.k] : x.r.toOrder > 0 ? x.r.toOrder : 0);
+      const after = (x) => x.stock + (x.r.ospo || 0) + qty(x), val = (x) => qty(x) * (x.it.price || 0);
+      const paint = () => {
+        const tot = rows.reduce((a, x) => a + val(x), 0), left = d.sisa - tot, warn = [];
+        if (tot > d.sisa) warn.push(`Nilai simulasi ${money(tot, cur)} melebihi sisa nilai kontrak ${money(d.sisa, cur)}.`);
+        const perItem = new Map(); rows.forEach((x) => perItem.set(x.it, (perItem.get(x.it) || 0) + qty(x)));
+        perItem.forEach((q, it) => { if (it.targetQty && q > it.openQty) warn.push(`${it.material}: qty simulasi ${fmt(q)} melebihi sisa qty kontrak ${fmt(it.openQty)}.`); });
+        if (d.sisaHari != null && d.sisaHari < 60) warn.push(`Kontrak berakhir ${fmt(d.sisaHari, 0)} hari lagi. Pastikan jadwal kirim masih di dalam masa kontrak.`);
+        const per = plants.map((p) => [p, rows.filter((x) => x.p === p).reduce((a, x) => a + val(x), 0)]).filter((x) => x[1] > 0);
+        box.querySelector('#sKp').innerHTML = T.kpis([['Sisa nilai kontrak', esc(money(d.sisa, cur)), fmt(d.pctSisa * 100, 0) + '% dari nilai kontrak'], ['Nilai RO simulasi', esc(money(tot, cur)), per.length ? per.map((x) => x[0] + ' ' + money(x[1], cur)).join(' · ') : 'belum ada qty'], ['Sisa sesudah simulasi', esc(money(left, cur)), d.target ? fmt((left / d.target) * 100, 0) + '% dari nilai kontrak' : '', left < 0 ? 'k-low' : 'k-ok']]);
+        box.querySelector('#sWarn').innerHTML = warn.map((w) => `<div class="sim-warn">${esc(w)}</div>`).join('');
+      };
+      const rowCls = (x) => 'mx-' + (MP.pos(after(x), x.r) || 'none');
+      const draw = () => {
+        const shown = rows.filter((x) => (!SIM.plant || x.p === SIM.plant) && (!SIM.need || x.r.toOrder > 0 || qty(x) > 0));
+        box.innerHTML = `<div class="seg-bar"><span id="sSeg"></span><label class="chk"><input type="checkbox" id="sNeed"${SIM.need ? ' checked' : ''}> Hanya yang perlu order atau sudah diisi</label><button class="btn ghost small" id="sMrp" type="button">Isi sesuai MRP</button><button class="btn ghost small" id="sClr" type="button">Kosongkan</button></div>
+          <div id="sKp"></div><div id="sWarn"></div>
+          <div class="t-wrap"><table class="t"><colgroup>${[2.8, 0.7, 0.8, 1, 0.8, 0.8, 1.1, 1, 1.2, 0.9].map((w) => `<col style="width:${w * 7.8}%">`).join('')}</colgroup>
+          <thead><tr><th>Material</th><th>Plant</th><th class="r">Stok</th><th class="r">Min – Max</th><th class="r">To Order</th><th class="r">OS PO/RO</th><th class="r">Harga satuan</th><th class="r">Qty RO</th><th class="r">Nilai RO</th><th class="r">Stok sesudah</th></tr></thead>
+          <tbody>${shown.length ? shown.map((x, n) => `<tr data-n="${n}"><td>${T.two(x.it.desc || x.it.material, x.it.material + ' · ' + (x.it.uom || ''))}</td><td>${esc(x.p)}</td><td class="r mx-${MP.pos(x.stock, x.r) || 'none'}">${fmt(x.stock)}</td><td class="r ref">${fmt(x.r.min2)} – ${fmt(x.r.max2)}</td><td class="r b">${x.r.toOrder > 0 ? fmt(x.r.toOrder) : ''}</td><td class="r">${x.r.ospo ? fmt(x.r.ospo) : ''}</td><td class="r">${x.it.price ? esc(money(x.it.price, cur)) : ''}</td>
+            <td class="r"><input class="sq" type="number" min="0" step="any" value="${qty(x) || ''}" placeholder="0" aria-label="Qty RO ${esc(x.it.material)} ${esc(x.p)}"></td><td class="r" data-v>${val(x) ? esc(money(val(x), cur)) : ''}</td><td class="r ${rowCls(x)}" data-a>${fmt(after(x))}</td></tr>`).join('') : '<tr><td class="empty" colspan="10">Tidak ada material kontrak ini yang dipantau MRP di plant terpilih.</td></tr>'}</tbody></table></div>
+          <p class="muted small pad">Stok sesudah = stok + OS PO/RO + Qty RO. Qty awal = To Order dari MRP; ubah sesuai rencana. Ini hitungan saja, tidak membuat RO di SAP.</p>`;
+        UI.seg(box.querySelector('#sSeg'), [['', 'Semua plant']].concat(plants.map((p) => [p, p])), SIM.plant, (v) => { SIM.plant = v; store.set('simRO2', all); draw(); });
+        box.querySelector('#sNeed').onchange = (e) => { SIM.need = e.target.checked; store.set('simRO2', all); draw(); };
+        box.querySelector('#sMrp').onclick = () => { SIM.q = {}; store.set('simRO2', all); draw(); };
+        box.querySelector('#sClr').onclick = () => { rows.forEach((x) => (SIM.q[x.k] = 0)); store.set('simRO2', all); draw(); };
+        box.querySelectorAll('input.sq').forEach((inp) => (inp.oninput = () => {
+          const tr = inp.closest('tr'), x = shown[+tr.dataset.n]; SIM.q[x.k] = Math.max(0, parseFloat(inp.value) || 0); store.set('simRO2', all);
+          tr.querySelector('[data-v]').textContent = val(x) ? money(val(x), cur) : ''; const a = tr.querySelector('[data-a]'); a.textContent = fmt(after(x)); a.className = 'r ' + rowCls(x); paint();
+        }));
+        paint();
+      };
+      draw();
+    };
+    const show = (k, plant) => {
+      UI.seg(body.querySelector('#kdSeg'), [['item', `Item (${fmt(its.length, 0)})`], ['his', `PO/RO dari kontrak (${calls ? fmt(calls.length, 0) : '–'})`], ['sim', 'Simulasi RO']], k, (v) => show(v));
       const box = body.querySelector('#kdBody');
-      if (k === 'item') T.table(box, { rows: its, pageSize: 10, name: 'OA_' + doc + '_Item', onRow: (i) => i.material && MP.detail(i.material), cols: [{ label: 'Item', w: 0.6, get: (i) => i.item }, { label: 'Material', w: 3, get: (i) => i.desc, html: (i) => T.two(i.desc, i.material + ' · ' + (i.uom || '')) },
+      if (k === 'sim') sim(box, plant);
+      else if (k === 'item') T.table(box, { rows: its, pageSize: 10, name: 'OA_' + doc + '_Item', onRow: (i) => i.material && MP.detail(i.material), cols: [{ label: 'Item', w: 0.6, get: (i) => i.item }, { label: 'Material', w: 3, get: (i) => i.desc, html: (i) => T.two(i.desc, i.material + ' · ' + (i.uom || '')) },
         { label: 'Harga', type: 'num', w: 1.1, get: (i) => i.price, html: (i) => esc(money(i.price, d.currency)) }, { label: 'Target qty', type: 'num', w: 0.9, get: (i) => i.targetQty }, { label: 'Terpakai', type: 'num', w: 0.9, get: (i) => i.releasedQty }, { label: 'Sisa qty', type: 'num', w: 0.9, get: (i) => i.openQty }] });
       else if (!calls) box.innerHTML = '<div class="hint">Butuh file ME2N untuk melihat PO/RO dari kontrak ini.</div>';
       else T.table(box, { rows: calls, pageSize: 10, name: 'OA_' + doc + '_PO_RO', onRow: (l) => l.material && MP.detail(l.material, l.plant), cols: [{ label: 'Tgl dokumen', type: 'date', w: 0.9, get: (l) => l.docDate }, { label: 'Dokumen', w: 1.1, get: (l) => l.doc + '/' + l.item },
         { label: 'Plant', w: 0.6, get: (l) => l.plant }, { label: 'Material', w: 2.6, get: (l) => l.desc, html: (l) => T.two(l.desc, l.material) }, { label: 'Nilai', type: 'num', w: 1.1, get: (l) => l.value, html: (l) => esc(money(l.value, l.currency)) }, { label: 'Sisa kirim', type: 'num', w: 0.8, get: (l) => l.openQty },
         { label: 'Status', type: 'status', w: 1, get: (l) => PO_ST[poSt(l)][0], html: (l) => T.pill(...PO_ST[poSt(l)]) }] });
     };
-    show('item');
+    show(tab || 'item', plant);
   };
 
   // ---------- Pesanan: PO/RO (ME2N) dan Reservasi (MB25) ----------

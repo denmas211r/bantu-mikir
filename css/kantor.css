@@ -194,6 +194,9 @@ table.t .pill { max-width: 100%; overflow: hidden; text-overflow: ellipsis; vert
 .blk-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; } @media (max-width: 1100px) { .blk-grid { grid-template-columns: minmax(0, 1fr); } }
 /* judul material */
 .mhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; } .mhead h2 { margin: 0; font-size: 17px; font-weight: 600; } .mhead .meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 12.5px; color: var(--muted); }
+.sim-warn { margin: 8px 0; padding: 8px 12px; border-radius: 6px; background: #fdecec; color: #a12727; font-size: 13px; }
+input.sq { width: 100%; max-width: 90px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; text-align: right; font: inherit; background: var(--surface); color: var(--ink); }
+input.sq:focus { outline: 2px solid var(--brand); outline-offset: -1px; }
 .hint { padding: 28px; text-align: center; color: var(--muted); background: var(--surface); border: 1px dashed var(--line); border-radius: var(--r-panel); }
 /* kartu kontrak */
 .kcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; }
